@@ -1,0 +1,30 @@
+[package]
+name = "social_media_app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework and async runtime
+axum = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "fs"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Database and utilities (Azure Cosmos DB will be added back once basic server works)
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# TODO: Re-add these once basic server is working:
+# azure_data_cosmos = "0.17"
+# azure_identity = "0.17"
+# bcrypt = "0.15"
+
+# For calling Python scripts (using tokio built-in process support)
+# We'll use tokio::process::Command which is built-in
