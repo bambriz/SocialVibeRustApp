@@ -25,11 +25,22 @@ async fn api_health() -> Json<Value> {
         "service": "social_media_app",
         "version": "0.1.0",
         "features": {
-            "authentication": "not_implemented",
-            "posts": "not_implemented",
+            "authentication": "implemented",
+            "posts": "implemented",
             "comments": "not_implemented",
-            "sentiment_analysis": "not_implemented",
-            "content_moderation": "not_implemented"
+            "sentiment_analysis": "implemented",
+            "content_moderation": "implemented"
+        },
+        "endpoints": {
+            "auth": {
+                "register": "/api/auth/register",
+                "login": "/api/auth/login"
+            },
+            "posts": {
+                "create": "POST /api/posts (requires auth)",
+                "list": "GET /api/posts",
+                "get": "GET /api/posts/:id"
+            }
         }
     }))
 }

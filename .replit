@@ -32,3 +32,7 @@ args = "/nix/store/bqwc4hzm2lvshv5i3y9l3rmsb17z9a57-rust-mixed/bin/cargo run"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 39167
+externalPort = 3000
