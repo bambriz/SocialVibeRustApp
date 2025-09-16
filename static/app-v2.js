@@ -302,12 +302,23 @@ function getSentimentClass(post) {
 }
 
 function getSentimentLabel(post) {
-    if (post.sentiment_score) {
-        const confidence = (post.sentiment_score * 100).toFixed(0);
-        const sentimentType = getSentimentTypeFromClass(getSentimentClass(post));
+    // Use the actual sentiment detected by our enhanced analysis system
+    if (post.sentiment_colors && post.sentiment_colors.length > 0) {
+        const sentimentClass = getSentimentClass(post);
+        const sentimentType = getSentimentTypeFromClass(sentimentClass);
+        
+        // For sarcasm combinations, show special label
+        if (post.sentiment_colors.length > 1) {
+            return `${sentimentType} Sarcastic Combo`;
+        }
+        
+        // Show the actual detected emotion with confidence
+        const confidence = post.confidence ? Math.round(post.confidence * 100) : 50;
         return `${sentimentType} ${confidence}%`;
     }
-    return 'Neutral';
+    
+    // If no sentiment data, show calm instead of neutral
+    return '😌 Calm';
 }
 
 // New function to handle gradient backgrounds for sarcasm combinations
