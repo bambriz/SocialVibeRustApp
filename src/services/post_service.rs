@@ -50,7 +50,7 @@ impl PostService {
         };
         
         let sentiment_colors: Vec<String> = sentiments.iter()
-            .map(|s| s.color_code.clone())
+            .flat_map(|s| s.sentiment_type.colors_array())
             .collect();
         
         // Calculate popularity score based on sentiment

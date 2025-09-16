@@ -6,11 +6,13 @@ pub enum SentimentType {
     Angry,
     Sarcastic,
     Happy,
+    Excited,
+    Confused,
     Affection,
     Calm,
     Fear,
-    // Mixed sentiments (e.g., Sarcastic + Angry)
-    Mixed(Vec<SentimentType>),
+    // Mixed sentiments (e.g., Sarcastic + Happy)
+    SarcasticCombination(Box<SentimentType>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,18 +28,25 @@ impl SentimentType {
             SentimentType::Sad => "#1e3a8a".to_string(), // Dark blue
             SentimentType::Angry => "#dc2626".to_string(), // Red
             SentimentType::Sarcastic => "#7c3aed".to_string(), // Purple
-            SentimentType::Happy => "#fbbf24".to_string(), // Bright yellow
+            SentimentType::Happy => "#fbbf24".to_string(), // Bright yellow/gold
+            SentimentType::Excited => "#f59e0b".to_string(), // Bright orange
+            SentimentType::Confused => "#8b5cf6".to_string(), // Light purple
             SentimentType::Affection => "#ec4899".to_string(), // Pink
             SentimentType::Calm => "#059669".to_string(), // Green
             SentimentType::Fear => "#374151".to_string(), // Dark grey
-            SentimentType::Mixed(types) => {
-                // For mixed sentiments, create a gradient or return primary sentiment
-                if let Some(primary) = types.first() {
-                    primary.color_code()
-                } else {
-                    "#6b7280".to_string() // Default grey
-                }
+            SentimentType::SarcasticCombination(base_type) => {
+                // Create a gradient effect by combining sarcasm purple with base sentiment
+                format!("linear-gradient(45deg, #7c3aed, {})", base_type.color_code())
             }
+        }
+    }
+    
+    pub fn colors_array(&self) -> Vec<String> {
+        match self {
+            SentimentType::SarcasticCombination(base_type) => {
+                vec!["#7c3aed".to_string(), base_type.color_code()]
+            }
+            _ => vec![self.color_code()]
         }
     }
 

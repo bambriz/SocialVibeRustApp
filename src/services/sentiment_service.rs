@@ -22,15 +22,34 @@ impl SentimentService {
             }]);
         }
         
-        let sentiment_type = match parts[0] {
-            "happy" => SentimentType::Happy,
-            "sad" => SentimentType::Sad,
-            "angry" => SentimentType::Angry,
-            "fear" => SentimentType::Fear,
-            "calm" => SentimentType::Calm,
-            "affection" => SentimentType::Affection,
-            "sarcastic" => SentimentType::Sarcastic,
-            _ => SentimentType::Calm,
+        let sentiment_type = if parts[0].starts_with("sarcastic+") {
+            // Handle sarcasm combinations like "sarcastic+happy"
+            let base_sentiment = parts[0].strip_prefix("sarcastic+").unwrap_or("calm");
+            let base_type = match base_sentiment {
+                "happy" => SentimentType::Happy,
+                "sad" => SentimentType::Sad,
+                "angry" => SentimentType::Angry,
+                "excited" => SentimentType::Excited,
+                "confused" => SentimentType::Confused,
+                "fear" => SentimentType::Fear,
+                "calm" => SentimentType::Calm,
+                "affection" => SentimentType::Affection,
+                _ => SentimentType::Calm,
+            };
+            SentimentType::SarcasticCombination(Box::new(base_type))
+        } else {
+            match parts[0] {
+                "happy" => SentimentType::Happy,
+                "excited" => SentimentType::Excited,
+                "confused" => SentimentType::Confused,
+                "sad" => SentimentType::Sad,
+                "angry" => SentimentType::Angry,
+                "fear" => SentimentType::Fear,
+                "calm" => SentimentType::Calm,
+                "affection" => SentimentType::Affection,
+                "sarcastic" => SentimentType::Sarcastic,
+                _ => SentimentType::Calm,
+            }
         };
         
         let confidence: f64 = parts[1].parse().unwrap_or(0.5);
