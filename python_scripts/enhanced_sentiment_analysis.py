@@ -64,7 +64,9 @@ class AdvancedSentimentAnalyzer:
                     r'\b(angry|mad|furious|rage|hate|livid|enraged)\b',
                     r'\b(pissed|irritated|annoyed|frustrated|outraged)\b',
                     r'\b(infuriated|aggravated|irate|seething|fed\s+up)\b',
-                    r'\b(tired\s+of|sick\s+of|enough|stop|quit)\b'
+                    r'\b(tired\s+of|sick\s+of|enough|stop|quit|can\'t\s+take)\b',
+                    r'\b(this\s+is\s+ridiculous|this\s+is\s+bullshit|this\s+sucks)\b',
+                    r'\b(what\s+the\s+hell|what\s+the\s+fuck|are\s+you\s+kidding)\b'
                 ],
                 'secondary': [
                     r'\b(stupid|idiot|damn|crap|sucks|terrible|awful)\b',
@@ -72,9 +74,13 @@ class AdvancedSentimentAnalyzer:
                     r'\b(accountability|clarity|change|problems|deadlines|slipping)\b',
                     r'\b(pretending|sugarcoating|not\s+here\s+to|part\s+of\s+the\s+problem)\b',
                     r'\b(fine\s+when\s+it\'s\s+clearly\s+not|communication\s+is\s+a\s+mess|no\s+more)\b',
+                    r'\b(keep\s+slipping|missed\s+deadlines|constantly\s+changing|always\s+behind)\b',
+                    r'\b(incompetent|unacceptable|disaster|failure|broken\s+system)\b',
+                    r'\b(had\s+enough|losing\s+patience|at\s+my\s+limit|breaking\s+point)\b',
+                    r'\b(unprofessional|disorganized|chaotic|dysfunction|toxic)\b',
                     r'(😡|🤬|👿|💢|🔥|😠|😤|🤮|💀)'
                 ],
-                'boosters': [r'(so|very|really|extremely|totally|absolutely|clearly|obviously)']
+                'boosters': [r'(so|very|really|extremely|totally|absolutely|clearly|obviously|completely|utterly)']
             },
             
             'confused': {

@@ -312,9 +312,8 @@ function getSentimentLabel(post) {
             return `${sentimentType} Sarcastic Combo`;
         }
         
-        // Show the actual detected emotion with confidence
-        const confidence = post.confidence ? Math.round(post.confidence * 100) : 50;
-        return `${sentimentType} ${confidence}%`;
+        // Show the actual detected emotion without percentage
+        return sentimentType;
     }
     
     // If no sentiment data, show calm instead of neutral
