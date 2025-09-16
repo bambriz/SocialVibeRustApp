@@ -1,5 +1,6 @@
 use crate::models::Post;
 use crate::models::post::{CreatePostRequest, PostResponse};
+use crate::models::sentiment::{Sentiment, SentimentType};
 use crate::db::repository::{PostRepository, MockPostRepository};
 use crate::services::{SentimentService, ModerationService};
 use crate::{AppError, Result};
@@ -27,20 +28,26 @@ impl PostService {
     }
 
     pub async fn create_post(&self, request: CreatePostRequest, author_id: Uuid, author_username: String) -> Result<PostResponse> {
-        // Combine title and content for analysis
-        let full_text = format!("{} {}", request.title, request.content);
+        // Analyze title and body separately with body bias
+        // Body gets 4x weight compared to title for sentiment determination
         
-        // Check content moderation first
-        let is_blocked = self.moderation_service.check_content(&full_text).await
+        // Check content moderation first (use combined text for moderation)
+        let combined_text = format!("{} {}", request.title, request.content);
+        let is_blocked = self.moderation_service.check_content(&combined_text).await
             .map_err(|e| AppError::InternalError(format!("Content moderation failed: {}", e)))?;
         
         if is_blocked {
             return Err(AppError::ValidationError("Content violates community guidelines and has been blocked".to_string()));
         }
         
-        // Run sentiment analysis
-        let sentiments = self.sentiment_service.analyze_sentiment(&full_text).await
-            .map_err(|e| AppError::InternalError(format!("Sentiment analysis failed: {}", e)))?;
+        // Run sentiment analysis on title and body separately
+        let title_sentiments = self.sentiment_service.analyze_sentiment(&request.title).await
+            .map_err(|e| AppError::InternalError(format!("Title sentiment analysis failed: {}", e)))?;
+        let body_sentiments = self.sentiment_service.analyze_sentiment(&request.content).await
+            .map_err(|e| AppError::InternalError(format!("Body sentiment analysis failed: {}", e)))?;
+        
+        // Combine sentiments with body bias (body weight = 4x title weight)
+        let sentiments = self.combine_sentiments_with_bias(&title_sentiments, &body_sentiments, 0.2, 0.8);
         
         // Calculate sentiment score and extract colors
         let sentiment_score = if !sentiments.is_empty() {
@@ -73,6 +80,74 @@ impl PostService {
         
         let created_post = self.post_repo.create_post(&post).await?;
         Ok(PostResponse::from(created_post))
+    }
+
+    // Helper method to combine sentiments with weighting bias
+    fn combine_sentiments_with_bias(&self, title_sentiments: &[Sentiment], body_sentiments: &[Sentiment], title_weight: f64, body_weight: f64) -> Vec<Sentiment> {
+        if body_sentiments.is_empty() && title_sentiments.is_empty() {
+            return vec![Sentiment {
+                sentiment_type: SentimentType::Calm,
+                confidence: 0.5,
+                color_code: SentimentType::Calm.color_code(),
+            }];
+        }
+        
+        // If only body has sentiments, use those (body bias)
+        if !body_sentiments.is_empty() {
+            return body_sentiments.to_vec();
+        }
+        
+        // If only title has sentiments, use those with reduced confidence
+        if !title_sentiments.is_empty() {
+            return title_sentiments.iter().map(|s| Sentiment {
+                sentiment_type: s.sentiment_type.clone(),
+                confidence: s.confidence * title_weight,
+                color_code: s.color_code.clone(),
+            }).collect();
+        }
+        
+        // If both have sentiments, prioritize body with weighting
+        let mut combined_score_map = std::collections::HashMap::new();
+        
+        // Add title sentiments with title weight
+        for sentiment in title_sentiments {
+            let key = format!("{:?}", sentiment.sentiment_type);
+            *combined_score_map.entry(key).or_insert(0.0) += sentiment.confidence * title_weight;
+        }
+        
+        // Add body sentiments with body weight (higher priority)
+        for sentiment in body_sentiments {
+            let key = format!("{:?}", sentiment.sentiment_type);
+            *combined_score_map.entry(key).or_insert(0.0) += sentiment.confidence * body_weight;
+        }
+        
+        // Return the highest scoring sentiment
+        if let Some((dominant_type, score)) = combined_score_map.iter().max_by(|a, b| a.1.partial_cmp(b.1).unwrap()) {
+            let sentiment_type = match dominant_type.as_str() {
+                "Happy" => SentimentType::Happy,
+                "Sad" => SentimentType::Sad,
+                "Angry" => SentimentType::Angry,
+                "Excited" => SentimentType::Excited,
+                "Confused" => SentimentType::Confused,
+                "Fear" => SentimentType::Fear,
+                "Calm" => SentimentType::Calm,
+                "Affection" => SentimentType::Affection,
+                "Sarcastic" => SentimentType::Sarcastic,
+                _ => SentimentType::Calm,
+            };
+            
+            vec![Sentiment {
+                sentiment_type: sentiment_type.clone(),
+                confidence: *score,
+                color_code: sentiment_type.color_code(),
+            }]
+        } else {
+            vec![Sentiment {
+                sentiment_type: SentimentType::Calm,
+                confidence: 0.5,
+                color_code: SentimentType::Calm.color_code(),
+            }]
+        }
     }
 
     pub async fn get_post(&self, post_id: Uuid) -> Result<Option<PostResponse>> {
