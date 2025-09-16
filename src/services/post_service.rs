@@ -84,7 +84,16 @@ impl PostService {
 
     // Helper method to combine sentiments with weighting bias
     fn combine_sentiments_with_bias(&self, title_sentiments: &[Sentiment], body_sentiments: &[Sentiment], title_weight: f64, body_weight: f64) -> Vec<Sentiment> {
-        if body_sentiments.is_empty() && title_sentiments.is_empty() {
+        // Filter out fallback Calm sentiments (parser failures)
+        let filtered_title: Vec<&Sentiment> = title_sentiments.iter()
+            .filter(|s| !(matches!(s.sentiment_type, SentimentType::Calm) && (s.confidence - 0.5).abs() < 0.01))
+            .collect();
+        let filtered_body: Vec<&Sentiment> = body_sentiments.iter()
+            .filter(|s| !(matches!(s.sentiment_type, SentimentType::Calm) && (s.confidence - 0.5).abs() < 0.01))
+            .collect();
+        
+        // If both are empty after filtering, default to calm
+        if filtered_body.is_empty() && filtered_title.is_empty() {
             return vec![Sentiment {
                 sentiment_type: SentimentType::Calm,
                 confidence: 0.5,
@@ -92,14 +101,14 @@ impl PostService {
             }];
         }
         
-        // If only body has sentiments, use those (body bias)
-        if !body_sentiments.is_empty() {
-            return body_sentiments.to_vec();
+        // If only body has real sentiments, use those (body bias)
+        if !filtered_body.is_empty() && filtered_title.is_empty() {
+            return filtered_body.into_iter().cloned().collect();
         }
         
-        // If only title has sentiments, use those with reduced confidence
-        if !title_sentiments.is_empty() {
-            return title_sentiments.iter().map(|s| Sentiment {
+        // If only title has real sentiments, use those with reduced confidence
+        if !filtered_title.is_empty() && filtered_body.is_empty() {
+            return filtered_title.iter().map(|s| Sentiment {
                 sentiment_type: s.sentiment_type.clone(),
                 confidence: s.confidence * title_weight,
                 color_code: s.color_code.clone(),
@@ -110,13 +119,13 @@ impl PostService {
         let mut combined_score_map = std::collections::HashMap::new();
         
         // Add title sentiments with title weight
-        for sentiment in title_sentiments {
+        for sentiment in filtered_title {
             let key = format!("{:?}", sentiment.sentiment_type);
             *combined_score_map.entry(key).or_insert(0.0) += sentiment.confidence * title_weight;
         }
         
         // Add body sentiments with body weight (higher priority)
-        for sentiment in body_sentiments {
+        for sentiment in filtered_body {
             let key = format!("{:?}", sentiment.sentiment_type);
             *combined_score_map.entry(key).or_insert(0.0) += sentiment.confidence * body_weight;
         }

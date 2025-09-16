@@ -12,19 +12,23 @@ impl SentimentService {
     pub async fn analyze_sentiment(&self, text: &str) -> Result<Vec<Sentiment>, Box<dyn std::error::Error>> {
         let result = self.call_python_analyzer(text).await?;
         
-        // Parse the result (format: "sentiment_type:confidence")
-        let parts: Vec<&str> = result.trim().split(':').collect();
-        if parts.len() != 2 {
-            return Ok(vec![Sentiment {
-                sentiment_type: SentimentType::Calm,
-                confidence: 0.5,
-                color_code: SentimentType::Calm.color_code(),
-            }]);
+        // Robust parsing: handle different output formats
+        let clean_result = result.lines().last().unwrap_or("").trim();
+        if clean_result.is_empty() {
+            return Ok(vec![]); // Return empty instead of default Calm
         }
         
-        let sentiment_type = if parts[0].starts_with("sarcastic+") {
+        // Parse the result (format: "sentiment_type:confidence")
+        let parts: Vec<&str> = clean_result.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            return Ok(vec![]); // Return empty instead of default Calm
+        }
+        
+        let sentiment_label = parts[0].to_lowercase(); // Make case-insensitive
+        
+        let sentiment_type = if sentiment_label.starts_with("sarcastic+") {
             // Handle sarcasm combinations like "sarcastic+happy"
-            let base_sentiment = parts[0].strip_prefix("sarcastic+").unwrap_or("calm");
+            let base_sentiment = sentiment_label.strip_prefix("sarcastic+").unwrap_or("calm");
             let base_type = match base_sentiment {
                 "happy" => SentimentType::Happy,
                 "sad" => SentimentType::Sad,
@@ -34,11 +38,11 @@ impl SentimentService {
                 "fear" => SentimentType::Fear,
                 "calm" => SentimentType::Calm,
                 "affection" => SentimentType::Affection,
-                _ => SentimentType::Calm,
+                _ => return Ok(vec![]), // Return empty for unknown types
             };
             SentimentType::SarcasticCombination(Box::new(base_type))
         } else {
-            match parts[0] {
+            match sentiment_label.as_str() {
                 "happy" => SentimentType::Happy,
                 "excited" => SentimentType::Excited,
                 "confused" => SentimentType::Confused,
@@ -48,7 +52,7 @@ impl SentimentService {
                 "calm" => SentimentType::Calm,
                 "affection" => SentimentType::Affection,
                 "sarcastic" => SentimentType::Sarcastic,
-                _ => SentimentType::Calm,
+                _ => return Ok(vec![]), // Return empty for unknown types
             }
         };
         

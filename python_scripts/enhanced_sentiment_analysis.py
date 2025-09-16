@@ -66,7 +66,10 @@ class AdvancedSentimentAnalyzer:
                     r'\b(infuriated|aggravated|irate|seething|fed\s+up)\b',
                     r'\b(tired\s+of|sick\s+of|enough|stop|quit|can\'t\s+take)\b',
                     r'\b(this\s+is\s+ridiculous|this\s+is\s+bullshit|this\s+sucks)\b',
-                    r'\b(what\s+the\s+hell|what\s+the\s+fuck|are\s+you\s+kidding)\b'
+                    r'\b(what\s+the\s+hell|what\s+the\s+fuck|are\s+you\s+kidding)\b',
+                    r'\b(how\s+are\s+we\s+still|still\s+dealing\s+with|we\'re\s+drowning)\b',
+                    r'\b(it\'s\s+not\s+fine|isn\'t\s+just\s+frustrating|it\'s\s+insulting)\b',
+                    r'\b(fix\s+it\.\s+now|being\s+treated\s+like|don\'t\s+matter)\b'
                 ],
                 'secondary': [
                     r'\b(stupid|idiot|damn|crap|sucks|terrible|awful)\b',
@@ -78,6 +81,10 @@ class AdvancedSentimentAnalyzer:
                     r'\b(incompetent|unacceptable|disaster|failure|broken\s+system)\b',
                     r'\b(had\s+enough|losing\s+patience|at\s+my\s+limit|breaking\s+point)\b',
                     r'\b(unprofessional|disorganized|chaotic|dysfunction|toxic)\b',
+                    r'\b(broken\s+tools|zero\s+communication|vacuum|chaos|pressure|silence)\b',
+                    r'\b(no\s+roadmap|no\s+support|leadership\s+plays\s+pretend|robots|mind\s+readers)\b',
+                    r'\b(professionals|decisions\s+made\s+in|expected\s+to\s+keep|delivering\s+like)\b',
+                    r'\b(everything\'s\s+fine|drowning\s+in|plays\s+pretend|treating\s+like)\b',
                     r'(😡|🤬|👿|💢|🔥|😠|😤|🤮|💀)'
                 ],
                 'boosters': [r'(so|very|really|extremely|totally|absolutely|clearly|obviously|completely|utterly)']
@@ -251,12 +258,15 @@ class AdvancedSentimentAnalyzer:
             raw_score = self.calculate_pattern_score(text, patterns)
             emotion_scores[emotion] = self.apply_context_modifiers(raw_score, text)
         
-        # Find the dominant emotion
-        if not emotion_scores or max(emotion_scores.values()) < 0.2:
+        # Debug: print emotion scores for troubleshooting
+        # print(f"DEBUG: Emotion scores: {emotion_scores}")
+        
+        # Find the dominant emotion (lowered threshold to 0.01 for better detection) 
+        if not emotion_scores or max(emotion_scores.values()) < 0.01:
             dominant_emotion = 'calm'
             emotion_confidence = 0.5
         else:
-            dominant_emotion = max(emotion_scores, key=emotion_scores.get)
+            dominant_emotion = max(emotion_scores.keys(), key=lambda k: emotion_scores[k])
             emotion_confidence = min(emotion_scores[dominant_emotion] / 2.0, 1.0)  # Better scaling
         
         # Combine with sarcasm if detected
