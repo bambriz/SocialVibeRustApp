@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
+    "emotionclassifier>=0.1.4",
     "hatesonar>=0.0.7",
+    "nrclex>=3.0.0",
 ]
 
 [[tool.uv.index]]
