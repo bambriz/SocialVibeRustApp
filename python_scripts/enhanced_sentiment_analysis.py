@@ -141,7 +141,8 @@ class AdvancedSentimentAnalyzer:
         self.intensity_modifiers = {
             'amplifiers': r'\b(very|really|so|extremely|super|incredibly|absolutely|totally|completely|utterly|quite|pretty|rather)\b',
             'diminishers': r'\b(a\s+bit|slightly|somewhat|kind\s+of|sort\s+of|a\s+little|barely|hardly)\b',
-            'negations': r'\b(not|never|no|none|nothing|nobody|nowhere|neither|nor|don\'t|doesn\'t|didn\'t|won\'t|wouldn\'t|can\'t|couldn\'t|isn\'t|aren\'t|wasn\'t|weren\'t)\b'
+            'negations': r'\b(not|never|no|none|nothing|nobody|nowhere|neither|nor|don\'t|doesn\'t|didn\'t|won\'t|wouldn\'t|couldn\'t|isn\'t|aren\'t|wasn\'t|weren\'t)\b',
+            'negation_exceptions': r'\b(can\'t\s+wait|not\s+bad|no\s+worries|not\s+terrible|can\'t\s+believe\s+how\s+good)\b'
         }
 
     def calculate_pattern_score(self, text: str, patterns: Dict[str, List[str]]) -> float:
@@ -211,11 +212,11 @@ class AdvancedSentimentAnalyzer:
         if re.search(self.intensity_modifiers['diminishers'], text_lower):
             modified_score *= 0.7
             
-        # Check for negations (complex logic needed)
-        negation_matches = re.finditer(self.intensity_modifiers['negations'], text_lower)
-        for match in negation_matches:
-            # Simple negation handling - could be much more sophisticated
-            modified_score *= 0.3
+        # Check for negations but skip positive idioms
+        if not re.search(self.intensity_modifiers['negation_exceptions'], text_lower):
+            negation_matches = re.finditer(self.intensity_modifiers['negations'], text_lower)
+            for match in negation_matches:
+                modified_score *= 0.3
             
         return min(modified_score, 1.0)
 
