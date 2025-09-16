@@ -37,7 +37,7 @@ impl PostService {
             .map_err(|e| AppError::InternalError(format!("Content moderation failed: {}", e)))?;
         
         if is_blocked {
-            return Err(AppError::ValidationError("Content violates community guidelines and has been blocked".to_string()));
+            return Err(AppError::ValidationError("Message failed to send because it violates our site policy against hate speech and offensive content. Please revise your message and try again.".to_string()));
         }
         
         // Run sentiment analysis on title and body separately
