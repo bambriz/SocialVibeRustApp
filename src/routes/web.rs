@@ -1,103 +1,120 @@
-use axum::{response::Html, routing::get, Router};
+use axum::{
+    response::{Html, Response},
+    http::{StatusCode, header},
+    Router,
+    routing::get,
+    extract::Path,
+};
+use tokio::fs;
 use crate::AppState;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/", get(home))
-        .route("/health", get(health))
+        .route("/", get(serve_index))
+        .route("/static/*file", get(serve_static))
+        .route("/health", get(health_check))
 }
 
-async fn home() -> Html<&'static str> {
+async fn serve_index() -> Result<Html<String>, StatusCode> {
+    match fs::read_to_string("static/index.html").await {
+        Ok(content) => Ok(Html(content)),
+        Err(_) => {
+            // Fallback if static file not found
+            Ok(Html(r#"
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Social Pulse - Sentiment-Based Social Media</title>
+                <style>
+                    body { 
+                        font-family: 'Inter', sans-serif; 
+                        text-align: center; 
+                        padding: 50px;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        min-height: 100vh;
+                        color: white;
+                        margin: 0;
+                    }
+                    .container {
+                        max-width: 600px;
+                        margin: 0 auto;
+                        background: rgba(255, 255, 255, 0.1);
+                        padding: 3rem;
+                        border-radius: 1rem;
+                        backdrop-filter: blur(10px);
+                    }
+                    h1 {
+                        font-size: 2.5rem;
+                        margin-bottom: 1rem;
+                    }
+                    .status {
+                        background: rgba(16, 185, 129, 0.2);
+                        padding: 1rem;
+                        border-radius: 0.5rem;
+                        margin: 2rem 0;
+                    }
+                    a {
+                        color: #90EE90;
+                        text-decoration: none;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>🚀 Social Pulse</h1>
+                    <p>Sentiment-Based Social Media Platform</p>
+                    <div class="status">
+                        <h3>✅ Backend Server Running</h3>
+                        <p>Frontend loading...</p>
+                    </div>
+                    <p>API Health: <a href="/api/health">/api/health</a></p>
+                    <p>Try refreshing the page if the frontend doesn't load.</p>
+                </div>
+            </body>
+            </html>
+            "#.to_string()))
+        }
+    }
+}
+
+async fn serve_static(Path(file_path): Path<String>) -> Result<Response, StatusCode> {
+    let full_path = format!("static/{}", file_path);
+    
+    match fs::read(&full_path).await {
+        Ok(contents) => {
+            let content_type = match full_path.split('.').last() {
+                Some("html") => "text/html; charset=utf-8",
+                Some("css") => "text/css; charset=utf-8", 
+                Some("js") => "application/javascript; charset=utf-8",
+                Some("png") => "image/png",
+                Some("jpg") | Some("jpeg") => "image/jpeg",
+                Some("gif") => "image/gif",
+                Some("svg") => "image/svg+xml",
+                _ => "application/octet-stream",
+            };
+            
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, content_type)
+                .header(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                .body(contents.into())
+                .unwrap())
+        }
+        Err(_) => Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn health_check() -> Html<&'static str> {
     Html(r#"
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Social Media App</title>
+        <title>Health Check - Social Pulse</title>
         <style>
             body { 
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                max-width: 800px; 
-                margin: 0 auto; 
-                padding: 2rem; 
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                min-height: 100vh;
-            }
-            .card { 
-                background: rgba(255, 255, 255, 0.1); 
-                padding: 2rem; 
-                border-radius: 10px; 
-                backdrop-filter: blur(10px);
-                margin: 1rem 0;
-            }
-            h1 { text-align: center; margin-bottom: 2rem; }
-            .feature { margin: 1rem 0; padding: 1rem; background: rgba(255, 255, 255, 0.05); border-radius: 5px; }
-            .api-links { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
-            .api-link { 
-                background: rgba(255, 255, 255, 0.2); 
-                padding: 0.5rem 1rem; 
-                border-radius: 5px; 
-                color: #90EE90; 
-                text-decoration: none; 
-                font-size: 0.9rem;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>🚀 Social Media App</h1>
-        <div class="card">
-            <h2>Welcome to your Rust Social Media Platform!</h2>
-            <p>This application is built with:</p>
-            <div class="feature">🦀 <strong>Rust & Axum</strong> - High-performance modular web framework</div>
-            <div class="feature">🗃️ <strong>Azure Cosmos DB</strong> - Scalable NoSQL database (coming soon)</div>
-            <div class="feature">🧠 <strong>AI Sentiment Analysis</strong> - Color-coded emotional analysis</div>
-            <div class="feature">🛡️ <strong>Content Moderation</strong> - Automated hate speech detection</div>
-            <div class="feature">💬 <strong>Nested Comments</strong> - Rich discussion threading</div>
-            <div class="feature">📊 <strong>Smart Feed Algorithm</strong> - Popularity-based post ranking</div>
-        </div>
-        <div class="card">
-            <h3>🎯 Development Progress:</h3>
-            <ul>
-                <li>✅ Modular project structure</li>
-                <li>✅ Error handling & configuration</li>
-                <li>✅ Data models for users, posts, comments</li>
-                <li>⏳ Database integration (Cosmos DB)</li>
-                <li>⏳ Authentication system</li>
-                <li>⏳ API endpoints</li>
-                <li>⏳ Sentiment analysis pipeline</li>
-                <li>⏳ Content moderation</li>
-            </ul>
-        </div>
-        <div class="card">
-            <h3>📡 API Endpoints (Coming Soon):</h3>
-            <div class="api-links">
-                <a href="/api/v1/health" class="api-link">Health Check</a>
-                <a href="/api/v1/posts" class="api-link">Posts API</a>
-                <a href="/api/v1/users" class="api-link">Users API</a>
-            </div>
-        </div>
-        <div class="card">
-            <p><strong>Status:</strong> ✅ Server is running with modular architecture!</p>
-            <p><strong>Health Check:</strong> <a href="/health" style="color: #90EE90;">Check Server Health</a></p>
-        </div>
-    </body>
-    </html>
-    "#)
-}
-
-async fn health() -> Html<&'static str> {
-    Html(r#"
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Health Check</title>
-        <style>
-            body { 
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                font-family: 'Inter', sans-serif;
                 max-width: 600px; 
                 margin: 0 auto; 
                 padding: 2rem; 
@@ -107,19 +124,27 @@ async fn health() -> Html<&'static str> {
                 text-align: center;
             }
             .status { 
-                background: rgba(0, 255, 0, 0.2); 
+                background: rgba(16, 185, 129, 0.2); 
                 padding: 2rem; 
-                border-radius: 10px; 
+                border-radius: 1rem; 
                 margin: 2rem 0;
+                backdrop-filter: blur(10px);
             }
+            a { color: #90EE90; }
         </style>
     </head>
     <body>
         <h1>🏥 Health Check</h1>
         <div class="status">
             <h2>✅ Server Status: Healthy</h2>
-            <p>Rust Social Media App is running with modular architecture!</p>
-            <p><a href="/" style="color: #90EE90;">← Back to Home</a></p>
+            <p>Social Pulse API is running with all features:</p>
+            <ul style="text-align: left; display: inline-block;">
+                <li>✅ JWT Authentication</li>
+                <li>✅ Sentiment Analysis</li>
+                <li>✅ Content Moderation</li>
+                <li>✅ Feed Algorithm</li>
+            </ul>
+            <p><a href="/">← Back to App</a></p>
         </div>
     </body>
     </html>

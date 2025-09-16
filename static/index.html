@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social Pulse - Sentiment-Based Social Media</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>Social Pulse</h1>
+                <span class="tagline">Feel the Vibe</span>
+            </div>
+            <div class="nav-actions" id="navActions">
+                <button class="btn btn-primary" onclick="showLogin()">Login</button>
+                <button class="btn btn-outline" onclick="showRegister()">Sign Up</button>
+            </div>
+            <div class="nav-user hidden" id="navUser">
+                <span class="username" id="navUsername">Welcome!</span>
+                <button class="btn btn-outline" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <!-- Login Modal -->
+        <div class="modal hidden" id="loginModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Welcome Back</h2>
+                    <button class="close-btn" onclick="closeModal('loginModal')">&times;</button>
+                </div>
+                <form class="auth-form" id="loginForm">
+                    <div class="form-group">
+                        <label for="loginEmail">Email</label>
+                        <input type="email" id="loginEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password</label>
+                        <input type="password" id="loginPassword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full">Login</button>
+                </form>
+                <div class="auth-switch">
+                    <p>Don't have an account? <a href="#" onclick="showRegister(); closeModal('loginModal')">Sign up</a></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Register Modal -->
+        <div class="modal hidden" id="registerModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Join Social Pulse</h2>
+                    <button class="close-btn" onclick="closeModal('registerModal')">&times;</button>
+                </div>
+                <form class="auth-form" id="registerForm">
+                    <div class="form-group">
+                        <label for="registerUsername">Username</label>
+                        <input type="text" id="registerUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerEmail">Email</label>
+                        <input type="email" id="registerEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPassword">Password</label>
+                        <input type="password" id="registerPassword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full">Create Account</button>
+                </form>
+                <div class="auth-switch">
+                    <p>Already have an account? <a href="#" onclick="showLogin(); closeModal('registerModal')">Login</a></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Post Creation Area -->
+        <div class="post-creator hidden" id="postCreator">
+            <div class="creator-container">
+                <h3>Share Your Thoughts</h3>
+                <form id="postForm">
+                    <div class="form-group">
+                        <input type="text" id="postTitle" placeholder="What's on your mind?" required>
+                    </div>
+                    <div class="form-group">
+                        <textarea id="postContent" placeholder="Tell us more..." rows="4" required></textarea>
+                    </div>
+                    <div class="creator-actions">
+                        <div class="sentiment-preview" id="sentimentPreview"></div>
+                        <button type="submit" class="btn btn-primary">Share Post</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Posts Feed -->
+        <div class="feed-container">
+            <div class="feed-header">
+                <h2>Social Feed</h2>
+                <div class="feed-controls">
+                    <button class="filter-btn active" onclick="filterFeed('all')">All Posts</button>
+                    <button class="filter-btn" onclick="filterFeed('happy')">😊 Happy</button>
+                    <button class="filter-btn" onclick="filterFeed('sad')">😢 Sad</button>
+                    <button class="filter-btn" onclick="filterFeed('angry')">😡 Angry</button>
+                    <button class="filter-btn" onclick="filterFeed('calm')">😌 Calm</button>
+                </div>
+            </div>
+            
+            <div class="posts-container" id="postsContainer">
+                <div class="loading-spinner hidden" id="loadingSpinner">
+                    <div class="spinner"></div>
+                    <p>Loading posts...</p>
+                </div>
+                
+                <!-- Posts will be dynamically inserted here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Notification Toast -->
+    <div class="toast hidden" id="toast">
+        <div class="toast-content" id="toastContent"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

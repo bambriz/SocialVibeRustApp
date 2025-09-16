@@ -22,18 +22,13 @@ args = "Server"
 name = "Server"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "bash -c \"source /home/runner/workspace/.local/share/.cargo/env && cargo run\""
-waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
+args = "/nix/store/bqwc4hzm2lvshv5i3y9l3rmsb17z9a57-rust-mixed/bin/cargo run"
 
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 41427
-externalPort = 3001
