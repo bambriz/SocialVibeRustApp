@@ -134,6 +134,25 @@ class AdvancedSentimentAnalyzer:
                     r'(😌|😐|😑|🧘|☮️|🕯️)'
                 ],
                 'boosters': [r'(very|really|quite|pretty|fairly)']
+            },
+            
+            'affection': {
+                'primary': [
+                    r'\b(love|adore|cherish|treasure|precious|darling|sweetheart)\b',
+                    r'\b(beautiful|gorgeous|handsome|cute|adorable|sweet|sweetest)\b',
+                    r'\b(amazing|wonderful|fantastic|incredible|perfect|best)\b',
+                    r'\b(smartest|cutest|most\s+handsome|most\s+beautiful|most\s+amazing)\b'
+                ],
+                'secondary': [
+                    r'\b(lovely|charming|delightful|enchanting|magnificent)\b',
+                    r'\b(marvelous|splendid|divine|stunning|breathtaking)\b',
+                    r'\b(caring|gentle|tender|affectionate|loving|devoted)\b',
+                    r'\b(special|unique|exceptional|remarkable|outstanding)\b',
+                    r'\b(heart|hearts|warmth|warm|cozy|snuggle|hug|kiss)\b',
+                    r'\b(angel|sunshine|light\s+of\s+my\s+life|pride\s+and\s+joy)\b',
+                    r'(💕|❤️|💖|💗|💙|💚|💛|🧡|💜|🤎|🖤|🤍|💘|💝|💞|💟|♥️|💌|😍|🥰|😘|😻|🤗)'
+                ],
+                'boosters': [r'(so|very|really|extremely|absolutely|totally|completely|utterly|most|super)']
             }
         }
         
