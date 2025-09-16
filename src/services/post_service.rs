@@ -110,28 +110,28 @@ impl PostService {
         for sentiment in sentiments {
             let sentiment_multiplier = match sentiment.sentiment_type {
                 SentimentType::Happy => 1.2,
+                SentimentType::Excited => 1.3,  // Highest positive boost
                 SentimentType::Affection => 1.1,
                 SentimentType::Calm => 1.0,
+                SentimentType::Confused => 0.95, // Slightly lower than neutral
                 SentimentType::Sarcastic => 0.9,
                 SentimentType::Sad => 0.8,
                 SentimentType::Fear => 0.7,
                 SentimentType::Angry => 0.6,
-                SentimentType::Mixed(ref types) => {
-                    // For mixed sentiments, average the scores
-                    if types.is_empty() {
-                        1.0
-                    } else {
-                        types.iter().map(|t| match t {
-                            SentimentType::Happy => 1.2,
-                            SentimentType::Affection => 1.1,
-                            SentimentType::Calm => 1.0,
-                            SentimentType::Sarcastic => 0.9,
-                            SentimentType::Sad => 0.8,
-                            SentimentType::Fear => 0.7,
-                            SentimentType::Angry => 0.6,
-                            _ => 1.0,
-                        }).sum::<f64>() / types.len() as f64
-                    }
+                SentimentType::SarcasticCombination(ref base_type) => {
+                    // For sarcastic combinations, reduce the base sentiment score
+                    let base_score = match **base_type {
+                        SentimentType::Happy => 1.2,
+                        SentimentType::Excited => 1.3,
+                        SentimentType::Affection => 1.1,
+                        SentimentType::Calm => 1.0,
+                        SentimentType::Confused => 0.95,
+                        SentimentType::Sad => 0.8,
+                        SentimentType::Fear => 0.7,
+                        SentimentType::Angry => 0.6,
+                        _ => 1.0,
+                    };
+                    base_score * 0.8  // Reduce by 20% due to sarcasm
                 }
             };
             

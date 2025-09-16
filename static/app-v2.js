@@ -237,10 +237,11 @@ function renderPosts(postsToRender) {
     const postsHTML = postsToRender.map(post => {
         const sentimentClass = getSentimentClass(post);
         const sentimentLabel = getSentimentLabel(post);
+        const backgroundStyle = getSentimentBackground(post);
         const timeAgo = formatTimeAgo(post.created_at);
         
         return `
-            <article class="post-card">
+            <article class="post-card" style="${backgroundStyle}">
                 <div class="post-header">
                     <div>
                         <div class="post-author">${escapeHtml(post.author_username)}</div>
@@ -276,18 +277,25 @@ function getSentimentClass(post) {
         return 'sentiment-calm';
     }
     
+    // Handle sarcasm combinations (multiple colors)
+    if (post.sentiment_colors.length > 1) {
+        return 'sentiment-sarcastic-combo';
+    }
+    
     // Use the first sentiment color to determine class
     const primaryColor = post.sentiment_colors[0];
     
-    // Map colors to sentiment classes
+    // Map colors to sentiment classes (updated with new backend colors)
     const colorToClass = {
-        '#10b981': 'sentiment-happy',    // Green - Happy
-        '#3b82f6': 'sentiment-sad',      // Blue - Sad  
-        '#ef4444': 'sentiment-angry',    // Red - Angry
-        '#f97316': 'sentiment-fear',     // Orange - Fear
-        '#6ee7b7': 'sentiment-calm',     // Light Green - Calm
-        '#f472b6': 'sentiment-affection', // Pink - Affection
-        '#a855f7': 'sentiment-sarcastic'  // Purple - Sarcastic
+        '#fbbf24': 'sentiment-happy',      // Bright yellow/gold - Happy
+        '#f59e0b': 'sentiment-excited',    // Bright orange - Excited  
+        '#1e3a8a': 'sentiment-sad',        // Dark blue - Sad
+        '#dc2626': 'sentiment-angry',      // Red - Angry
+        '#8b5cf6': 'sentiment-confused',   // Light purple - Confused
+        '#374151': 'sentiment-fear',       // Dark grey - Fear
+        '#059669': 'sentiment-calm',       // Green - Calm
+        '#ec4899': 'sentiment-affection',  // Pink - Affection
+        '#7c3aed': 'sentiment-sarcastic'   // Purple - Sarcastic
     };
     
     return colorToClass[primaryColor] || 'sentiment-calm';
@@ -302,15 +310,36 @@ function getSentimentLabel(post) {
     return 'Neutral';
 }
 
+// New function to handle gradient backgrounds for sarcasm combinations
+function getSentimentBackground(post) {
+    if (!post.sentiment_colors || post.sentiment_colors.length === 0) {
+        return '';
+    }
+    
+    // Handle sarcasm combinations with gradient
+    if (post.sentiment_colors.length > 1) {
+        const color1 = post.sentiment_colors[0];
+        const color2 = post.sentiment_colors[1];
+        return `border-left: 4px solid ${color1}; background: linear-gradient(135deg, ${color1}22, ${color2}22);`;
+    }
+    
+    // Single sentiment color
+    const color = post.sentiment_colors[0];
+    return `border-left: 4px solid ${color}; background: ${color}11;`;
+}
+
 function getSentimentTypeFromClass(sentimentClass) {
     const classToEmoji = {
         'sentiment-happy': '😊',
+        'sentiment-excited': '🤩',
         'sentiment-sad': '😢', 
         'sentiment-angry': '😡',
+        'sentiment-confused': '🤔',
         'sentiment-fear': '😨',
         'sentiment-calm': '😌',
         'sentiment-affection': '💕',
-        'sentiment-sarcastic': '😏'
+        'sentiment-sarcastic': '😏',
+        'sentiment-sarcastic-combo': '😏+'
     };
     
     return classToEmoji[sentimentClass] || '😐';
@@ -389,6 +418,12 @@ function filterFeed(sentiment) {
     } else {
         const filtered = posts.filter(post => {
             const sentimentClass = getSentimentClass(post);
+            
+            // Handle sarcastic combinations
+            if (sentiment === 'sarcastic' && sentimentClass === 'sentiment-sarcastic-combo') {
+                return true;
+            }
+            
             return sentimentClass.includes(sentiment);
         });
         renderPosts(filtered);
