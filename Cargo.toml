@@ -13,6 +13,7 @@ tower-http = { version = "0.5", features = ["cors", "fs"] }
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+async-trait = "0.1"
 
 # Database and utilities (Azure Cosmos DB will be added back once basic server works)
 uuid = { version = "1.0", features = ["v4", "serde"] }
@@ -21,10 +22,14 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
-# TODO: Re-add these once basic server is working:
-# azure_data_cosmos = "0.17"
-# azure_identity = "0.17"
-# bcrypt = "0.15"
+# Authentication and cryptography
+jsonwebtoken = "9.2"
+argon2 = "0.5"
+rand_core = { version = "0.6", features = ["std"] }
+
+# TODO: Re-add Azure Cosmos DB with rustls once authentication is working:
+# azure_data_cosmos = { version = "0.17", features = ["rustls"] }
+# azure_identity = { version = "0.17", features = ["rustls"] }
 
 # For calling Python scripts (using tokio built-in process support)
 # We'll use tokio::process::Command which is built-in

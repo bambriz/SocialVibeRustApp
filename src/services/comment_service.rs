@@ -1,15 +1,18 @@
 use crate::models::Comment;
 use crate::models::comment::{CreateCommentRequest, CommentResponse};
+use crate::db::repository::{CommentRepository, MockCommentRepository};
 use crate::{AppError, Result};
 use uuid::Uuid;
+use std::sync::Arc;
+use chrono::Utc;
 
 pub struct CommentService {
-    // TODO: Add database repository and sentiment service references
+    comment_repo: Arc<MockCommentRepository>,
 }
 
 impl CommentService {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(comment_repo: Arc<MockCommentRepository>) -> Self {
+        Self { comment_repo }
     }
 
     pub async fn create_comment(

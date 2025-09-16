@@ -1,5 +1,8 @@
 pub mod api;
 pub mod web;
+pub mod users;
+pub mod posts;
+pub mod auth;
 
 use axum::Router;
 use crate::AppState;
