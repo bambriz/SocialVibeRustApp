@@ -26,7 +26,7 @@ impl PostService {
         }
     }
 
-    pub async fn create_post(&self, request: CreatePostRequest, author_id: Uuid) -> Result<PostResponse> {
+    pub async fn create_post(&self, request: CreatePostRequest, author_id: Uuid, author_username: String) -> Result<PostResponse> {
         // Combine title and content for analysis
         let full_text = format!("{} {}", request.title, request.content);
         
@@ -61,7 +61,7 @@ impl PostService {
             title: request.title,
             content: request.content,
             author_id,
-            author_username: "User".to_string(), // TODO: Get from user service
+            author_username,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             comment_count: 0,

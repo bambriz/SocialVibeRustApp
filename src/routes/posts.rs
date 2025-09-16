@@ -34,8 +34,8 @@ pub async fn create_post(
     let author_id = Uuid::parse_str(&claims.user_id)
         .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;
     
-    // Create post with authenticated user's ID
-    let post = app_state.post_service.create_post(request, author_id).await?;
+    // Create post with authenticated user's ID and username
+    let post = app_state.post_service.create_post(request, author_id, claims.username.clone()).await?;
     
     Ok(ResponseJson(json!({
         "post": post,

@@ -63,14 +63,18 @@ class AdvancedSentimentAnalyzer:
                 'primary': [
                     r'\b(angry|mad|furious|rage|hate|livid|enraged)\b',
                     r'\b(pissed|irritated|annoyed|frustrated|outraged)\b',
-                    r'\b(infuriated|aggravated|irate|seething)\b'
+                    r'\b(infuriated|aggravated|irate|seething|fed\s+up)\b',
+                    r'\b(tired\s+of|sick\s+of|enough|stop|quit)\b'
                 ],
                 'secondary': [
                     r'\b(stupid|idiot|damn|crap|sucks|terrible|awful)\b',
-                    r'\b(disgusting|horrible|pathetic|useless|waste)\b',
+                    r'\b(disgusting|horrible|pathetic|useless|waste|mess)\b',
+                    r'\b(accountability|clarity|change|problems|deadlines|slipping)\b',
+                    r'\b(pretending|sugarcoating|not\s+here\s+to|part\s+of\s+the\s+problem)\b',
+                    r'\b(fine\s+when\s+it\'s\s+clearly\s+not|communication\s+is\s+a\s+mess|no\s+more)\b',
                     r'(😡|🤬|👿|💢|🔥|😠|😤|🤮|💀)'
                 ],
-                'boosters': [r'(so|very|really|extremely|totally|absolutely)']
+                'boosters': [r'(so|very|really|extremely|totally|absolutely|clearly|obviously)']
             },
             
             'confused': {
@@ -121,19 +125,23 @@ class AdvancedSentimentAnalyzer:
             'obvious_sarcasm': [
                 r'\b(oh\s+really|obviously|of\s+course|sure\s+thing)\b',
                 r'\b(yeah\s+right|as\s+if|like\s+that|totally)\b',
-                r'\b(great\s+job\.\.\.|wonderful\.\.\.|perfect\.\.\.|brilliant\.\.\.)\b'
+                r'\b(great\s+job\.\.\.|wonderful\.\.\.|perfect\.\.\.|brilliant\.\.\.)\b',
+                r'\b(oh\s+wow|real\s+genius|how\s+clever|so\s+smart)\b'
             ],
             'contradictory': [
                 r'\b(love\s+how|just\s+perfect|so\s+smart|really\s+helpful)\b.*\b(not|fail|terrible|stupid|useless)\b',
-                r'\b(thanks\s+for\s+nothing|couldn\'t\s+be\s+better|exactly\s+what\s+I\s+wanted)\b'
+                r'\b(thanks\s+for\s+nothing|couldn\'t\s+be\s+better|exactly\s+what\s+I\s+wanted)\b',
+                r'\b(keep\s+smiling)\b.*\b(through\s+it\s+all|mess|problems)\b'
             ],
             'excessive_praise': [
                 r'\b(absolutely\s+amazing|just\s+incredible|so\s+wonderful|totally\s+perfect)\b.*[.]{3,}',
-                r'\b(best\s+thing\s+ever|couldn\'t\s+be\s+happier|exactly\s+right)\b.*[!]*[.]{2,}'
+                r'\b(best\s+thing\s+ever|couldn\'t\s+be\s+happier|exactly\s+right)\b.*[!]*[.]{2,}',
+                r'\b(everything\'s\s+fine)\b.*\b(clearly\s+not|obviously\s+not)\b'
             ],
             'tone_indicators': [
                 r'\/s\b|sarcasm|being\s+sarcastic|joking|kidding',
-                r'\b(not)\s*[!]*\s*$'  # ending with "not!"
+                r'\b(not)\s*[!]*\s*$',  # ending with "not!"
+                r'\?\s*$'  # ending with question mark can indicate sarcasm
             ]
         }
         
