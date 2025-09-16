@@ -31,11 +31,14 @@ impl SentimentService {
             let base_sentiment = sentiment_label.strip_prefix("sarcastic+").unwrap_or("calm");
             let base_type = match base_sentiment {
                 "happy" => SentimentType::Happy,
+                "joy" => SentimentType::Joy,
                 "sad" => SentimentType::Sad,
                 "angry" => SentimentType::Angry,
                 "excited" => SentimentType::Excited,
                 "confused" => SentimentType::Confused,
                 "fear" => SentimentType::Fear,
+                "disgust" => SentimentType::Disgust,
+                "surprise" => SentimentType::Surprise,
                 "calm" => SentimentType::Calm,
                 "affection" => SentimentType::Affection,
                 _ => return Ok(vec![]), // Return empty for unknown types
@@ -44,11 +47,14 @@ impl SentimentService {
         } else {
             match sentiment_label.as_str() {
                 "happy" => SentimentType::Happy,
+                "joy" => SentimentType::Joy,
                 "excited" => SentimentType::Excited,
                 "confused" => SentimentType::Confused,
                 "sad" => SentimentType::Sad,
                 "angry" => SentimentType::Angry,
                 "fear" => SentimentType::Fear,
+                "disgust" => SentimentType::Disgust,
+                "surprise" => SentimentType::Surprise,
                 "calm" => SentimentType::Calm,
                 "affection" => SentimentType::Affection,
                 "sarcastic" => SentimentType::Sarcastic,
@@ -70,7 +76,7 @@ impl SentimentService {
     // Method to call Python sentiment analysis script
     async fn call_python_analyzer(&self, text: &str) -> Result<String, Box<dyn std::error::Error>> {
         let output = Command::new("python3")
-            .arg("python_scripts/custom_sentiment_analysis.py")
+            .arg("python_scripts/enhanced_sentiment_analysis.py")
             .arg(text)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

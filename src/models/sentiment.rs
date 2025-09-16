@@ -6,11 +6,14 @@ pub enum SentimentType {
     Angry,
     Sarcastic,
     Happy,
+    Joy,        // Distinct from Happy - more intense positive emotion
     Excited,
     Confused,
     Affection,
     Calm,
     Fear,
+    Disgust,    // New emotion type
+    Surprise,   // New emotion type
     // Mixed sentiments (e.g., Sarcastic + Happy)
     SarcasticCombination(Box<SentimentType>),
 }
@@ -25,15 +28,18 @@ pub struct Sentiment {
 impl SentimentType {
     pub fn color_code(&self) -> String {
         match self {
-            SentimentType::Sad => "#1e3a8a".to_string(), // Dark blue
-            SentimentType::Angry => "#dc2626".to_string(), // Red
+            SentimentType::Sad => "#1e3a8a".to_string(), // Dark blue - 😢
+            SentimentType::Angry => "#dc2626".to_string(), // Red - 😠
             SentimentType::Sarcastic => "#7c3aed".to_string(), // Purple
             SentimentType::Happy => "#fbbf24".to_string(), // Bright yellow/gold
+            SentimentType::Joy => "#22d3ee".to_string(), // Bright cyan - 😊 
             SentimentType::Excited => "#f59e0b".to_string(), // Bright orange
             SentimentType::Confused => "#8b5cf6".to_string(), // Light purple
             SentimentType::Affection => "#ec4899".to_string(), // Pink
             SentimentType::Calm => "#059669".to_string(), // Green
-            SentimentType::Fear => "#374151".to_string(), // Dark grey
+            SentimentType::Fear => "#374151".to_string(), // Dark grey - 😨
+            SentimentType::Disgust => "#84cc16".to_string(), // Lime green - 🤢
+            SentimentType::Surprise => "#f97316".to_string(), // Orange - 😲
             SentimentType::SarcasticCombination(base_type) => {
                 // Create a gradient effect by combining sarcasm purple with base sentiment
                 format!("linear-gradient(45deg, #7c3aed, {})", base_type.color_code())

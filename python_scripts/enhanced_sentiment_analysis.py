@@ -141,7 +141,8 @@ class AdvancedSentimentAnalyzer:
                     r'\b(love|adore|cherish|treasure|precious|darling|sweetheart)\b',
                     r'\b(beautiful|gorgeous|handsome|cute|adorable|sweet|sweetest)\b',
                     r'\b(amazing|wonderful|fantastic|incredible|perfect|best)\b',
-                    r'\b(smartest|cutest|most\s+handsome|most\s+beautiful|most\s+amazing)\b'
+                    r'\b(smartest|cutest|most\s+handsome|most\s+beautiful|most\s+amazing)\b',
+                    r'\b(i\s+love\s+you|you\s+mean\s+everything|my\s+heart|with\s+all\s+my\s+love)\b'
                 ],
                 'secondary': [
                     r'\b(lovely|charming|delightful|enchanting|magnificent)\b',
@@ -153,26 +154,76 @@ class AdvancedSentimentAnalyzer:
                     r'(💕|❤️|💖|💗|💙|💚|💛|🧡|💜|🤎|🖤|🤍|💘|💝|💞|💟|♥️|💌|😍|🥰|😘|😻|🤗)'
                 ],
                 'boosters': [r'(so|very|really|extremely|absolutely|totally|completely|utterly|most|super)']
+            },
+            
+            'joy': {
+                'primary': [
+                    r'\b(joyful|joyous|elated|euphoric|blissful|ecstatic)\b',
+                    r'\b(delighted|overjoyed|thrilled|radiant|gleeful)\b',
+                    r'\b(celebration|celebrate|victory|success|achievement)\b'
+                ],
+                'secondary': [
+                    r'\b(cheerful|bright|sunny|uplifting|positive|optimistic)\b',
+                    r'\b(smile|smiling|grin|grinning|beam|beaming)\b',
+                    r'\b(laughter|laughing|giggle|chuckle)\b',
+                    r'(😊|😄|😃|😁|🤗|🎉|🎊|✨|🌟|⭐)'
+                ],
+                'boosters': [r'(so|very|really|extremely|absolutely|totally)']
+            },
+            
+            'disgust': {
+                'primary': [
+                    r'\b(disgusting|disgusted|revolting|repulsive|nauseating)\b',
+                    r'\b(gross|yuck|ew|nasty|vile|foul)\b',
+                    r'\b(sickening|appalling|horrible|terrible|awful)\b'
+                ],
+                'secondary': [
+                    r'\b(unpleasant|offensive|distasteful|repugnant)\b',
+                    r'\b(makes\s+me\s+sick|want\s+to\s+vomit|can\'t\s+stand)\b',
+                    r'(🤢|🤮|😷|🤧|😵|🙄)'
+                ],
+                'boosters': [r'(so|very|really|extremely|absolutely|totally)']
+            },
+            
+            'surprise': {
+                'primary': [
+                    r'\b(surprised|shocked|amazed|astonished|astounded)\b',
+                    r'\b(unexpected|sudden|wow|whoa|omg|unbelievable)\b',
+                    r'\b(incredible|remarkable|extraordinary|stunning)\b'
+                ],
+                'secondary': [
+                    r'\b(didn\'t\s+expect|never\s+thought|can\'t\s+believe)\b',
+                    r'\b(out\s+of\s+nowhere|came\s+out\s+of|blindsided)\b',
+                    r'(😲|😮|😯|🤯|😱|🙀|😳)'
+                ],
+                'boosters': [r'(so|very|really|extremely|absolutely|totally)']
             }
         }
         
         # Advanced sarcasm detection patterns
         self.sarcasm_patterns = {
             'obvious_sarcasm': [
-                r'\b(oh\s+really|obviously|of\s+course|sure\s+thing)\b',
+                r'\b(oh\s+great|oh\s+really|obviously|of\s+course|sure\s+thing)\b',
                 r'\b(yeah\s+right|as\s+if|like\s+that|totally)\b',
                 r'\b(great\s+job\.\.\.|wonderful\.\.\.|perfect\.\.\.|brilliant\.\.\.)\b',
-                r'\b(oh\s+wow|real\s+genius|how\s+clever|so\s+smart)\b'
+                r'\b(oh\s+wow|real\s+genius|how\s+clever|so\s+smart)\b',
+                r'\b(just\s+perfect|just\s+great|how\s+wonderful|absolutely\s+perfect)\b'
             ],
             'contradictory': [
                 r'\b(love\s+how|just\s+perfect|so\s+smart|really\s+helpful)\b.*\b(not|fail|terrible|stupid|useless)\b',
                 r'\b(thanks\s+for\s+nothing|couldn\'t\s+be\s+better|exactly\s+what\s+I\s+wanted)\b',
-                r'\b(keep\s+smiling)\b.*\b(through\s+it\s+all|mess|problems)\b'
+                r'\b(keep\s+smiling)\b.*\b(through\s+it\s+all|mess|problems)\b',
+                r'\b(great|perfect|wonderful|amazing)\b.*\b(another|could\s+have\s+been|should\s+have)\b'
             ],
             'excessive_praise': [
                 r'\b(absolutely\s+amazing|just\s+incredible|so\s+wonderful|totally\s+perfect)\b.*[.]{3,}',
                 r'\b(best\s+thing\s+ever|couldn\'t\s+be\s+happier|exactly\s+right)\b.*[!]*[.]{2,}',
                 r'\b(everything\'s\s+fine)\b.*\b(clearly\s+not|obviously\s+not)\b'
+            ],
+            'punctuation_sarcasm': [
+                r'\b(great|perfect|wonderful|amazing|fantastic)\b.*\.\s*$',  # Positive word with period (flat tone)
+                r'^[A-Z][a-z]+\s+(great|perfect|wonderful)\b',  # Start with "Oh great", "Just perfect"
+                r'\b(great|perfect|wonderful)\b.*\b(meeting|email|another)\b'  # Context clues
             ],
             'tone_indicators': [
                 r'\/s\b|sarcasm|being\s+sarcastic|joking|kidding',
@@ -194,10 +245,10 @@ class AdvancedSentimentAnalyzer:
         text_lower = text.lower()
         score = 0.0
         
-        # Primary patterns get highest weight
+        # Primary patterns get highest weight (increased for affection priority)
         for pattern in patterns.get('primary', []):
             matches = len(re.findall(pattern, text_lower))
-            score += matches * 1.0  # Increased from 0.8
+            score += matches * 1.5  # Increased to give affection better chance
         
         # Secondary patterns get medium weight  
         for pattern in patterns.get('secondary', []):
@@ -222,13 +273,15 @@ class AdvancedSentimentAnalyzer:
             for pattern in patterns:
                 matches = len(re.findall(pattern, text_lower))
                 if category == 'obvious_sarcasm':
-                    sarcasm_score += matches * 0.9
+                    sarcasm_score += matches * 1.2  # Increased weight
                 elif category == 'contradictory':
-                    sarcasm_score += matches * 0.8
+                    sarcasm_score += matches * 1.0  # Increased weight
+                elif category == 'punctuation_sarcasm':
+                    sarcasm_score += matches * 0.8  # New category
                 elif category == 'tone_indicators':
-                    sarcasm_score += matches * 1.0  # Strong indicator
+                    sarcasm_score += matches * 1.5  # Strong indicator
                 else:
-                    sarcasm_score += matches * 0.6
+                    sarcasm_score += matches * 0.7  # Increased base weight
         
         # Additional context clues
         if re.search(r'[.]{3,}', text):  # Ellipses often indicate sarcasm
@@ -292,16 +345,31 @@ class AdvancedSentimentAnalyzer:
         # Debug: print emotion scores for troubleshooting
         # print(f"DEBUG: Emotion scores: {emotion_scores}", file=sys.stderr)
         
-        # Find the dominant emotion (ultra-low threshold for workplace frustration detection) 
-        if not emotion_scores or max(emotion_scores.values()) < 0.005:
+        # Find the dominant emotion with proper thresholds
+        if not emotion_scores:
             dominant_emotion = 'calm'
             emotion_confidence = 0.5
         else:
-            dominant_emotion = max(emotion_scores.keys(), key=lambda k: emotion_scores[k])
-            emotion_confidence = min(emotion_scores[dominant_emotion] / 2.0, 1.0)  # Better scaling
+            # Get the highest scoring emotion (with affection priority in case of ties)
+            max_score = max(emotion_scores.values())
+            
+            # If affection ties with other emotions, prioritize it
+            if 'affection' in emotion_scores and emotion_scores['affection'] == max_score:
+                dominant_emotion = 'affection'
+            else:
+                dominant_emotion = max(emotion_scores.keys(), key=lambda k: emotion_scores[k])
+            
+            raw_confidence = emotion_scores[dominant_emotion]
+            
+            # Apply minimum thresholds for detection (lowered for better sensitivity)
+            if raw_confidence < 0.2:
+                dominant_emotion = 'calm'
+                emotion_confidence = 0.5
+            else:
+                emotion_confidence = min(raw_confidence / 2.0, 1.0)  # Better scaling
         
-        # Combine with sarcasm if detected
-        if is_sarcastic and sarcasm_confidence > 0.5:
+        # Return sarcastic combination if sarcasm detected with high confidence
+        if is_sarcastic and sarcasm_confidence > 0.4:
             combined_confidence = min((emotion_confidence + sarcasm_confidence) / 2, 1.0)
             return f"sarcastic+{dominant_emotion}:{combined_confidence:.2f}"
         else:

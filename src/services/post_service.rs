@@ -134,6 +134,7 @@ impl PostService {
         if let Some((dominant_type, score)) = combined_score_map.iter().max_by(|a, b| a.1.partial_cmp(b.1).unwrap()) {
             let sentiment_type = match dominant_type.as_str() {
                 "Happy" => SentimentType::Happy,
+                "Joy" => SentimentType::Joy,
                 "Sad" => SentimentType::Sad,
                 "Angry" => SentimentType::Angry,
                 "Excited" => SentimentType::Excited,
@@ -141,6 +142,8 @@ impl PostService {
                 "Fear" => SentimentType::Fear,
                 "Calm" => SentimentType::Calm,
                 "Affection" => SentimentType::Affection,
+                "Disgust" => SentimentType::Disgust,
+                "Surprise" => SentimentType::Surprise,
                 "Sarcastic" => SentimentType::Sarcastic,
                 _ => SentimentType::Calm,
             };
@@ -194,11 +197,14 @@ impl PostService {
         for sentiment in sentiments {
             let sentiment_multiplier = match sentiment.sentiment_type {
                 SentimentType::Happy => 1.2,
-                SentimentType::Excited => 1.3,  // Highest positive boost
+                SentimentType::Joy => 1.4,      // Highest positive boost - pure joy
+                SentimentType::Excited => 1.3,  // High positive boost
                 SentimentType::Affection => 1.1,
+                SentimentType::Surprise => 1.1, // Slight positive boost - draws attention
                 SentimentType::Calm => 1.0,
                 SentimentType::Confused => 0.95, // Slightly lower than neutral
                 SentimentType::Sarcastic => 0.9,
+                SentimentType::Disgust => 0.6,  // Low engagement like anger
                 SentimentType::Sad => 0.8,
                 SentimentType::Fear => 0.7,
                 SentimentType::Angry => 0.6,
@@ -206,10 +212,14 @@ impl PostService {
                     // For sarcastic combinations, reduce the base sentiment score
                     let base_score = match **base_type {
                         SentimentType::Happy => 1.2,
+                        SentimentType::Joy => 1.4,
                         SentimentType::Excited => 1.3,
                         SentimentType::Affection => 1.1,
+                        SentimentType::Surprise => 1.1,
                         SentimentType::Calm => 1.0,
                         SentimentType::Confused => 0.95,
+                        SentimentType::Sarcastic => 0.9,
+                        SentimentType::Disgust => 0.6,
                         SentimentType::Sad => 0.8,
                         SentimentType::Fear => 0.7,
                         SentimentType::Angry => 0.6,

@@ -288,10 +288,13 @@ function getSentimentClass(post) {
     // Map colors to sentiment classes (updated with new backend colors)
     const colorToClass = {
         '#fbbf24': 'sentiment-happy',      // Bright yellow/gold - Happy
+        '#22d3ee': 'sentiment-joy',        // Bright cyan - Joy 😊
         '#f59e0b': 'sentiment-excited',    // Bright orange - Excited  
         '#1e3a8a': 'sentiment-sad',        // Dark blue - Sad
         '#dc2626': 'sentiment-angry',      // Red - Angry
         '#8b5cf6': 'sentiment-confused',   // Light purple - Confused
+        '#84cc16': 'sentiment-disgust',    // Lime green - Disgust 🤢
+        '#f97316': 'sentiment-surprise',   // Orange - Surprise 😲
         '#374151': 'sentiment-fear',       // Dark grey - Fear
         '#059669': 'sentiment-calm',       // Green - Calm
         '#ec4899': 'sentiment-affection',  // Pink - Affection
@@ -341,11 +344,14 @@ function getSentimentBackground(post) {
 function getSentimentTypeFromClass(sentimentClass) {
     const classToEmoji = {
         'sentiment-happy': '😊',
+        'sentiment-joy': '😊',             // Joy - distinct from happy
         'sentiment-excited': '🤩',
-        'sentiment-sad': '😢', 
-        'sentiment-angry': '😡',
+        'sentiment-sad': '😢',             // Sadness
+        'sentiment-angry': '😠',           // Anger
         'sentiment-confused': '🤔',
-        'sentiment-fear': '😨',
+        'sentiment-fear': '😨',            // Fear
+        'sentiment-disgust': '🤢',         // Disgust
+        'sentiment-surprise': '😲',        // Surprise
         'sentiment-calm': '😌',
         'sentiment-affection': '💕',
         'sentiment-sarcastic': '😏',
