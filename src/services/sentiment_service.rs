@@ -66,7 +66,7 @@ impl SentimentService {
     // Method to call Python sentiment analysis script
     async fn call_python_analyzer(&self, text: &str) -> Result<String, Box<dyn std::error::Error>> {
         let output = Command::new("python3")
-            .arg("python_scripts/sentiment_analysis.py")
+            .arg("python_scripts/enhanced_sentiment_analysis.py")
             .arg(text)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
