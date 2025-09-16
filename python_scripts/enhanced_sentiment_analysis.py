@@ -67,9 +67,11 @@ class AdvancedSentimentAnalyzer:
                     r'\b(tired\s+of|sick\s+of|enough|stop|quit|can\'t\s+take)\b',
                     r'\b(this\s+is\s+ridiculous|this\s+is\s+bullshit|this\s+sucks)\b',
                     r'\b(what\s+the\s+hell|what\s+the\s+fuck|are\s+you\s+kidding)\b',
-                    r'\b(how\s+are\s+we\s+still|still\s+dealing\s+with|we\'re\s+drowning)\b',
-                    r'\b(it\'s\s+not\s+fine|isn\'t\s+just\s+frustrating|it\'s\s+insulting)\b',
-                    r'\b(fix\s+it\.\s+now|being\s+treated\s+like|don\'t\s+matter)\b'
+                    r'(how\s+are\s+we\s+still|still\s+dealing\s+with|we\'re\s+drowning)',
+                    r'(it\'s\s+not\s+fine|isn\'t\s+just\s+frustrating|it\'s\s+insulting)',
+                    r'(fix\s+it\.?\s*now|being\s+treated\s+like|don\'t\s+matter)',
+                    r'(this\s+isn\'t\s+just\s+frustrating|we\'re\s+not\s+robots|we\'re\s+not\s+mind\s+readers)',
+                    r'(everything\'s\s+fine\?|somehow.*expected\s+to\s+keep|delivering\s+like\s+everything\'s\s+fine)'
                 ],
                 'secondary': [
                     r'\b(stupid|idiot|damn|crap|sucks|terrible|awful)\b',
@@ -81,10 +83,12 @@ class AdvancedSentimentAnalyzer:
                     r'\b(incompetent|unacceptable|disaster|failure|broken\s+system)\b',
                     r'\b(had\s+enough|losing\s+patience|at\s+my\s+limit|breaking\s+point)\b',
                     r'\b(unprofessional|disorganized|chaotic|dysfunction|toxic)\b',
-                    r'\b(broken\s+tools|zero\s+communication|vacuum|chaos|pressure|silence)\b',
-                    r'\b(no\s+roadmap|no\s+support|leadership\s+plays\s+pretend|robots|mind\s+readers)\b',
-                    r'\b(professionals|decisions\s+made\s+in|expected\s+to\s+keep|delivering\s+like)\b',
-                    r'\b(everything\'s\s+fine|drowning\s+in|plays\s+pretend|treating\s+like)\b',
+                    r'(broken\s+tools|zero\s+communication|decisions\s+made\s+in\s+a?\s*vacuum)',
+                    r'(no\s+roadmap|no\s+support|leadership\s+plays\s+pretend|robots|mind\s+readers)',
+                    r'(professionals|decisions\s+made\s+in|expected\s+to\s+keep|delivering\s+like)',
+                    r'(everything\'s\s+fine|drowning\s+in\s+chaos|plays\s+pretend|treating\s+like)',
+                    r'(pressure\s+and\s+silence|just\s+pressure\s+and\s+silence|chaos\s+while\s+leadership)',
+                    r'(insulting|frustrating)',
                     r'(😡|🤬|👿|💢|🔥|😠|😤|🤮|💀)'
                 ],
                 'boosters': [r'(so|very|really|extremely|totally|absolutely|clearly|obviously|completely|utterly)']
@@ -233,11 +237,19 @@ class AdvancedSentimentAnalyzer:
         if re.search(self.intensity_modifiers['diminishers'], text_lower):
             modified_score *= 0.7
             
-        # Check for negations but skip positive idioms
+        # Smart negation handling - some negations amplify anger rather than diminish it
         if not re.search(self.intensity_modifiers['negation_exceptions'], text_lower):
-            negation_matches = re.finditer(self.intensity_modifiers['negations'], text_lower)
-            for match in negation_matches:
-                modified_score *= 0.3
+            # Angry negations that amplify frustration
+            angry_negations = re.findall(r'\b(it\'s\s+not\s+fine|not\s+just\s+frustrating|don\'t\s+matter|we\'re\s+not\s+robots|not\s+mind\s+readers|isn\'t\s+just)', text_lower)
+            # Regular negations that diminish sentiment  
+            regular_negations = re.findall(r'\b(not|never|no|none|nothing|nobody|nowhere|neither|nor|don\'t|doesn\'t|didn\'t|won\'t|wouldn\'t|couldn\'t|isn\'t|aren\'t|wasn\'t|weren\'t)\b', text_lower)
+            
+            # Subtract angry negations from regular negations count
+            net_negations = max(0, len(regular_negations) - len(angry_negations))
+            
+            # Only apply penalty for net regular negations (max 3 to prevent over-penalization)
+            for _ in range(min(net_negations, 3)):
+                modified_score *= 0.7  # Less harsh penalty
             
         return min(modified_score, 1.0)
 
@@ -259,10 +271,10 @@ class AdvancedSentimentAnalyzer:
             emotion_scores[emotion] = self.apply_context_modifiers(raw_score, text)
         
         # Debug: print emotion scores for troubleshooting
-        # print(f"DEBUG: Emotion scores: {emotion_scores}")
+        # print(f"DEBUG: Emotion scores: {emotion_scores}", file=sys.stderr)
         
-        # Find the dominant emotion (lowered threshold to 0.01 for better detection) 
-        if not emotion_scores or max(emotion_scores.values()) < 0.01:
+        # Find the dominant emotion (ultra-low threshold for workplace frustration detection) 
+        if not emotion_scores or max(emotion_scores.values()) < 0.005:
             dominant_emotion = 'calm'
             emotion_confidence = 0.5
         else:
