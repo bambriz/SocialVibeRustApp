@@ -6,6 +6,10 @@ Detects hate speech, racist, and homophobic content
 import sys
 import json
 import re
+from hatesonar import Sonar
+
+HATE_SPEECH_THRESHOLD = 0.6
+HATE_SPEECH_LOWER_THRESHOLD = 0.35
 
 def check_content_moderation(text):
     """
@@ -14,43 +18,18 @@ def check_content_moderation(text):
     """
     text_lower = text.lower()
     
-    # Define offensive patterns (this is a basic implementation)
-    # In production, use more sophisticated ML models
-    hate_speech_patterns = [
-        # Racial slurs and discriminatory language (censored examples)
-        r'\b(racist?|bigot|discrimination|prejudice)\b',
-        # Homophobic language (censored examples)  
-        r'\b(homophobic?|transphobic?)\b',
-        # General hate patterns
-        r'\bhate\s+(you|them|him|her)\b',
-        r'\bkill\s+(yourself|themselves)\b',
-        r'\b(die|death)\s+(to|for)\s+',
-        r'\b(stupid|dumb|idiot)\s+(people|person)\b',
-        # Threat patterns
-        r'\bthreat(en)?(s|ed)?\b',
-        r'\bviolent?|violence\b',
-    ]
-    
-    # Check for hate speech patterns
-    for pattern in hate_speech_patterns:
-        if re.search(pattern, text_lower):
-            return "blocked"
-    
-    # Check for excessive profanity (basic implementation)
-    profanity_count = 0
-    profanity_patterns = [
-        r'\bf\*+k\b', r'\bs\*+t\b', r'\bd\*+n\b',  # Censored profanity
-        r'\bbitch\b', r'\basshole\b'
-    ]
-    
-    for pattern in profanity_patterns:
-        matches = len(re.findall(pattern, text_lower))
-        profanity_count += matches
-    
-    # Block if too much profanity
-    if profanity_count > 2:
+    sonar = Sonar()
+    result = sonar.ping(text_lower)
+    hate_speech_prob = result['classes']['hate_speech']
+    offensive_prob = result['classes']['offensive_language']
+    neither_prob = result['classes']['neither']
+    top_class = result['top_class']
+    if top_class == 'hate_speech' and hate_speech_prob > HATE_SPEECH_THRESHOLD:
         return "blocked"
-    
+    if top_class == 'offensive_language' and hate_speech > HATE_SPEECH_LOWER_THRESHOLD:
+        return "blocked"
+    if hate_speech > HATE_SPEECH_LOWER_THRESHOLD:
+        return "blocked"
     return "allowed"
 
 def main():
