@@ -15,12 +15,21 @@ pub fn routes() -> Router<AppState> {
         .route("/health", get(health_check))
 }
 
-async fn serve_index() -> Result<Html<String>, StatusCode> {
+async fn serve_index() -> Result<Response, StatusCode> {
     match fs::read_to_string("static/index.html").await {
-        Ok(content) => Ok(Html(content)),
+        Ok(content) => Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .header(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+            .body(content.into())
+            .unwrap()),
         Err(_) => {
             // Fallback if static file not found
-            Ok(Html(r#"
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+                .header(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                .body(r#"
             <!DOCTYPE html>
             <html>
             <head>
@@ -72,7 +81,8 @@ async fn serve_index() -> Result<Html<String>, StatusCode> {
                 </div>
             </body>
             </html>
-            "#.to_string()))
+            "#.into())
+                .unwrap())
         }
     }
 }
