@@ -15,25 +15,34 @@ def check_content_moderation(text):
     
     # Define hate speech patterns
     hate_patterns = [
-        # Racial slurs and hate speech
-        r'\b(n\*\*ger|n\*gger|nigg[aer]+|f\*ggot|faggot|retard|retarded)\b',
-        r'\b(ch\*nk|ch[1i]nk|sp[1i]c|k[1i]ke|raghead|towelhead)\b',
-        r'\b(wetback|beaner|cracker|honkey|whitey|gook|jap)\b',
+        # Racial slurs and hate speech (singular and plural forms)
+        r'\b(n\*\*ger|n\*gger|nigg[aer]+s?|f\*ggot|faggots?|retards?|retarded)\b',
+        r'\b(ch\*nks?|ch[1i]nks?|sp[1i]cs?|k[1i]kes?|ragheads?|towelheads?)\b',
+        r'\b(wetbacks?|beaners?|crackers?|honkeys?|whiteys?|gooks?|japs?)\b',
+        r'\b(spics?|chinks?|kikes?)\b',  # Additional common variants
         
-        # Homophobic slurs
-        r'\b(fag|dyke|tranny|homo|queer)\b',
+        # Homophobic slurs (singular and plural forms)
+        r'\b(fags?|dykes?|trann(y|ies)|homos?|queers?)\b',
+        
+        # Additional hate speech terms
+        r'\b(sand\s*nigg[aer]+s?|mud\s*people|white\s*trash|trailer\s*trash)\b',
+        r'\b(illegals?|border\s*jumpers?|anchor\s*babies?)\b',
         
         # Violent hate speech
-        r'\b(kill\s+all|genocide|lynch|hang\s+the|shoot\s+the)\b.*\b(blacks|jews|muslims|gays|women|men)\b',
-        r'\b(gas\s+the|exterminate|eliminate)\b.*\b(jews|blacks|muslims|gays)\b',
+        r'\b(kill\s+all|genocide|lynch|hang\s+the|shoot\s+the)\b.*\b(blacks|jews|muslims|gays|women|men|latinos|hispanics|immigrants)\b',
+        r'\b(gas\s+the|exterminate|eliminate)\b.*\b(jews|blacks|muslims|gays|latinos|hispanics)\b',
         
         # Direct threats
         r'\b(i\s+will\s+kill|gonna\s+kill|will\s+murder|should\s+die)\b',
-        r'\b(burn\s+in\s+hell|hope\s+you\s+die|kill\s+yourself)\b',
+        r'\b(burn\s+in\s+hell|hope\s+you\s+die|kill\s+yourself|should\s+be\s+shot)\b',
         
-        # Extreme profanity with hate context
-        r'\b(fucking|damn|shit)\b.*\b(jews|blacks|muslims|gays|women|immigrants)\b',
-        r'\b(jews|blacks|muslims|gays|women|immigrants)\b.*\b(are\s+trash|are\s+scum|should\s+be\s+killed)\b',
+        # Hate speech with context
+        r'\b(fucking|damn|shit)\b.*\b(jews|blacks|muslims|gays|women|immigrants|latinos|hispanics|beaners|queers)\b',
+        r'\b(jews|blacks|muslims|gays|women|immigrants|latinos|hispanics|beaners|queers)\b.*\b(are\s+trash|are\s+scum|should\s+be\s+killed|ruin\s+everything|are\s+disgusting)\b',
+        
+        # Derogatory statements
+        r'\bi\s+hate\s+(jews|blacks|muslims|gays|women|immigrants|latinos|hispanics|beaners|queers)\b',
+        r'\b(disgusting|filthy|dirty)\s+(jews|blacks|muslims|gays|women|immigrants|latinos|hispanics|beaners|queers)\b',
     ]
     
     # Check for hate speech patterns
