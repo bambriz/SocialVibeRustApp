@@ -180,6 +180,15 @@ wheels = [
 ]
 
 [[package]]
+name = "emoji"
+version = "2.14.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/cb/7d/01cddcbb6f5cc0ba72e00ddf9b1fa206c802d557fd0a20b18e130edf1336/emoji-2.14.1.tar.gz", hash = "sha256:f8c50043d79a2c1410ebfae833ae1868d5941a67a6cd4d18377e2eb0bd79346b", size = 597182 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/91/db/a0335710caaa6d0aebdaa65ad4df789c15d89b7babd9a30277838a7d9aac/emoji-2.14.1-py3-none-any.whl", hash = "sha256:35a8a486c1460addb1499e3bf7929d3889b2e2841a57401903699fef595e942b", size = 590617 },
+]
+
+[[package]]
 name = "emotionclassifier"
 version = "0.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1021,6 +1030,8 @@ dependencies = [
     { name = "emotionclassifier" },
     { name = "hatesonar" },
     { name = "nrclex" },
+    { name = "text2emotion" },
+    { name = "textblob" },
 ]
 
 [package.metadata]
@@ -1028,6 +1039,8 @@ requires-dist = [
     { name = "emotionclassifier", specifier = ">=0.1.4" },
     { name = "hatesonar", specifier = ">=0.0.7" },
     { name = "nrclex", specifier = ">=3.0.0" },
+    { name = "text2emotion", specifier = ">=0.0.5" },
+    { name = "textblob", specifier = ">=0.19.0" },
 ]
 
 [[package]]
@@ -1205,6 +1218,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517", size = 7793921 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353 },
+]
+
+[[package]]
+name = "text2emotion"
+version = "0.0.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "emoji" },
+    { name = "nltk" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b0/47/c63fd37b02ebfdfaf7aa365d40b2ac357814a820b692dc1a652a6cbc8964/text2emotion-0.0.5.tar.gz", hash = "sha256:a7868ff1aee3362491c9ca094ae3d975678693aaa5e9144d1ad0eb64dd8f32e8", size = 59214 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fe/31/b190e37c1396ca68ab1b5c8ea1a23f2f7848df532ad69133e94853120aed/text2emotion-0.0.5-py3-none-any.whl", hash = "sha256:3724a0a610f3a35ada599de0b9a1deff5b8902fb55078596236c31505ee75421", size = 57772 },
 ]
 
 [[package]]

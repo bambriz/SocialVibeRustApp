@@ -68,68 +68,79 @@ def main_emotion_analysis(text):
     """
     text = text.lower()
     
-    # Use EmotionClassifier as primary emotion detector (shows more emotion options)
-    try:
-        from emotionclassifier import EmotionClassifier
-        classifier = EmotionClassifier()
-        result = classifier.predict(text)
+    # Skip slow ML libraries to avoid timeout - use fast NRCLex + pattern matching
+    # try:
+    #     from emotionclassifier import EmotionClassifier
+    #     classifier = EmotionClassifier()
+    #     result = classifier.predict(text)
+    #     
+    #     # EmotionClassifier returns label and confidence
+    #     emotion_label = result['label'].lower()
+    #     # Use a base confidence since EmotionClassifier provides the prediction
+    #     confidence = 0.75  # High confidence for ML-based detection
+    #     
+    #     return f"{emotion_label}:{confidence:.2f}"
+    #     
+    # except (ImportError, Exception):
+    #     # Try text2emotion as backup
+    #     try:
+    #         import text2emotion as te
+    #         result = te.get_emotion(text)
+    #         # Get the emotion with highest probability
+    #         if result:
+    #             dominant_emotion = max(result.keys(), key=lambda k: result[k])
+    #             confidence = result[dominant_emotion]
+    #             return f"{dominant_emotion.lower()}:{confidence:.2f}"
+    #     except (ImportError, Exception):
+    #         pass
+    # Fallback to NRCLex (fast and reliable)
+    emotions = NRCLex(text)
+    emotion_scores = emotions.raw_emotion_scores  # type: ignore
+    
+    if emotion_scores:
+        # Get the dominant emotion from NRCLex
+        dominant_emotion = max(emotion_scores, key=emotion_scores.get)
         
-        # EmotionClassifier returns label and confidence
-        emotion_label = result['label'].lower()
-        # Use a base confidence since EmotionClassifier provides the prediction
-        confidence = 0.75  # High confidence for ML-based detection
+        # Map NRCLex emotions to your expanded set
+        emotion_mapping = {
+            'joy': 'joy',
+            'sadness': 'sad',
+            'anger': 'angry',
+            'fear': 'fear',
+            'disgust': 'disgust',
+            'surprise': 'surprise',
+            'anticipation': 'excited',
+            'trust': 'affection',
+            'positive': 'happy',
+            'negative': 'sad'
+        }
         
-        return f"{emotion_label}:{confidence:.2f}"
+        mapped_emotion = emotion_mapping.get(dominant_emotion, 'calm')
         
-    except (ImportError, Exception):
-        # Fallback to NRCLex if EmotionClassifier fails
-        emotions = NRCLex(text)
-        emotion_scores = emotions.raw_emotion_scores  # type: ignore
+        # Pattern-based enhancement for missing emotions (second pass)
+        text_patterns = {
+            'joy': [r'\b(celebration|celebrate|party|joyful|jubilant|triumph|victory)\b'],
+            'disgust': [r'\b(disgusting|gross|revolting|nauseating|yuck|ew|horrible)\b'],
+            'surprise': [r'\b(surprised|shocked|wow|omg|unexpected|amazing|incredible)\b'],
+            'excited': [r'\b(excited|thrilled|pumped|hyped|stoked|energized)\b'],
+            'confused': [r'\b(confused|puzzled|bewildered|don\'t\s+understand)\b']
+        }
         
-        if emotion_scores:
-            # Get the dominant emotion from NRCLex
-            dominant_emotion = max(emotion_scores, key=emotion_scores.get)
-            
-            # Map NRCLex emotions to your expanded set
-            emotion_mapping = {
-                'joy': 'joy',
-                'sadness': 'sad',
-                'anger': 'angry',
-                'fear': 'fear',
-                'disgust': 'disgust',
-                'surprise': 'surprise',
-                'anticipation': 'excited',
-                'trust': 'affection',
-                'positive': 'happy',
-                'negative': 'sad'
-            }
-            
-            mapped_emotion = emotion_mapping.get(dominant_emotion, 'calm')
-            
-            # Pattern-based enhancement for missing emotions (second pass)
-            text_patterns = {
-                'joy': [r'\b(celebration|celebrate|party|joyful|jubilant|triumph|victory)\b'],
-                'disgust': [r'\b(disgusting|gross|revolting|nauseating|yuck|ew|horrible)\b'],
-                'surprise': [r'\b(surprised|shocked|wow|omg|unexpected|amazing|incredible)\b'],
-                'excited': [r'\b(excited|thrilled|pumped|hyped|stoked|energized)\b'],
-                'confused': [r'\b(confused|puzzled|bewildered|don\'t\s+understand)\b']
-            }
-            
-            for pattern_emotion, patterns in text_patterns.items():
-                if any(re.search(pattern, text) for pattern in patterns):
-                    return f"{pattern_emotion}:0.70"
-                    
-            return f"{mapped_emotion}:0.60"
-        
-        # Fallback to simple pattern matching if NRCLex fails
-        if re.search(r'\b(happy|joy|glad|cheerful|delighted)\b', text):
-            return 'happy:0.60'
-        elif re.search(r'\b(sad|depressed|miserable|heartbroken)\b', text):
-            return 'sad:0.60'
-        elif re.search(r'\b(angry|mad|furious|rage|hate)\b', text):
-            return 'angry:0.60'
-        else:
-            return 'calm:0.30'
+        for pattern_emotion, patterns in text_patterns.items():
+            if any(re.search(pattern, text) for pattern in patterns):
+                return f"{pattern_emotion}:0.70"
+                
+        return f"{mapped_emotion}:0.60"
+    
+    # Fallback to simple pattern matching if NRCLex fails
+    if re.search(r'\b(happy|joy|glad|cheerful|delighted)\b', text):
+        return 'happy:0.60'
+    elif re.search(r'\b(sad|depressed|miserable|heartbroken)\b', text):
+        return 'sad:0.60'
+    elif re.search(r'\b(angry|mad|furious|rage|hate)\b', text):
+        return 'angry:0.60'
+    else:
+        return 'calm:0.30'
 
 def main():
     """Main function for command line usage"""

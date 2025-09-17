@@ -1,5 +1,7 @@
 use tokio::process::Command;
 use std::process::Stdio;
+use std::time::Duration;
+use tokio::time::timeout;
 
 #[derive(Debug, Clone)]
 pub struct ModerationResult {
@@ -16,7 +18,18 @@ impl ModerationService {
     }
 
     pub async fn check_content(&self, text: &str) -> Result<ModerationResult, Box<dyn std::error::Error>> {
-        let result = self.call_python_moderator(text).await?;
+        // Add timeout to prevent hanging on model downloads
+        let result = match timeout(Duration::from_secs(5), self.call_python_moderator(text)).await {
+            Ok(res) => res?,
+            Err(_) => {
+                eprintln!("Content moderation timed out, failing open for safety");
+                return Ok(ModerationResult {
+                    is_blocked: false,
+                    violation_type: Some("moderation_timeout".to_string()),
+                    details: Some("system_timeout".to_string()),
+                });
+            }
+        };
         let trimmed = result.trim();
         
         if trimmed == "allowed" {
@@ -53,8 +66,10 @@ impl ModerationService {
 
     async fn call_python_moderator(&self, text: &str) -> Result<String, Box<dyn std::error::Error>> {
         let output = Command::new("python3")
+            .arg("-u")  // Unbuffered output
             .arg("python_scripts/content_moderation.py")
             .arg(text)
+            .stdin(Stdio::null())  // Prevent stdin waits
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()

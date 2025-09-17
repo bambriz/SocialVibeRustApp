@@ -7,6 +7,8 @@ dependencies = [
     "emotionclassifier>=0.1.4",
     "hatesonar>=0.0.7",
     "nrclex>=3.0.0",
+    "text2emotion>=0.0.5",
+    "textblob>=0.19.0",
 ]
 
 [[tool.uv.index]]

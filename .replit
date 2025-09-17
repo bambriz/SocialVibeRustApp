@@ -4,7 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["openssl", "pkg-config"]
+packages = ["glibcLocales", "openssl", "pkg-config"]
 
 [workflows]
 runButton = "Project"

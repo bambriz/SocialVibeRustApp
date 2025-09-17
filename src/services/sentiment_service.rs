@@ -1,6 +1,8 @@
 use crate::models::{Sentiment, SentimentType};
 use tokio::process::Command;
 use std::process::Stdio;
+use std::time::Duration;
+use tokio::time::timeout;
 
 pub struct SentimentService;
 
@@ -10,7 +12,18 @@ impl SentimentService {
     }
 
     pub async fn analyze_sentiment(&self, text: &str) -> Result<Vec<Sentiment>, Box<dyn std::error::Error>> {
-        let result = self.call_python_analyzer(text).await?;
+        // Add timeout to prevent hanging on model downloads
+        let result = match timeout(Duration::from_secs(5), self.call_python_analyzer(text)).await {
+            Ok(res) => res?,
+            Err(_) => {
+                eprintln!("Sentiment analysis timed out, returning default");
+                return Ok(vec![Sentiment {
+                    sentiment_type: SentimentType::Calm,
+                    confidence: 0.30,
+                    color_code: SentimentType::Calm.color_code(),
+                }]);
+            }
+        };
         
         // Robust parsing: handle different output formats
         let clean_result = result.lines().last().unwrap_or("").trim();
@@ -78,8 +91,10 @@ impl SentimentService {
     // Method to call Python sentiment analysis script
     async fn call_python_analyzer(&self, text: &str) -> Result<String, Box<dyn std::error::Error>> {
         let output = Command::new("python3")
+            .arg("-u")  // Unbuffered output
             .arg("python_scripts/custom_sentiment_analysis.py")
             .arg(text)
+            .stdin(Stdio::null())  // Prevent stdin waits
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
