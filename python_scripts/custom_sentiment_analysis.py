@@ -19,8 +19,11 @@ def sarcasm_affection_analysis(text):
         r'\b(oh\s+great|oh\s+really|obviously|of\s+course|sure\s+thing)\b',
         r'\b(yeah\s+right|as\s+if|like\s+that|totally)\b',
         r'\b(just\s+perfect|just\s+great|how\s+wonderful|absolutely\s+perfect)\b',
-        r'\b(great|perfect|wonderful)\b.*\b(meeting|email|another)\b',
-        r'\b(thanks\s+for\s+nothing|couldn\'t\s+be\s+better)\b'
+        r'\b(great|perfect|wonderful|magical)\b.*\b(meeting|email|another|timing|start|day)\b',
+        r'\b(thanks\s+for\s+nothing|couldn\'t\s+be\s+better)\b',
+        r'\b(living\s+the\s+dream|perfect\s+timing|magical\s+start)\b',
+        r'\b(couldn\'t\s+have\s+asked\s+for|what\s+a\s+day|how\s+perfect)\b',
+        r'\b(complete\s+the\s+chaos|chaos\s+bingo|one\s+glitch\s+at\s+a\s+time)\b'
     ]
     
     pattern_sarcasm_detected = any(re.search(pattern, text_lower) for pattern in sarcasm_patterns)

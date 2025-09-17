@@ -114,6 +114,18 @@ impl PostService {
 
     // Helper method to combine sentiments with weighting bias
     fn combine_sentiments_with_bias(&self, title_sentiments: &[Sentiment], body_sentiments: &[Sentiment], title_weight: f64, body_weight: f64) -> Vec<Sentiment> {
+        // PRIORITIZE SARCASTIC COMBINATIONS - if either title or body has sarcasm, use it
+        for sentiment in body_sentiments.iter() {
+            if matches!(sentiment.sentiment_type, SentimentType::SarcasticCombination(_)) {
+                return vec![sentiment.clone()];
+            }
+        }
+        for sentiment in title_sentiments.iter() {
+            if matches!(sentiment.sentiment_type, SentimentType::SarcasticCombination(_)) {
+                return vec![sentiment.clone()];
+            }
+        }
+        
         // Filter out fallback Calm sentiments (parser failures) but preserve sarcastic combinations
         let filtered_title: Vec<&Sentiment> = title_sentiments.iter()
             .filter(|s| !(matches!(s.sentiment_type, SentimentType::Calm) && (s.confidence - 0.5).abs() < 0.01))
