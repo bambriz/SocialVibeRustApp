@@ -17,7 +17,7 @@ function initializeApp() {
     if (authToken) {
         try {
             const payload = JSON.parse(atob(authToken.split('.')[1]));
-            currentUser = { username: payload.username, id: payload.sub };
+            currentUser = { username: payload.username, id: payload.user_id };
             showUserInterface();
             loadPosts();
         } catch (e) {
