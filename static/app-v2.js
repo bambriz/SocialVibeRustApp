@@ -29,6 +29,56 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Post form visible:', !document.getElementById('postCreator').classList.contains('hidden'));
         console.log('========================');
     };
+    
+    // Auto-setup function that clears everything and logs in
+    window.autoSetup = async function() {
+        console.log('🔧 Starting auto setup...');
+        
+        // Clear everything
+        localStorage.clear();
+        authToken = null;
+        currentUser = null;
+        
+        // Close any open modals
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.classList.add('hidden');
+        });
+        
+        console.log('✅ Cleared browser data');
+        
+        try {
+            // Auto login with test account
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: 'frontend@test.com',
+                    password: 'test123'
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                authToken = data.token;
+                localStorage.setItem('authToken', authToken);
+                currentUser = data.user;
+                showUserInterface();
+                loadPosts();
+                console.log('✅ Auto-logged in successfully!');
+                console.log('🎉 Ready to post! The "Share Your Thoughts" form should now be visible.');
+                return true;
+            } else {
+                console.error('❌ Login failed:', data.message);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ Auto setup failed:', error);
+            return false;
+        }
+    };
 });
 
 function initializeApp() {
