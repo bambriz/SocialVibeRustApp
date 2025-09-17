@@ -12,7 +12,7 @@ def sarcasm_affection_analysis(text):
     emotions = NRCLex(text_lower)
     # sarcasm is detected by contradictory emotions such as joy and anger being near each other in value
     # out of emotions.top_emotions is a list of tuples with tuple index 0 being the emotion and index 1 being the value
-    emotion_dict: Dict[str,float] = dict(emotions.top_emotions)
+    emotion_dict: Dict[str,float] = dict(emotions.top_emotions)  # type: ignore
     
     # Enhanced sarcasm detection with pattern matching (second pass as requested)
     sarcasm_patterns = [
@@ -67,7 +67,7 @@ def main_emotion_analysis(text):
     
     # Use NRCLex for base emotion detection (faster than EmotionClassifier)
     emotions = NRCLex(text)
-    emotion_scores = emotions.raw_emotion_scores
+    emotion_scores = emotions.raw_emotion_scores  # type: ignore
     
     if emotion_scores:
         # Get the dominant emotion from NRCLex
