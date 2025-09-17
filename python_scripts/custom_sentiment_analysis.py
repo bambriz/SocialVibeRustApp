@@ -119,9 +119,13 @@ def main_emotion_analysis(text):
                     emotion = result['emotion'].lower()
                     confidence = result.get('confidence', 0.70)
                 else:
-                    # Dict of emotion:score pairs
-                    emotion = max(result, key=result.get).lower()
-                    confidence = result[emotion]
+                    # Dict of emotion:score pairs - handle properly
+                    if result:
+                        emotion = max(result.keys(), key=lambda k: result[k]).lower()
+                        confidence = result[emotion]
+                    else:
+                        emotion = 'calm'
+                        confidence = 0.30
             elif isinstance(result, str):
                 emotion = result.lower() 
                 confidence = 0.70

@@ -88,13 +88,63 @@ impl SentimentService {
         Ok(vec![sentiment])
     }
 
-    // Method to call Python sentiment analysis script
+    // Method to call Python sentiment analysis server (persistent, faster)
     async fn call_python_analyzer(&self, text: &str) -> Result<String, Box<dyn std::error::Error>> {
+        // Configure client with timeouts and retry logic
+        let client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_millis(500))
+            .timeout(std::time::Duration::from_secs(2))
+            .build()?;
+        
+        // Try connecting to persistent Python server with retry
+        let mut attempts = 0;
+        let max_attempts = 3;
+        
+        while attempts < max_attempts {
+            attempts += 1;
+            
+            match client
+                .post("http://127.0.0.1:8001/analyze")  // Use IPv4 explicitly
+                .json(&serde_json::json!({ "text": text }))
+                .send()
+                .await 
+            {
+                Ok(response) if response.status().is_success() => {
+            let result: serde_json::Value = response.json().await?;
+            
+            // Extract sentiment info from server response
+            let sentiment_type = result["sentiment_type"].as_str().unwrap_or("calm");
+            let confidence = result["confidence"].as_f64().unwrap_or(0.5);
+            
+                    // Return in the expected format for existing parsing logic
+                    return Ok(format!("{}:{:.2}", sentiment_type, confidence));
+                },
+                Ok(_) => {
+                    // Server responded but with error status
+                    if attempts == max_attempts {
+                        eprintln!("Python sentiment server responded with error after {} attempts", max_attempts);
+                        break;
+                    }
+                },
+                Err(_) => {
+                    // Connection failed
+                    if attempts == max_attempts {
+                        eprintln!("Python sentiment server connection failed after {} attempts", max_attempts);
+                        break;
+                    }
+                    // Brief delay before retry
+                    tokio::time::sleep(std::time::Duration::from_millis(100 * attempts as u64)).await;
+                }
+            }
+        }
+        
+        // Fallback to script if server is not available
+        eprintln!("Python sentiment server not available, falling back to script");
         let output = Command::new("python3")
-            .arg("-u")  // Unbuffered output
+            .arg("-u")
             .arg("python_scripts/custom_sentiment_analysis.py")
             .arg(text)
-            .stdin(Stdio::null())  // Prevent stdin waits
+            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -103,7 +153,7 @@ impl SentimentService {
         if output.status.success() {
             Ok(String::from_utf8(output.stdout)?)
         } else {
-            Err(format!("Python sentiment analysis failed: {}", String::from_utf8_lossy(&output.stderr)).into())
+            Err(format!("Both sentiment server and script failed: {}", String::from_utf8_lossy(&output.stderr)).into())
         }
     }
 }

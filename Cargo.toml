@@ -31,5 +31,8 @@ rand_core = { version = "0.6", features = ["std"] }
 # azure_data_cosmos = { version = "0.17", features = ["rustls"] }
 # azure_identity = { version = "0.17", features = ["rustls"] }
 
+# HTTP client for calling Python sentiment server
+reqwest = { version = "0.11", features = ["json"] }
+
 # For calling Python scripts (using tokio built-in process support)
 # We'll use tokio::process::Command which is built-in
