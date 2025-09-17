@@ -18,17 +18,19 @@ impl SentimentService {
             return Ok(vec![]); // Return empty instead of default Calm
         }
         
-        // Parse the result (format: "sentiment_type:confidence")
-        let parts: Vec<&str> = clean_result.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Ok(vec![]); // Return empty instead of default Calm
-        }
+        // Parse the result (format: "sentiment_type:confidence") with resilient parsing
+        let (sentiment_label, confidence_str) = if let Some((label, conf)) = clean_result.split_once(':') {
+            (label.trim().to_lowercase(), conf.trim())
+        } else {
+            // Handle missing confidence - default to 0.70
+            (clean_result.trim().to_lowercase(), "0.70")
+        };
         
-        let sentiment_label = parts[0].to_lowercase(); // Make case-insensitive
-        
-        let sentiment_type = if sentiment_label.starts_with("sarcastic+") {
-            // Handle sarcasm combinations like "sarcastic+happy"
-            let base_sentiment = sentiment_label.strip_prefix("sarcastic+").unwrap_or("calm");
+        let sentiment_type = if sentiment_label.starts_with("sarcastic+") || sentiment_label.starts_with("sarcasm+") {
+            // Handle sarcasm combinations like "sarcastic+happy" or "sarcasm+happy"
+            let base_sentiment = sentiment_label.strip_prefix("sarcastic+")
+                .or_else(|| sentiment_label.strip_prefix("sarcasm+"))
+                .unwrap_or("calm");
             let base_type = match base_sentiment {
                 "happy" => SentimentType::Happy,
                 "joy" => SentimentType::Joy,
@@ -41,7 +43,7 @@ impl SentimentService {
                 "surprise" => SentimentType::Surprise,
                 "calm" => SentimentType::Calm,
                 "affection" => SentimentType::Affection,
-                _ => return Ok(vec![]), // Return empty for unknown types
+                _ => SentimentType::Calm, // Default to Calm instead of returning empty
             };
             SentimentType::SarcasticCombination(Box::new(base_type))
         } else {
@@ -58,11 +60,11 @@ impl SentimentService {
                 "calm" => SentimentType::Calm,
                 "affection" => SentimentType::Affection,
                 "sarcastic" => SentimentType::Sarcastic,
-                _ => return Ok(vec![]), // Return empty for unknown types
+                _ => SentimentType::Calm // Default to Calm instead of returning empty
             }
         };
         
-        let confidence: f64 = parts[1].parse().unwrap_or(0.5);
+        let confidence: f64 = confidence_str.parse().unwrap_or(0.70);
         
         let sentiment = Sentiment {
             sentiment_type: sentiment_type.clone(),

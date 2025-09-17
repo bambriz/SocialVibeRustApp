@@ -1,210 +1,137 @@
 import sys
 import re
-from typing import Dict, List
+from nrclex import NRCLex
+from typing import Dict
 
-# Fallback implementation when heavy libraries are slow to load
-def lightweight_nrc_analysis(text: str) -> Dict[str, float]:
+def sarcasm_affection_analysis(text):
     """
-    Lightweight emotion detection based on NRC-style patterns
+    Initial sentiment analysis to detect sarcasm or affection
+    Returns: "sarcasm", "affection", or "neutral"
     """
     text_lower = text.lower()
-    emotions = {
-        'joy': 0.0,
-        'anger': 0.0,
-        'sadness': 0.0,
-        'fear': 0.0,
-        'trust': 0.0,
-        'disgust': 0.0,
-        'surprise': 0.0,
-        'anticipation': 0.0
-    }
+    emotions = NRCLex(text_lower)
+    # sarcasm is detected by contradictory emotions such as joy and anger being near each other in value
+    # out of emotions.top_emotions is a list of tuples with tuple index 0 being the emotion and index 1 being the value
+    emotion_dict: Dict[str,float] = dict(emotions.top_emotions)
     
-    # Pattern-based emotion scoring (similar to NRCLex but lighter)
-    emotion_patterns = {
-        'joy': [r'\b(happy|joy|joyful|delighted|cheerful|glad|pleased|wonderful|amazing|fantastic|great|excellent)\b'],
-        'anger': [r'\b(angry|mad|furious|rage|hate|pissed|irritated|annoyed|frustrated|fed\s+up|ridiculous|stupid)\b'],
-        'sadness': [r'\b(sad|depressed|miserable|heartbroken|crying|tears|hurt|disappointed|awful|terrible)\b'],
-        'fear': [r'\b(scared|afraid|terrified|worried|anxious|nervous|fear|dread|panic)\b'],
-        'trust': [r'\b(trust|believe|faith|confidence|reliable|honest|caring|love|affection)\b'],
-        'disgust': [r'\b(disgusting|gross|revolting|sick|nauseating|yuck|ew|horrible|awful|nasty)\b'],
-        'surprise': [r'\b(surprised|shocked|wow|omg|amazing|incredible|unexpected|unbelievable)\b'],
-        'anticipation': [r'\b(excited|looking\s+forward|can\'t\s+wait|eager|anticipating|hope|expect)\b']
-    }
-    
-    for emotion, patterns in emotion_patterns.items():
-        for pattern in patterns:
-            matches = len(re.findall(pattern, text_lower))
-            emotions[emotion] += matches * 0.3
-    
-    return emotions
-
-def lightweight_emotion_classification(text: str) -> str:
-    """
-    Lightweight emotion classification based on pattern matching
-    """
-    text_lower = text.lower()
-    
-    # Enhanced pattern matching for better accuracy
-    emotion_scores = {
-        'happy': 0.0,
-        'joy': 0.0,
-        'excited': 0.0,
-        'sad': 0.0,
-        'angry': 0.0,
-        'fear': 0.0,
-        'disgust': 0.0,
-        'surprise': 0.0,
-        'confused': 0.0,
-        'affection': 0.0,
-        'calm': 0.0
-    }
-    
-    # Comprehensive emotion patterns
-    patterns = {
-        'happy': [r'\b(happy|glad|pleased|cheerful|delighted|content|positive|good|nice|fine)\b'],
-        'joy': [r'\b(joy|joyful|celebration|celebrate|party|triumph|victory|jubilant|ecstatic|elated)\b'],
-        'excited': [r'\b(excited|thrilled|pumped|hyped|stoked|energized|enthusiastic|eager)\b'],
-        'sad': [r'\b(sad|depressed|miserable|heartbroken|devastated|crying|tears|hurt|disappointed)\b'],
-        'angry': [r'\b(angry|mad|furious|rage|hate|pissed|irritated|annoyed|frustrated|fed\s+up|ridiculous|stupid|bullshit)\b'],
-        'fear': [r'\b(scared|afraid|terrified|frightened|worried|anxious|nervous|fear|panic|dread)\b'],
-        'disgust': [r'\b(disgusting|gross|revolting|repulsive|sick|nauseating|yuck|ew|horrible|awful|nasty|foul)\b'],
-        'surprise': [r'\b(surprised|shocked|astonished|amazed|wow|omg|incredible|unbelievable|unexpected)\b'],
-        'confused': [r'\b(confused|puzzled|bewildered|perplexed|don\'t\s+understand|what\s+the|unclear)\b'],
-        'affection': [r'\b(love|adore|cherish|treasure|affection|caring|tender|sweet|beloved|darling|sweetheart)\b'],
-        'calm': [r'\b(calm|peaceful|serene|tranquil|relaxed|okay|fine|alright|normal|quiet)\b']
-    }
-    
-    for emotion, emotion_patterns in patterns.items():
-        for pattern in emotion_patterns:
-            matches = len(re.findall(pattern, text_lower))
-            emotion_scores[emotion] += matches
-    
-    # Return the highest scoring emotion
-    if max(emotion_scores.values()) == 0:
-        return 'calm'
-    
-    return max(emotion_scores, key=emotion_scores.get)
-
-def enhanced_sarcasm_affection_analysis(text):
-    """
-    Enhanced sentiment analysis to detect sarcasm, affection, and other complex emotions
-    Using lightweight implementations for better performance
-    """
-    text_lower = text.lower()
-    
-    # Use lightweight NRC-style analysis
-    emotions = lightweight_nrc_analysis(text)
-    
-    # Enhanced sarcasm detection patterns
+    # Enhanced sarcasm detection with pattern matching (second pass as requested)
     sarcasm_patterns = [
         r'\b(oh\s+great|oh\s+really|obviously|of\s+course|sure\s+thing)\b',
-        r'\b(yeah\s+right|as\s+if|like\s+that|totally)\b', 
+        r'\b(yeah\s+right|as\s+if|like\s+that|totally)\b',
         r'\b(just\s+perfect|just\s+great|how\s+wonderful|absolutely\s+perfect)\b',
         r'\b(great|perfect|wonderful)\b.*\b(meeting|email|another)\b',
         r'\b(thanks\s+for\s+nothing|couldn\'t\s+be\s+better)\b'
     ]
     
-    # Enhanced affection detection patterns
+    pattern_sarcasm_detected = any(re.search(pattern, text_lower) for pattern in sarcasm_patterns)
+    
+    # Your original sarcasm detection logic with enhanced thresholds
+    if "joy" in emotion_dict and "anger" in emotion_dict:
+        if abs(emotion_dict["joy"] - emotion_dict["anger"]) < 0.15:  # Enhanced threshold
+            return "sarcasm"
+    if "sadness" in emotion_dict and "joy" in emotion_dict:
+        if abs(emotion_dict["sadness"] - emotion_dict["joy"]) < 0.15:  # Enhanced threshold
+            return "sarcasm"
+    if "disgust" in emotion_dict and "joy" in emotion_dict:
+        if abs(emotion_dict["disgust"] - emotion_dict["joy"]) < 0.15:  # Enhanced threshold
+            return "sarcasm"
+    
+    # Pattern-based sarcasm detection (second pass enhancement) - prioritize this
+    if pattern_sarcasm_detected:
+        return "sarcasm"
+    
+    # Enhanced affection detection with pattern matching
     affection_patterns = [
         r'\b(love\s+you|adore\s+you|cherish\s+you|treasure\s+you)\b',
         r'\b(mean\s+everything|mean\s+the\s+world|so\s+important)\b',
-        r'\b(darling|sweetheart|honey|dear|beloved)\b',
-        r'\b(affection|affectionate|tender|caring|loving)\b'
+        r'\b(darling|sweetheart|honey|dear|beloved)\b'
     ]
     
-    # Check for explicit sarcasm patterns first
-    sarcasm_detected = any(re.search(pattern, text_lower) for pattern in sarcasm_patterns)
+    pattern_affection_detected = any(re.search(pattern, text_lower) for pattern in affection_patterns)
     
-    # Check for explicit affection patterns
-    affection_detected = any(re.search(pattern, text_lower) for pattern in affection_patterns)
+    # affection is detected by presence of positive emotions like joy, trust, and anticipation
+    if "joy" in emotion_dict and "trust" in emotion_dict:
+        if emotion_dict["joy"] > 0.15 and emotion_dict["trust"] > 0.15 and "sadness" not in emotion_dict and "anger" not in emotion_dict and "fear" not in emotion_dict and "disgust" not in emotion_dict:  # Enhanced thresholds
+            return "affection" if abs(emotion_dict["joy"] - emotion_dict["trust"]) < 0.25 else "neutral"  # Enhanced difference threshold
     
-    if affection_detected:
-        # Strong affection indicators override other emotions
-        if emotions.get("joy", 0) > 0.3 or emotions.get("trust", 0) > 0.2:
-            return "affection"
-        # Fallback affection detection
+    # Pattern-based affection fallback (second pass enhancement) - but not for celebration/party words
+    celebration_words = r'\b(celebration|celebrate|party|wonderful)\b'
+    if pattern_affection_detected and ("joy" in emotion_dict or "trust" in emotion_dict) and not re.search(celebration_words, text_lower):
         return "affection"
-    
-    # Enhanced sarcasm detection using emotion contradictions + patterns
-    if sarcasm_detected or (emotions.get("joy", 0) > 0 and emotions.get("anger", 0) > 0):
-        if sarcasm_detected or abs(emotions.get("joy", 0) - emotions.get("anger", 0)) < 0.15:
-            # Determine base emotion for sarcastic combination
-            base_emotion = "happy"  # default
-            if emotions.get("anger", 0) > 0.3:
-                base_emotion = "angry"
-            elif emotions.get("sadness", 0) > 0.3:
-                base_emotion = "sad"
-            elif emotions.get("disgust", 0) > 0.3:
-                base_emotion = "disgust"
-            elif emotions.get("fear", 0) > 0.3:
-                base_emotion = "fear"
-            return f"sarcastic+{base_emotion}"
-    
-    # Check other sarcasm combinations
-    if emotions.get("sadness", 0) > 0 and emotions.get("joy", 0) > 0:
-        if abs(emotions.get("sadness", 0) - emotions.get("joy", 0)) < 0.1:
-            return "sarcastic+sad"
-    if emotions.get("disgust", 0) > 0 and emotions.get("joy", 0) > 0:
-        if abs(emotions.get("disgust", 0) - emotions.get("joy", 0)) < 0.1:
-            return "sarcastic+disgust"
 
     return "neutral"
 
-def enhanced_emotion_analysis(text):
-    """Enhanced emotion analysis using lightweight classification"""
-    emotion = lightweight_emotion_classification(text)
+def main_emotion_analysis(text):
+    """Enhanced emotion analysis using NRCLex + pattern matching fallback"""
+    text = text.lower()
     
-    # Map to our expanded emotion set
-    emotion_mapping = {
-        'happy': 'happy',
-        'joy': 'joy', 
-        'excited': 'excited',
-        'affection': 'affection',
-        'sad': 'sad',
-        'angry': 'angry',
-        'fear': 'fear',
-        'disgust': 'disgust',
-        'surprise': 'surprise',
-        'confused': 'confused',
-        'calm': 'calm'
-    }
+    # Use NRCLex for base emotion detection (faster than EmotionClassifier)
+    emotions = NRCLex(text)
+    emotion_scores = emotions.raw_emotion_scores
     
-    return emotion_mapping.get(emotion, 'calm')
+    if emotion_scores:
+        # Get the dominant emotion from NRCLex
+        dominant_emotion = max(emotion_scores, key=emotion_scores.get)
+        
+        # Map NRCLex emotions to your expanded set
+        emotion_mapping = {
+            'joy': 'joy',
+            'sadness': 'sad',
+            'anger': 'angry',
+            'fear': 'fear',
+            'disgust': 'disgust',
+            'surprise': 'surprise',
+            'anticipation': 'excited',
+            'trust': 'affection',
+            'positive': 'happy',
+            'negative': 'sad'
+        }
+        
+        mapped_emotion = emotion_mapping.get(dominant_emotion, 'calm')
+        
+        # Pattern-based enhancement for missing emotions (second pass)
+        text_patterns = {
+            'joy': [r'\b(celebration|celebrate|party|joyful|jubilant|triumph|victory)\b'],
+            'disgust': [r'\b(disgusting|gross|revolting|nauseating|yuck|ew|horrible)\b'],
+            'surprise': [r'\b(surprised|shocked|wow|omg|unexpected|amazing|incredible)\b'],
+            'excited': [r'\b(excited|thrilled|pumped|hyped|stoked|energized)\b'],
+            'confused': [r'\b(confused|puzzled|bewildered|don\'t\s+understand)\b']
+        }
+        
+        for pattern_emotion, patterns in text_patterns.items():
+            if any(re.search(pattern, text) for pattern in patterns):
+                return pattern_emotion
+                
+        return mapped_emotion
+    
+    # Fallback to simple pattern matching if NRCLex fails
+    if re.search(r'\b(happy|joy|glad|cheerful|delighted)\b', text):
+        return 'happy'
+    elif re.search(r'\b(sad|depressed|miserable|heartbroken)\b', text):
+        return 'sad'
+    elif re.search(r'\b(angry|mad|furious|rage|hate)\b', text):
+        return 'angry'
+    else:
+        return 'calm'
 
 def main():
-    """Main function for command line usage with enhanced emotion detection using lightweight libraries"""
+    """Main function for command line usage"""
     if len(sys.argv) != 2:
         print("Usage: python custom_sentiment_analysis.py <text>")
         sys.exit(1)
 
     text = sys.argv[1]
-    
-    # First check for complex emotions (sarcasm, affection)
-    initial_sentiment_analysis = enhanced_sarcasm_affection_analysis(text)
-    
-    if initial_sentiment_analysis == "affection":
+    initial_sentiment_analysis = sarcasm_affection_analysis(text)
+    if initial_sentiment_analysis in ["affection"]:
         print(f"{initial_sentiment_analysis}:0.75")
         return
-    elif initial_sentiment_analysis.startswith("sarcastic+"):
-        print(f"{initial_sentiment_analysis}:0.80")
-        return
-    elif initial_sentiment_analysis != "neutral":
-        print(f"{initial_sentiment_analysis}:0.70")
-        return
-    
-    # If no complex emotions detected, use enhanced emotion analysis
-    advance_sentiment_analysis = enhanced_emotion_analysis(text)
-    confidence = 0.65  # Default confidence
-    
-    # Adjust confidence based on emotion strength
-    if advance_sentiment_analysis in ['angry', 'sad', 'happy', 'excited']:
-        confidence = 0.70
-    elif advance_sentiment_analysis in ['joy', 'disgust', 'surprise', 'fear']:
-        confidence = 0.65
+    advance_sentiment_analysis = main_emotion_analysis(text)
+    if initial_sentiment_analysis == "sarcasm":
+        print(f"sarcastic+{advance_sentiment_analysis}:0.80")
     else:
-        confidence = 0.50  # calm, confused
-    
-    print(f"{advance_sentiment_analysis}:{confidence:.2f}")
+        # Add confidence scores based on emotion strength
+        confidence = 0.70 if advance_sentiment_analysis in ['angry', 'sad', 'happy', 'excited'] else 0.50
+        print(f"{advance_sentiment_analysis}:{confidence:.2f}")
 
 if __name__ == "__main__":
     main()
