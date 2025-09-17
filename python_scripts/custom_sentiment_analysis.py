@@ -3,6 +3,19 @@ import re
 from nrclex import NRCLex
 from typing import Dict
 
+# Import emotionclassifier as specified by user
+# Note: Temporarily disabled due to initialization timeouts - will re-enable once optimized
+EMOTIONCLASSIFIER_AVAILABLE = False
+emotion_classifier = None
+
+# try:
+#     from emotionclassifier import EmotionClassifier
+#     emotion_classifier = None
+#     EMOTIONCLASSIFIER_AVAILABLE = True
+# except ImportError:
+#     EMOTIONCLASSIFIER_AVAILABLE = False
+#     emotion_classifier = None
+
 def sarcasm_affection_analysis(text):
     """
     Initial sentiment analysis to detect sarcasm or affection
@@ -71,32 +84,59 @@ def main_emotion_analysis(text):
     """
     text = text.lower()
     
-    # Skip slow ML libraries to avoid timeout - use fast NRCLex + pattern matching
-    # try:
-    #     from emotionclassifier import EmotionClassifier
-    #     classifier = EmotionClassifier()
-    #     result = classifier.predict(text)
-    #     
-    #     # EmotionClassifier returns label and confidence
-    #     emotion_label = result['label'].lower()
-    #     # Use a base confidence since EmotionClassifier provides the prediction
-    #     confidence = 0.75  # High confidence for ML-based detection
-    #     
-    #     return f"{emotion_label}:{confidence:.2f}"
-    #     
-    # except (ImportError, Exception):
-    #     # Try text2emotion as backup
-    #     try:
-    #         import text2emotion as te
-    #         result = te.get_emotion(text)
-    #         # Get the emotion with highest probability
-    #         if result:
-    #             dominant_emotion = max(result.keys(), key=lambda k: result[k])
-    #             confidence = result[dominant_emotion]
-    #             return f"{dominant_emotion.lower()}:{confidence:.2f}"
-    #     except (ImportError, Exception):
-    #         pass
-    # Fallback to NRCLex (fast and reliable)
+    # PRIMARY: Use EmotionClassifier as specified by user
+    if EMOTIONCLASSIFIER_AVAILABLE:
+        try:
+            # Lazy initialization to avoid startup delays
+            global emotion_classifier
+            if emotion_classifier is None:
+                emotion_classifier = EmotionClassifier()
+            
+            result = emotion_classifier.predict(text)
+            
+            # EmotionClassifier returns different emotion labels, map them to our system
+            emotion_mapping = {
+                'happy': 'happy',
+                'joy': 'joy', 
+                'sadness': 'sad',
+                'sad': 'sad',
+                'anger': 'angry',
+                'angry': 'angry',
+                'fear': 'fear',
+                'disgust': 'disgust',
+                'surprise': 'surprise',
+                'excitement': 'excited',
+                'excited': 'excited',
+                'love': 'affection',
+                'affection': 'affection',
+                'neutral': 'calm',
+                'calm': 'calm'
+            }
+            
+            # Handle different return formats from EmotionClassifier
+            if isinstance(result, dict):
+                if 'emotion' in result:
+                    emotion = result['emotion'].lower()
+                    confidence = result.get('confidence', 0.70)
+                else:
+                    # Dict of emotion:score pairs
+                    emotion = max(result, key=result.get).lower()
+                    confidence = result[emotion]
+            elif isinstance(result, str):
+                emotion = result.lower() 
+                confidence = 0.70
+            else:
+                emotion = str(result).lower()
+                confidence = 0.70
+            
+            mapped_emotion = emotion_mapping.get(emotion, 'calm')
+            return f"{mapped_emotion}:{confidence:.2f}"
+            
+        except Exception as e:
+            # Fall through to NRCLex fallback  
+            pass
+    
+    # FALLBACK: Use NRCLex + enhanced pattern matching (as complementary to EmotionClassifier)
     emotions = NRCLex(text)
     emotion_scores = emotions.raw_emotion_scores  # type: ignore
     
