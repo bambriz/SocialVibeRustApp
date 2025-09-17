@@ -33,18 +33,48 @@ impl PostService {
         
         // Check content moderation first (use combined text for moderation)
         let combined_text = format!("{} {}", request.title, request.content);
-        let is_blocked = self.moderation_service.check_content(&combined_text).await
-            .map_err(|e| AppError::InternalError(format!("Content moderation failed: {}", e)))?;
+        let moderation_result = self.moderation_service.check_content(&combined_text).await
+            .map_err(|e| AppError::InternalError(format!("Content moderation system error: {}. Please try again later or contact support if this persists.", e)))?;
         
-        if is_blocked {
-            return Err(AppError::ValidationError("Message failed to send because it violates our site policy against hate speech and offensive content. Please revise your message and try again.".to_string()));
+        if moderation_result.is_blocked {
+            let error_message = match (&moderation_result.violation_type, &moderation_result.details) {
+                (Some(violation_type), Some(details)) => {
+                    match violation_type.as_str() {
+                        "racial_slurs" => "🚫 Post blocked: Your message contains racial slurs or offensive language targeting ethnicity. Our community guidelines prohibit discriminatory language to maintain a safe environment for everyone.".to_string(),
+                        "homophobic_slurs" => "🚫 Post blocked: Your message contains homophobic slurs or offensive language targeting LGBTQ+ individuals. Please use respectful language that welcomes all community members.".to_string(),
+                        "hate_speech_terms" => "🚫 Post blocked: Your message contains hate speech or derogatory terms. Our platform is committed to fostering inclusive discussions free from discriminatory language.".to_string(),
+                        "violent_threats" => "🚫 Post blocked: Your message contains violent threats or calls for harm against individuals or groups. Threats of violence are strictly prohibited and may be reported to authorities.".to_string(),
+                        "direct_threats" => "🚫 Post blocked: Your message contains direct threats of harm. This type of content violates our safety policies and may result in account suspension.".to_string(),
+                        "hate_speech_with_context" => "🚫 Post blocked: Your message contains hate speech combined with profanity targeting specific groups. Please revise your message to use respectful language.".to_string(),
+                        "derogatory_statements" => "🚫 Post blocked: Your message contains derogatory statements about individuals or groups. Our community values respect and inclusivity for all members.".to_string(),
+                        "excessive_profanity" => format!("🚫 Post blocked: Your message contains excessive profanity ({}). While some casual language is acceptable, excessive profanity disrupts constructive conversation.", details),
+                        "ai_hate_speech_detection" => format!("🚫 Post blocked: AI detection identified potential hate speech ({}). Our automated systems flagged this content as potentially harmful to community members.", details),
+                        "ai_offensive_language" => format!("🚫 Post blocked: AI detection identified highly offensive language ({}). Please consider revising your message to be more respectful.", details),
+                        _ => format!("🚫 Post blocked: Your message violates our community guidelines (violation type: {}). Please revise your content to comply with our policies.", violation_type)
+                    }
+                },
+                (Some(violation_type), None) => {
+                    match violation_type.as_str() {
+                        "racial_slurs" => "🚫 Post blocked: Your message contains racial slurs or discriminatory language. Please revise to use respectful language.".to_string(),
+                        "homophobic_slurs" => "🚫 Post blocked: Your message contains homophobic language. Please use inclusive language that respects all community members.".to_string(),
+                        "hate_speech_terms" => "🚫 Post blocked: Your message contains hate speech. Our platform maintains zero tolerance for discriminatory content.".to_string(),
+                        "violent_threats" => "🚫 Post blocked: Your message contains violent threats. This content is prohibited for community safety.".to_string(),
+                        "direct_threats" => "🚫 Post blocked: Your message contains direct threats. This violates our safety policies.".to_string(),
+                        "hate_speech_with_context" => "🚫 Post blocked: Your message contains hate speech with profanity. Please use respectful language.".to_string(),
+                        "derogatory_statements" => "🚫 Post blocked: Your message contains derogatory statements. Please revise to be more respectful.".to_string(),
+                        _ => format!("🚫 Post blocked: Content violates community guidelines ({}). Please revise your message.", violation_type)
+                    }
+                },
+                _ => "🚫 Post blocked: Your message violates our community guidelines against hate speech and offensive content. Please revise your message to use respectful language and try again.".to_string()
+            };
+            return Err(AppError::ValidationError(error_message));
         }
         
         // Run sentiment analysis on title and body separately
         let title_sentiments = self.sentiment_service.analyze_sentiment(&request.title).await
-            .map_err(|e| AppError::InternalError(format!("Title sentiment analysis failed: {}", e)))?;
+            .map_err(|e| AppError::InternalError(format!("⚠️ Sentiment analysis error (title): {}. This might be due to: 1) Python script execution issues, 2) Missing required Python libraries (nrclex, emotionclassifier), 3) Script file permissions, or 4) Temporary system overload. Please try again in a moment or contact support if this persists.", e)))?;
         let body_sentiments = self.sentiment_service.analyze_sentiment(&request.content).await
-            .map_err(|e| AppError::InternalError(format!("Body sentiment analysis failed: {}", e)))?;
+            .map_err(|e| AppError::InternalError(format!("⚠️ Sentiment analysis error (content): {}. This might be due to: 1) Python script execution issues, 2) Missing required Python libraries (nrclex, emotionclassifier), 3) Script file permissions, or 4) Temporary system overload. Please try again in a moment or contact support if this persists.", e)))?;
         
         // Combine sentiments with body bias (body weight = 4x title weight)
         let sentiments = self.combine_sentiments_with_bias(&title_sentiments, &body_sentiments, 0.2, 0.8);
