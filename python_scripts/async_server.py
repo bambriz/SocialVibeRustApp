@@ -4,7 +4,7 @@ Social Pulse - Persistent Sentiment Analysis Server
 
 This server provides HTTP endpoints for sentiment analysis and content moderation,
 eliminating the need to reinitialize Python libraries on each request.
-Designed to work with the user's preferred libraries: nrclex and emotionclassifier.
+Uses EmotionClassifier as primary detector with NRCLex as fallback.
 """
 import json
 import sys
@@ -12,6 +12,21 @@ import re
 import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from nrclex import NRCLex
+
+# Initialize EmotionClassifier as primary detector
+EMOTIONCLASSIFIER_AVAILABLE = False
+emotion_classifier = None
+
+try:
+    from text2emotion import get_emotion
+    EMOTIONCLASSIFIER_AVAILABLE = True
+    print("✅ EmotionClassifier (text2emotion) loaded successfully")
+except ImportError as e:
+    print(f"⚠️ EmotionClassifier not available: {e}")
+    print("📚 Will use NRCLex as fallback")
+
+# Pre-initialize NRCLex as fallback
+nrclex_fallback = None
 
 class SentimentHandler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -45,16 +60,20 @@ class SentimentHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(json.dumps({"status": "healthy", "libraries": ["nrclex"]}).encode('utf-8'))
+            libraries = ["nrclex"]
+            if EMOTIONCLASSIFIER_AVAILABLE:
+                libraries.insert(0, "emotionclassifier")
+            self.wfile.write(json.dumps({"status": "healthy", "libraries": libraries, "primary_detector": "emotionclassifier" if EMOTIONCLASSIFIER_AVAILABLE else "nrclex"}).encode('utf-8'))
         else:
             self.send_error(404)
     
     def analyze_sentiment(self, text):
         """
-        Analyzes sentiment using nrclex as primary detector.
-        EmotionClassifier would be used here if available.
+        Analyzes sentiment using EmotionClassifier as primary detector.
+        Falls back to NRCLex if EmotionClassifier fails.
         """
-        text_lower = text.lower().strip()
+        text_clean = text.strip()
+        text_lower = text_clean.lower()
         
         # Check for sarcasm patterns first
         sarcasm_patterns = [
@@ -67,32 +86,73 @@ class SentimentHandler(BaseHTTPRequestHandler):
         
         is_sarcastic = any(re.search(pattern, text_lower) for pattern in sarcasm_patterns)
         
-        # Use nrclex for primary emotion analysis
-        emotions = NRCLex(text_lower)
-        emotion_scores = emotions.raw_emotion_scores
+        # Try EmotionClassifier first (primary detector)
+        mapped_emotion = 'calm'
+        base_confidence = 0.3
         
-        if emotion_scores:
-            dominant_emotion = max(emotion_scores, key=emotion_scores.get)
-            emotion_mapping = {
-                'joy': 'joy', 'sadness': 'sad', 'anger': 'angry',
-                'fear': 'fear', 'disgust': 'disgust', 'surprise': 'surprise',
-                'anticipation': 'excited', 'trust': 'affection',
-                'positive': 'happy', 'negative': 'sad'
-            }
-            mapped_emotion = emotion_mapping.get(dominant_emotion, 'calm')
-            base_confidence = min(0.9, max(0.5, emotion_scores[dominant_emotion]))
-        else:
-            mapped_emotion = 'calm'
-            base_confidence = 0.3
+        if EMOTIONCLASSIFIER_AVAILABLE:
+            try:
+                emotion_scores = get_emotion(text_clean)
+                if emotion_scores:
+                    # Find the dominant emotion
+                    dominant_emotion = max(emotion_scores, key=emotion_scores.get)
+                    emotion_confidence = emotion_scores[dominant_emotion]
+                    
+                    # Map EmotionClassifier emotions to our system
+                    emotion_mapping = {
+                        'Happy': 'happy',
+                        'Angry': 'angry', 
+                        'Surprise': 'surprise',
+                        'Sad': 'sad',
+                        'Fear': 'fear'
+                    }
+                    
+                    mapped_emotion = emotion_mapping.get(dominant_emotion, 'calm')
+                    base_confidence = min(0.9, max(0.4, emotion_confidence))
+                    
+                    # Special handling for disgust (EmotionClassifier may not have this)
+                    if re.search(r'\b(disgusting|gross|revolting|nauseating|yuck|ew|horrible|nasty)\b', text_lower):
+                        mapped_emotion = 'disgust'
+                        base_confidence = 0.7
+                        
+            except Exception as e:
+                print(f"EmotionClassifier failed: {e}, falling back to NRCLex")
+                # Fall through to NRCLex fallback
         
-        # Pattern-based emotion enhancement
+        # Fallback to NRCLex if EmotionClassifier not available or failed
+        if mapped_emotion == 'calm' and base_confidence == 0.3:
+            try:
+                emotions = NRCLex(text_lower)
+                # Use correct attribute name for NRCLex
+                emotion_scores = emotions.affect_frequencies if hasattr(emotions, 'affect_frequencies') else emotions.affect_list
+                
+                if emotion_scores and hasattr(emotions, 'affect_frequencies'):
+                    # Get the highest scoring emotion
+                    if emotion_scores:
+                        dominant_emotion = max(emotion_scores, key=emotion_scores.get)
+                        emotion_mapping = {
+                            'joy': 'joy', 'sadness': 'sad', 'anger': 'angry',
+                            'fear': 'fear', 'disgust': 'disgust', 'surprise': 'surprise',
+                            'anticipation': 'excited', 'trust': 'affection',
+                            'positive': 'happy', 'negative': 'sad'
+                        }
+                        mapped_emotion = emotion_mapping.get(dominant_emotion, 'calm')
+                        base_confidence = min(0.8, max(0.4, emotion_scores[dominant_emotion]))
+                        
+            except Exception as e:
+                print(f"NRCLex also failed: {e}, using pattern-based detection")
+        
+        # Pattern-based enhancements (always apply)
         if re.search(r'\b(disgusting|gross|revolting|nauseating|yuck|ew|horrible|nasty)\b', text_lower):
             mapped_emotion = 'disgust'
             base_confidence = 0.7
         elif re.search(r'\b(amazing|awesome|fantastic|wonderful|great)\b', text_lower):
             mapped_emotion = 'joy'
             base_confidence = 0.8
-        
+        elif re.search(r'\b(hate|angry|furious|mad|pissed)\b', text_lower):
+            mapped_emotion = 'angry'
+            base_confidence = 0.7
+            
         # Handle sarcasm combinations
         if is_sarcastic:
             return {
@@ -148,7 +208,10 @@ if __name__ == '__main__':
     import time
     
     print('🚀 Social Pulse Sentiment Server starting on 127.0.0.1:8001...')
-    print('📚 Using libraries: nrclex (primary)')
+    if EMOTIONCLASSIFIER_AVAILABLE:
+        print('📚 Using libraries: emotionclassifier (primary), nrclex (fallback)')
+    else:
+        print('📚 Using libraries: nrclex (primary)')
     
     # Try to bind to the server
     try:
