@@ -62,57 +62,74 @@ def sarcasm_affection_analysis(text):
     return "neutral"
 
 def main_emotion_analysis(text):
-    """Enhanced emotion analysis using NRCLex + pattern matching fallback"""
+    """
+    Analyze the main emotion using EmotionClassifier for broader emotion detection
+    Returns the dominant emotion with confidence score
+    """
     text = text.lower()
     
-    # Use NRCLex for base emotion detection (faster than EmotionClassifier)
-    emotions = NRCLex(text)
-    emotion_scores = emotions.raw_emotion_scores  # type: ignore
-    
-    if emotion_scores:
-        # Get the dominant emotion from NRCLex
-        dominant_emotion = max(emotion_scores, key=emotion_scores.get)
+    # Use EmotionClassifier as primary emotion detector (shows more emotion options)
+    try:
+        from emotionclassifier import EmotionClassifier
+        classifier = EmotionClassifier()
+        result = classifier.predict(text)
         
-        # Map NRCLex emotions to your expanded set
-        emotion_mapping = {
-            'joy': 'joy',
-            'sadness': 'sad',
-            'anger': 'angry',
-            'fear': 'fear',
-            'disgust': 'disgust',
-            'surprise': 'surprise',
-            'anticipation': 'excited',
-            'trust': 'affection',
-            'positive': 'happy',
-            'negative': 'sad'
-        }
+        # EmotionClassifier returns label and confidence
+        emotion_label = result['label'].lower()
+        # Use a base confidence since EmotionClassifier provides the prediction
+        confidence = 0.75  # High confidence for ML-based detection
         
-        mapped_emotion = emotion_mapping.get(dominant_emotion, 'calm')
+        return f"{emotion_label}:{confidence:.2f}"
         
-        # Pattern-based enhancement for missing emotions (second pass)
-        text_patterns = {
-            'joy': [r'\b(celebration|celebrate|party|joyful|jubilant|triumph|victory)\b'],
-            'disgust': [r'\b(disgusting|gross|revolting|nauseating|yuck|ew|horrible)\b'],
-            'surprise': [r'\b(surprised|shocked|wow|omg|unexpected|amazing|incredible)\b'],
-            'excited': [r'\b(excited|thrilled|pumped|hyped|stoked|energized)\b'],
-            'confused': [r'\b(confused|puzzled|bewildered|don\'t\s+understand)\b']
-        }
+    except (ImportError, Exception):
+        # Fallback to NRCLex if EmotionClassifier fails
+        emotions = NRCLex(text)
+        emotion_scores = emotions.raw_emotion_scores  # type: ignore
         
-        for pattern_emotion, patterns in text_patterns.items():
-            if any(re.search(pattern, text) for pattern in patterns):
-                return pattern_emotion
-                
-        return mapped_emotion
-    
-    # Fallback to simple pattern matching if NRCLex fails
-    if re.search(r'\b(happy|joy|glad|cheerful|delighted)\b', text):
-        return 'happy'
-    elif re.search(r'\b(sad|depressed|miserable|heartbroken)\b', text):
-        return 'sad'
-    elif re.search(r'\b(angry|mad|furious|rage|hate)\b', text):
-        return 'angry'
-    else:
-        return 'calm'
+        if emotion_scores:
+            # Get the dominant emotion from NRCLex
+            dominant_emotion = max(emotion_scores, key=emotion_scores.get)
+            
+            # Map NRCLex emotions to your expanded set
+            emotion_mapping = {
+                'joy': 'joy',
+                'sadness': 'sad',
+                'anger': 'angry',
+                'fear': 'fear',
+                'disgust': 'disgust',
+                'surprise': 'surprise',
+                'anticipation': 'excited',
+                'trust': 'affection',
+                'positive': 'happy',
+                'negative': 'sad'
+            }
+            
+            mapped_emotion = emotion_mapping.get(dominant_emotion, 'calm')
+            
+            # Pattern-based enhancement for missing emotions (second pass)
+            text_patterns = {
+                'joy': [r'\b(celebration|celebrate|party|joyful|jubilant|triumph|victory)\b'],
+                'disgust': [r'\b(disgusting|gross|revolting|nauseating|yuck|ew|horrible)\b'],
+                'surprise': [r'\b(surprised|shocked|wow|omg|unexpected|amazing|incredible)\b'],
+                'excited': [r'\b(excited|thrilled|pumped|hyped|stoked|energized)\b'],
+                'confused': [r'\b(confused|puzzled|bewildered|don\'t\s+understand)\b']
+            }
+            
+            for pattern_emotion, patterns in text_patterns.items():
+                if any(re.search(pattern, text) for pattern in patterns):
+                    return f"{pattern_emotion}:0.70"
+                    
+            return f"{mapped_emotion}:0.60"
+        
+        # Fallback to simple pattern matching if NRCLex fails
+        if re.search(r'\b(happy|joy|glad|cheerful|delighted)\b', text):
+            return 'happy:0.60'
+        elif re.search(r'\b(sad|depressed|miserable|heartbroken)\b', text):
+            return 'sad:0.60'
+        elif re.search(r'\b(angry|mad|furious|rage|hate)\b', text):
+            return 'angry:0.60'
+        else:
+            return 'calm:0.30'
 
 def main():
     """Main function for command line usage"""
@@ -127,11 +144,12 @@ def main():
         return
     advance_sentiment_analysis = main_emotion_analysis(text)
     if initial_sentiment_analysis == "sarcasm":
-        print(f"sarcastic+{advance_sentiment_analysis}:0.80")
+        # Extract just the emotion from the EmotionClassifier result for sarcasm combinations
+        emotion_part = advance_sentiment_analysis.split(':')[0] if ':' in advance_sentiment_analysis else advance_sentiment_analysis
+        print(f"sarcastic+{emotion_part}:0.80")
     else:
-        # Add confidence scores based on emotion strength
-        confidence = 0.70 if advance_sentiment_analysis in ['angry', 'sad', 'happy', 'excited'] else 0.50
-        print(f"{advance_sentiment_analysis}:{confidence:.2f}")
+        # EmotionClassifier already returns with confidence score
+        print(advance_sentiment_analysis)
 
 if __name__ == "__main__":
     main()
