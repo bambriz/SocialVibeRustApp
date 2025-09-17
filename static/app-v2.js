@@ -10,6 +10,25 @@ const API_BASE = '/api';
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
     setupEventListeners();
+    
+    // Debug function accessible from console
+    window.debugAuth = function() {
+        console.log('=== AUTH DEBUG INFO ===');
+        console.log('Auth token:', authToken);
+        console.log('Current user:', currentUser);
+        console.log('Token in localStorage:', localStorage.getItem('authToken'));
+        if (authToken) {
+            try {
+                const payload = JSON.parse(atob(authToken.split('.')[1]));
+                console.log('Token payload:', payload);
+                console.log('Token expires:', new Date(payload.exp * 1000));
+            } catch (e) {
+                console.error('Failed to parse token:', e);
+            }
+        }
+        console.log('Post form visible:', !document.getElementById('postCreator').classList.contains('hidden'));
+        console.log('========================');
+    };
 });
 
 function initializeApp() {
@@ -192,6 +211,8 @@ async function handleCreatePost(e) {
         }
     } catch (error) {
         console.error('Create post error:', error);
+        console.error('Error details:', error.message);
+        console.error('Auth token present:', !!authToken);
         showToast('Failed to create post. Please try again.', 'error');
     }
 }
