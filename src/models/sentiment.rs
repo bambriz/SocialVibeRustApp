@@ -14,8 +14,9 @@ pub enum SentimentType {
     Fear,
     Disgust,    // New emotion type
     Surprise,   // New emotion type
-    // Mixed sentiments (e.g., Sarcastic + Happy)
+    // Mixed sentiments (e.g., Sarcastic + Happy, Affectionate + Sad)
     SarcasticCombination(Box<SentimentType>),
+    AffectionateCombination(Box<SentimentType>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +45,10 @@ impl SentimentType {
                 // Create a gradient effect by combining sarcasm purple with base sentiment
                 format!("linear-gradient(45deg, #7c3aed, {})", base_type.color_code())
             }
+            SentimentType::AffectionateCombination(base_type) => {
+                // Create a gradient effect by combining affection pink with base sentiment
+                format!("linear-gradient(45deg, #ec4899, {})", base_type.color_code())
+            }
         }
     }
     
@@ -51,6 +56,9 @@ impl SentimentType {
         match self {
             SentimentType::SarcasticCombination(base_type) => {
                 vec!["#7c3aed".to_string(), base_type.color_code()]
+            }
+            SentimentType::AffectionateCombination(base_type) => {
+                vec!["#ec4899".to_string(), base_type.color_code()]
             }
             _ => vec![self.color_code()]
         }

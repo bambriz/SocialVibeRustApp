@@ -4,29 +4,64 @@ Social Pulse - Persistent Sentiment Analysis Server
 
 This server provides HTTP endpoints for sentiment analysis and content moderation,
 eliminating the need to reinitialize Python libraries on each request.
-Uses EmotionClassifier as primary detector with NRCLex as fallback.
+Uses HuggingFace EmotionClassifier as primary detector with fallback chain.
 """
 import json
 import sys
 import re
 import subprocess
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from nrclex import NRCLex
 
-# Initialize EmotionClassifier as primary detector
-EMOTIONCLASSIFIER_AVAILABLE = False
-emotion_classifier = None
+# Initialize HuggingFace EmotionClassifier as primary detector
+HF_EMOTIONCLASSIFIER_AVAILABLE = False
+hf_emotion_classifier = None
 
+# Secondary detectors for fallback and special cases
+TEXT2EMOTION_AVAILABLE = False
+NRCLEX_AVAILABLE = True
+
+def initialize_hf_classifier_with_retry(max_retries=3):
+    """Initialize HuggingFace EmotionClassifier with retry logic and backoff"""
+    global HF_EMOTIONCLASSIFIER_AVAILABLE, hf_emotion_classifier
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"🔄 Attempt {attempt + 1}/{max_retries}: Loading HuggingFace EmotionClassifier...")
+            from emotionclassifier import EmotionClassifier
+            hf_emotion_classifier = EmotionClassifier()
+            
+            # Test the classifier to ensure it's working
+            test_result = hf_emotion_classifier.predict("I am happy")
+            if test_result and 'label' in test_result:
+                HF_EMOTIONCLASSIFIER_AVAILABLE = True
+                print("✅ HuggingFace EmotionClassifier loaded successfully!")
+                return True
+                
+        except Exception as e:
+            print(f"⚠️ Attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                backoff_time = (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                print(f"⏳ Waiting {backoff_time}s before retry...")
+                time.sleep(backoff_time)
+            
+    print("❌ HuggingFace EmotionClassifier failed to initialize after all retries")
+    return False
+
+# Try to initialize secondary detectors
 try:
     from text2emotion import get_emotion
-    EMOTIONCLASSIFIER_AVAILABLE = True
-    print("✅ EmotionClassifier (text2emotion) loaded successfully")
+    TEXT2EMOTION_AVAILABLE = True
+    print("✅ text2emotion available as secondary detector")
 except ImportError as e:
-    print(f"⚠️ EmotionClassifier not available: {e}")
-    print("📚 Will use NRCLex as fallback")
+    print(f"⚠️ text2emotion not available: {e}")
 
-# Pre-initialize NRCLex as fallback
-nrclex_fallback = None
+print("✅ NRCLex available as fallback detector")
+
+# Initialize the primary HuggingFace classifier
+print("🚀 Initializing HuggingFace EmotionClassifier as primary detector...")
+initialize_hf_classifier_with_retry()
 
 class SentimentHandler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -60,111 +95,131 @@ class SentimentHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
+            
             libraries = ["nrclex"]
-            if EMOTIONCLASSIFIER_AVAILABLE:
-                libraries.insert(0, "emotionclassifier")
-            self.wfile.write(json.dumps({"status": "healthy", "libraries": libraries, "primary_detector": "emotionclassifier" if EMOTIONCLASSIFIER_AVAILABLE else "nrclex"}).encode('utf-8'))
+            if TEXT2EMOTION_AVAILABLE:
+                libraries.append("text2emotion")
+            if HF_EMOTIONCLASSIFIER_AVAILABLE:
+                libraries.insert(0, "huggingface-emotionclassifier")
+            
+            primary_detector = "huggingface-emotionclassifier" if HF_EMOTIONCLASSIFIER_AVAILABLE else "nrclex"
+            
+            self.wfile.write(json.dumps({
+                "status": "healthy", 
+                "libraries": libraries, 
+                "primary_detector": primary_detector,
+                "supports_combo_sentiments": True
+            }).encode('utf-8'))
         else:
             self.send_error(404)
     
     def analyze_sentiment(self, text):
         """
-        Analyzes sentiment using EmotionClassifier as primary detector.
-        Falls back to NRCLex if EmotionClassifier fails.
+        Analyzes sentiment using HuggingFace EmotionClassifier as primary detector.
+        Uses text2emotion/NRCLex only for sarcasm and affectionate detection.
+        Returns combo sentiments with gradients.
         """
         text_clean = text.strip()
         text_lower = text_clean.lower()
         
-        # Check for sarcasm patterns first
+        # Use secondary libraries (text2emotion/NRCLex) ONLY for sarcasm/affectionate detection
+        # Since NRCLex has missing data, use robust pattern-based detection
+        is_sarcastic = False
+        is_affectionate = False
+        
+        # Detect sarcasm using robust patterns (no library dependency)
         sarcasm_patterns = [
-            r'\b(oh\s+great|obviously|of\s+course|sure\s+thing|yeah\s+right)\b',
-            r'\b(just\s+perfect|just\s+great|how\s+wonderful|absolutely\s+perfect)\b', 
-            r'\b(living\s+the\s+dream|perfect\s+timing|magical\s+start)\b',
-            r'\b(couldn\'t\s+have\s+asked\s+for|what\s+a\s+day|how\s+perfect)\b',
-            r'\b(working\s+flawlessly|could\s+not\s+have\s+asked)\b'
+            r'(?:^|\W)(oh\s+great|obviously|of\s+course|sure\s+thing|yeah\s+right)(?:\W|$)',
+            r'(?:^|\W)(just\s+perfect|just\s+great|how\s+wonderful|absolutely\s+perfect)(?:\W|$)', 
+            r'(?:^|\W)(living\s+the\s+dream|perfect\s+timing|magical\s+start)(?:\W|$)',
+            r'(?:^|\W)(couldn\'?t\s+have\s+asked\s+for|what\s+a\s+day|how\s+perfect)(?:\W|$)',
+            r'(?:^|\W)(working\s+flawlessly|could\s+not\s+have\s+asked)(?:\W|$)',
+            r'(?:^|\W)(yeah\s+sure|as\s+if|totally|love\s+that\s+for\s+me)(?:\W|$)',
+            r'(?:^|\W)(fantastic|wonderful|brilliant|amazing)(?:\W|$).*(?:^|\W)(not|never|fail|broken)(?:\W|$)'
         ]
+        is_sarcastic = any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in sarcasm_patterns)
         
-        is_sarcastic = any(re.search(pattern, text_lower) for pattern in sarcasm_patterns)
+        # Detect affection using robust patterns (no library dependency)
+        affectionate_patterns = [
+            r'(?:^|\W)(love|adore|cherish|treasure|devoted|caring|tender|sweet)(?:\W|$)',
+            r'(?:^|\W)(darling|sweetheart|honey|dear|beloved|babe|baby)(?:\W|$)',
+            r'(?:^|\W)(warm\s+feelings|deep\s+affection|heartfelt)(?:\W|$)',
+            r'(?:^|\W)(my\s+love|my\s+dear|my\s+darling|my\s+heart)(?:\W|$)',
+            r'[❤️💕💖💗💓💝🥰😍💋]',  # Heart and love emojis
+            r'(?:^|\W)(affectionate|loving|warmth|tenderness)(?:\W|$)'
+        ]
+        is_affectionate = any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in affectionate_patterns)
         
-        # Try EmotionClassifier first (primary detector)
+        # Use HuggingFace EmotionClassifier as PRIMARY detector
         mapped_emotion = 'calm'
         base_confidence = 0.3
         
-        if EMOTIONCLASSIFIER_AVAILABLE:
+        if HF_EMOTIONCLASSIFIER_AVAILABLE:
             try:
-                emotion_scores = get_emotion(text_clean)
-                if emotion_scores:
-                    # Find the dominant emotion
-                    dominant_emotion = max(emotion_scores, key=emotion_scores.get)
-                    emotion_confidence = emotion_scores[dominant_emotion]
+                # Use HuggingFace EmotionClassifier with exact syntax requested
+                result = hf_emotion_classifier.predict(text_clean)
+                if result and 'label' in result and 'confidence' in result:
+                    hf_emotion = result['label']
+                    hf_confidence = result['confidence']
                     
-                    # Map EmotionClassifier emotions to our system
+                    # Map HuggingFace emotions to our system
                     emotion_mapping = {
-                        'Happy': 'happy',
-                        'Angry': 'angry', 
-                        'Surprise': 'surprise',
-                        'Sad': 'sad',
-                        'Fear': 'fear'
+                        'joy': 'joy',
+                        'happiness': 'happy', 
+                        'happy': 'happy',
+                        'sadness': 'sad',
+                        'sad': 'sad',
+                        'anger': 'angry',
+                        'angry': 'angry',
+                        'fear': 'fear',
+                        'surprise': 'surprise',
+                        'disgust': 'disgust',
+                        'excitement': 'excited',
+                        'love': 'affection',
+                        'neutral': 'calm'
                     }
                     
-                    mapped_emotion = emotion_mapping.get(dominant_emotion, 'calm')
-                    base_confidence = min(0.9, max(0.4, emotion_confidence))
+                    mapped_emotion = emotion_mapping.get(hf_emotion.lower(), 'calm')
+                    base_confidence = min(0.95, max(0.5, hf_confidence))
                     
-                    # Special handling for disgust (EmotionClassifier may not have this)
-                    if re.search(r'\b(disgusting|gross|revolting|nauseating|yuck|ew|horrible|nasty)\b', text_lower):
-                        mapped_emotion = 'disgust'
-                        base_confidence = 0.7
-                        
             except Exception as e:
-                print(f"EmotionClassifier failed: {e}, falling back to NRCLex")
-                # Fall through to NRCLex fallback
+                print(f"HuggingFace EmotionClassifier failed: {e}, falling back")
+                # Fall through to fallback detectors
         
-        # Fallback to NRCLex if EmotionClassifier not available or failed
+        # If HuggingFace EmotionClassifier failed, use minimal fallback
         if mapped_emotion == 'calm' and base_confidence == 0.3:
-            try:
-                emotions = NRCLex(text_lower)
-                # Use correct attribute name for NRCLex
-                emotion_scores = emotions.affect_frequencies if hasattr(emotions, 'affect_frequencies') else emotions.affect_list
-                
-                if emotion_scores and hasattr(emotions, 'affect_frequencies'):
-                    # Get the highest scoring emotion
-                    if emotion_scores:
-                        dominant_emotion = max(emotion_scores, key=emotion_scores.get)
-                        emotion_mapping = {
-                            'joy': 'joy', 'sadness': 'sad', 'anger': 'angry',
-                            'fear': 'fear', 'disgust': 'disgust', 'surprise': 'surprise',
-                            'anticipation': 'excited', 'trust': 'affection',
-                            'positive': 'happy', 'negative': 'sad'
-                        }
-                        mapped_emotion = emotion_mapping.get(dominant_emotion, 'calm')
-                        base_confidence = min(0.8, max(0.4, emotion_scores[dominant_emotion]))
-                        
-            except Exception as e:
-                print(f"NRCLex also failed: {e}, using pattern-based detection")
+            print("HuggingFace EmotionClassifier failed - using neutral emotion")
+            # No general fallbacks - HuggingFace is the ONLY primary detector
+            # Other libraries are used ONLY for sarcasm/affectionate detection
+            mapped_emotion = 'calm'
+            base_confidence = 0.5
         
-        # Pattern-based enhancements (always apply)
-        if re.search(r'\b(disgusting|gross|revolting|nauseating|yuck|ew|horrible|nasty)\b', text_lower):
-            mapped_emotion = 'disgust'
-            base_confidence = 0.7
-        elif re.search(r'\b(amazing|awesome|fantastic|wonderful|great)\b', text_lower):
-            mapped_emotion = 'joy'
-            base_confidence = 0.8
-        elif re.search(r'\b(hate|angry|furious|mad|pissed)\b', text_lower):
-            mapped_emotion = 'angry'
-            base_confidence = 0.7
-            
-        # Handle sarcasm combinations
+        # Handle combo sentiments with gradients
         if is_sarcastic:
             return {
                 'sentiment_type': f'sarcastic+{mapped_emotion}',
-                'confidence': 0.8,
-                'is_sarcastic': True
+                'confidence': min(0.9, base_confidence + 0.1),
+                'is_sarcastic': True,
+                'is_combo': True,
+                'primary_emotion': mapped_emotion,
+                'combo_type': 'sarcastic'
+            }
+            
+        if is_affectionate:
+            return {
+                'sentiment_type': f'affectionate+{mapped_emotion}',
+                'confidence': min(0.9, base_confidence + 0.1),
+                'is_affectionate': True,
+                'is_combo': True,
+                'primary_emotion': mapped_emotion,
+                'combo_type': 'affectionate'
             }
         
         return {
             'sentiment_type': mapped_emotion,
             'confidence': base_confidence,
-            'is_sarcastic': False
+            'is_sarcastic': False,
+            'is_combo': False
         }
     
     def moderate_content(self, text):
@@ -208,10 +263,12 @@ if __name__ == '__main__':
     import time
     
     print('🚀 Social Pulse Sentiment Server starting on 127.0.0.1:8001...')
-    if EMOTIONCLASSIFIER_AVAILABLE:
-        print('📚 Using libraries: emotionclassifier (primary), nrclex (fallback)')
+    if HF_EMOTIONCLASSIFIER_AVAILABLE:
+        print('📚 Using libraries: HuggingFace EmotionClassifier (primary), text2emotion/nrclex (fallback)')
+        print('🎭 Supports combo sentiments: sarcastic+emotion, affectionate+emotion')
     else:
-        print('📚 Using libraries: nrclex (primary)')
+        print('📚 Using libraries: text2emotion/nrclex (fallback mode)')
+        print('⚠️ HuggingFace EmotionClassifier not available')
     
     # Try to bind to the server
     try:

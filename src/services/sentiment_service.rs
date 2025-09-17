@@ -56,9 +56,27 @@ impl SentimentService {
                 "surprise" => SentimentType::Surprise,
                 "calm" => SentimentType::Calm,
                 "affection" => SentimentType::Affection,
-                _ => SentimentType::Calm, // Default to Calm instead of returning empty
+                _ => SentimentType::Calm,
             };
             SentimentType::SarcasticCombination(Box::new(base_type))
+        } else if sentiment_label.starts_with("affectionate+") {
+            // Handle affectionate combinations like "affectionate+happy" 
+            let base_sentiment = sentiment_label.strip_prefix("affectionate+").unwrap_or("calm");
+            let base_type = match base_sentiment {
+                "happy" => SentimentType::Happy,
+                "joy" => SentimentType::Joy,
+                "sad" => SentimentType::Sad,
+                "angry" => SentimentType::Angry,
+                "excited" => SentimentType::Excited,
+                "confused" => SentimentType::Confused,
+                "fear" => SentimentType::Fear,
+                "disgust" => SentimentType::Disgust,
+                "surprise" => SentimentType::Surprise,
+                "calm" => SentimentType::Calm,
+                "affection" => SentimentType::Affection,
+                _ => SentimentType::Calm,
+            };
+            SentimentType::AffectionateCombination(Box::new(base_type))
         } else {
             match sentiment_label.as_str() {
                 "happy" => SentimentType::Happy,

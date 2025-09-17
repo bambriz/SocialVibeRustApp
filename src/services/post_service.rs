@@ -269,6 +269,25 @@ impl PostService {
                     };
                     base_score * 0.8  // Reduce by 20% due to sarcasm
                 }
+                SentimentType::AffectionateCombination(ref base_type) => {
+                    // For affectionate combinations, boost the base sentiment score
+                    let base_score = match **base_type {
+                        SentimentType::Happy => 1.2,
+                        SentimentType::Joy => 1.4,
+                        SentimentType::Excited => 1.3,
+                        SentimentType::Affection => 1.1,
+                        SentimentType::Surprise => 1.1,
+                        SentimentType::Calm => 1.0,
+                        SentimentType::Confused => 0.95,
+                        SentimentType::Sarcastic => 0.9,
+                        SentimentType::Disgust => 0.6,
+                        SentimentType::Sad => 0.8,
+                        SentimentType::Fear => 0.7,
+                        SentimentType::Angry => 0.6,
+                        _ => 1.0,
+                    };
+                    base_score * 1.2  // Boost by 20% due to affection
+                }
             };
             
             total_score += sentiment_multiplier * sentiment.confidence;

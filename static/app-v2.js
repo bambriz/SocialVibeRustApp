@@ -348,9 +348,17 @@ function getSentimentClass(post) {
         return 'sentiment-calm';
     }
     
-    // Handle sarcasm combinations (multiple colors)
+    // Handle combo sentiments (multiple colors)
     if (post.sentiment_colors.length > 1) {
-        return 'sentiment-sarcastic-combo';
+        // Check if first color indicates sarcastic or affectionate combo
+        const firstColor = post.sentiment_colors[0];
+        if (firstColor === '#7c3aed') {
+            return 'sentiment-sarcastic-combo';
+        } else if (firstColor === '#ec4899') {
+            return 'sentiment-affectionate-combo';
+        } else {
+            return 'sentiment-combo'; // Generic combo
+        }
     }
     
     // Use the first sentiment color to determine class
@@ -381,9 +389,16 @@ function getSentimentLabel(post) {
         const sentimentClass = getSentimentClass(post);
         const sentimentType = getSentimentTypeFromClass(sentimentClass);
         
-        // For sarcasm combinations, show special label
+        // For combo sentiments, show special labels with dual emojis
         if (post.sentiment_colors.length > 1) {
-            return `${sentimentType} Sarcastic Combo`;
+            const firstColor = post.sentiment_colors[0];
+            if (firstColor === '#7c3aed') {
+                return `😏${sentimentType} Sarcastic Combo`;
+            } else if (firstColor === '#ec4899') {
+                return `💕${sentimentType} Affectionate Combo`;
+            } else {
+                return `${sentimentType} Combo`;
+            }
         }
         
         // Show the actual detected emotion without percentage
