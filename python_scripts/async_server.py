@@ -119,6 +119,9 @@ class SentimentHandler(BaseHTTPRequestHandler):
         Uses text2emotion/NRCLex only for sarcasm and affectionate detection.
         Returns combo sentiments with gradients.
         """
+        print(f"🔍 DIAGNOSTIC: Incoming sentiment analysis request")
+        print(f"   📄 Text: \"{text[:100]}{'...' if len(text) > 100 else ''}\"")
+        
         text_clean = text.strip()
         text_lower = text_clean.lower()
         
@@ -150,6 +153,9 @@ class SentimentHandler(BaseHTTPRequestHandler):
         ]
         is_affectionate = any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in affectionate_patterns)
         
+        print(f"   🎭 Sarcasm detected: {is_sarcastic}")
+        print(f"   💕 Affection detected: {is_affectionate}")
+        
         # Use HuggingFace EmotionClassifier as PRIMARY detector
         mapped_emotion = 'calm'
         base_confidence = 0.3
@@ -157,10 +163,12 @@ class SentimentHandler(BaseHTTPRequestHandler):
         if HF_EMOTIONCLASSIFIER_AVAILABLE:
             try:
                 # Use HuggingFace EmotionClassifier with exact syntax requested
+                print(f"   🧠 Calling HuggingFace EmotionClassifier...")
                 result = hf_emotion_classifier.predict(text_clean)
                 if result and 'label' in result and 'confidence' in result:
                     hf_emotion = result['label']
                     hf_confidence = result['confidence']
+                    print(f"   🎯 HuggingFace result: {hf_emotion} (confidence: {hf_confidence})")
                     
                     # Map HuggingFace emotions to our system
                     emotion_mapping = {
@@ -195,8 +203,9 @@ class SentimentHandler(BaseHTTPRequestHandler):
             base_confidence = 0.5
         
         # Handle combo sentiments with gradients
+        final_result = {}
         if is_sarcastic:
-            return {
+            final_result = {
                 'sentiment_type': f'sarcastic+{mapped_emotion}',
                 'confidence': min(0.9, base_confidence + 0.1),
                 'is_sarcastic': True,
@@ -205,8 +214,8 @@ class SentimentHandler(BaseHTTPRequestHandler):
                 'combo_type': 'sarcastic'
             }
             
-        if is_affectionate:
-            return {
+        elif is_affectionate:
+            final_result = {
                 'sentiment_type': f'affectionate+{mapped_emotion}',
                 'confidence': min(0.9, base_confidence + 0.1),
                 'is_affectionate': True,
@@ -214,13 +223,21 @@ class SentimentHandler(BaseHTTPRequestHandler):
                 'primary_emotion': mapped_emotion,
                 'combo_type': 'affectionate'
             }
+        else:
+            final_result = {
+                'sentiment_type': mapped_emotion,
+                'confidence': base_confidence,
+                'is_sarcastic': False,
+                'is_combo': False
+            }
         
-        return {
-            'sentiment_type': mapped_emotion,
-            'confidence': base_confidence,
-            'is_sarcastic': False,
-            'is_combo': False
-        }
+        print(f"   ✅ Final result: {final_result['sentiment_type']} (confidence: {final_result['confidence']})")
+        if final_result.get('is_combo'):
+            print(f"   🎭 Combo type: {final_result.get('combo_type', 'unknown')}")
+            print(f"   🧠 Primary emotion: {final_result.get('primary_emotion', 'unknown')}")
+        print(f"   📤 Response sent")
+        
+        return final_result
     
     def moderate_content(self, text):
         """

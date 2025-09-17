@@ -121,31 +121,53 @@ impl SentimentService {
         while attempts < max_attempts {
             attempts += 1;
             
+            let request_payload = serde_json::json!({ "text": text });
+            println!("🔄 DIAGNOSTIC: Making request to Python server");
+            println!("   📤 URL: http://127.0.0.1:8001/analyze");
+            println!("   📄 Text: \"{}{}\"", 
+                if text.len() > 100 { &text[..100] } else { text },
+                if text.len() > 100 { "..." } else { "" });
+            println!("   🔢 Attempt: {}/{}", attempts, max_attempts);
+            
             match client
                 .post("http://127.0.0.1:8001/analyze")  // Use IPv4 explicitly
-                .json(&serde_json::json!({ "text": text }))
+                .json(&request_payload)
                 .send()
                 .await 
             {
                 Ok(response) if response.status().is_success() => {
-            let result: serde_json::Value = response.json().await?;
-            
-            // Extract sentiment info from server response
-            let sentiment_type = result["sentiment_type"].as_str().unwrap_or("calm");
-            let confidence = result["confidence"].as_f64().unwrap_or(0.5);
-            
+                    println!("   ✅ Response received successfully");
+                    let result: serde_json::Value = response.json().await?;
+                    
+                    println!("   📥 Raw response: {}", result);
+                    
+                    // Extract sentiment info from server response
+                    let sentiment_type = result["sentiment_type"].as_str().unwrap_or("calm");
+                    let confidence = result["confidence"].as_f64().unwrap_or(0.5);
+                    let is_combo = result["is_combo"].as_bool().unwrap_or(false);
+                    
+                    println!("   🎯 Parsed sentiment: {} (confidence: {:.2})", sentiment_type, confidence);
+                    if is_combo {
+                        let combo_type = result["combo_type"].as_str().unwrap_or("unknown");
+                        println!("   🎭 Combo detected: {}", combo_type);
+                    }
+                    
                     // Return in the expected format for existing parsing logic
-                    return Ok(format!("{}:{:.2}", sentiment_type, confidence));
+                    let formatted_result = format!("{}:{:.2}", sentiment_type, confidence);
+                    println!("   📤 Returning to Rust: {}", formatted_result);
+                    return Ok(formatted_result);
                 },
-                Ok(_) => {
+                Ok(response) => {
                     // Server responded but with error status
+                    println!("   ❌ Server error response: {}", response.status());
                     if attempts == max_attempts {
                         eprintln!("Python sentiment server responded with error after {} attempts", max_attempts);
                         break;
                     }
                 },
-                Err(_) => {
+                Err(e) => {
                     // Connection failed
+                    println!("   ❌ Connection failed: {}", e);
                     if attempts == max_attempts {
                         eprintln!("Python sentiment server connection failed after {} attempts", max_attempts);
                         break;
