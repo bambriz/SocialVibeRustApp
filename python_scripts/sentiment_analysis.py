@@ -16,15 +16,15 @@ def analyze_sentiment(text):
     
     # Enhanced sentiment patterns with much more comprehensive coverage
     patterns = {
-        'happy': [
+        'joy': [
+            # Merge former happy and excited patterns into joy
             r'\bhappy\b', r'\bjoy\b', r'\bgreat\b', r'\bawesome\b', r'\blove\b', r'\bwonderful\b',
             r'\bamazing\b', r'\bfantastic\b', r'\bexcellent\b', r'\bperfect\b', r'\bbrilliant\b',
             r'\bdelighted\b', r'\bcheerful\b', r'\bjoyful\b', r'\bglad\b', r'\bpleased\b',
             r'\bgood\b', r'\bnice\b', r'\bpositive\b', r'\bupbeat\b', r'\boptimistic\b',
-            r'😊', r'😄', r'🎉', r'😍', r'🥰', r'😎', r'👍'
-        ],
-        'excited': [
-            r'\bexcited\b', r'\bthrilled\b', r'\bpumped\b', r'\bethusiastic\b', r'\beager\b',
+            r'😊', r'😄', r'🎉', r'😍', r'🥰', r'😎', r'👍',
+            # Add former excited patterns
+            r'\bexcited\b', r'\bthrilled\b', r'\bpumped\b', r'\benthusiastic\b', r'\beager\b',
             r'\bstoked\b', r'\bfired up\b', r'\becstatic\b', r'\belated\b', r'\bpsyched\b',
             r'\bcan\'t wait\b', r'\bso ready\b', r'\blooking forward\b', r'\bsuper\b',
             r'!!+', r'\bwow\b', r'\bomg\b', r'\byay\b', r'\bwoop\b', r'\byeah\b',
@@ -57,7 +57,7 @@ def analyze_sentiment(text):
             r'\buneasy\b', r'\bconcerned\b', r'\bapprehensive\b', r'\balarmed\b', r'\bshaken\b',
             r'😨', r'😰', r'😱', r'😬', r'💀'
         ],
-        'calm': [
+        'neutral': [
             r'\bcalm\b', r'\bpeaceful\b', r'\brelaxed\b', r'\btranquil\b', r'\bserene\b',
             r'\bzen\b', r'\bmellow\b', r'\bcomposed\b', r'\bchill\b', r'\bstable\b',
             r'\bbalanced\b', r'\bundisturbed\b', r'\bunruffled\b', r'\bsettled\b',
@@ -110,7 +110,7 @@ def analyze_sentiment(text):
     
     # Determine result
     if not sentiment_scores and sarcasm_confidence == 0:
-        return "calm:0.5"  # Default neutral sentiment
+        return "neutral:0.5"  # Default neutral sentiment
     
     # If sarcasm is detected with another sentiment, combine them
     if sarcasm_confidence >= 0.3 and sentiment_scores:
@@ -127,7 +127,7 @@ def analyze_sentiment(text):
         best_sentiment = max(sentiment_scores.items(), key=lambda x: x[1])
         return f"{best_sentiment[0]}:{best_sentiment[1]:.2f}"
     
-    return "calm:0.5"
+    return "neutral:0.5"
 
 def main():
     if len(sys.argv) != 2:

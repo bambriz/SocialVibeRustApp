@@ -157,7 +157,7 @@ class SentimentHandler(BaseHTTPRequestHandler):
         print(f"   💕 Affection detected: {is_affectionate}")
         
         # Use HuggingFace EmotionClassifier as PRIMARY detector
-        mapped_emotion = 'calm'
+        mapped_emotion = 'neutral'
         base_confidence = 0.3
         
         # First, check for emotions HuggingFace doesn't support using patterns
@@ -167,7 +167,7 @@ class SentimentHandler(BaseHTTPRequestHandler):
             base_confidence = 0.8
             print(f"   🎨 Pattern-detected unsupported emotion: {mapped_emotion}")
         
-        elif HF_EMOTIONCLASSIFIER_AVAILABLE:
+        elif HF_EMOTIONCLASSIFIER_AVAILABLE and hf_emotion_classifier is not None:
             try:
                 # Use HuggingFace EmotionClassifier for supported emotions
                 print(f"   🧠 Calling HuggingFace EmotionClassifier...")
@@ -191,10 +191,10 @@ class SentimentHandler(BaseHTTPRequestHandler):
                         'surprise': 'surprise',
                         'disgust': 'disgust',
                         'love': 'affection',
-                        'neutral': 'calm'
+                        'neutral': 'neutral'
                     }
                     
-                    mapped_emotion = emotion_mapping.get(hf_emotion.lower(), 'calm')
+                    mapped_emotion = emotion_mapping.get(hf_emotion.lower(), 'neutral')
                     base_confidence = min(0.95, max(0.5, hf_confidence))
                     
             except Exception as e:
@@ -202,11 +202,11 @@ class SentimentHandler(BaseHTTPRequestHandler):
                 # Fall through to fallback detectors
         
         # If HuggingFace EmotionClassifier failed, use minimal fallback
-        if mapped_emotion == 'calm' and base_confidence == 0.3:
+        if mapped_emotion == 'neutral' and base_confidence == 0.3:
             print("HuggingFace EmotionClassifier failed - using neutral emotion")
             # No general fallbacks - HuggingFace is the ONLY primary detector
             # Other libraries are used ONLY for sarcasm/affectionate detection
-            mapped_emotion = 'calm'
+            mapped_emotion = 'neutral'
             base_confidence = 0.5
         
         # Handle combo sentiments with gradients
@@ -250,15 +250,8 @@ class SentimentHandler(BaseHTTPRequestHandler):
         """
         Detect emotions that HuggingFace doesn't support using pattern matching.
         HuggingFace supports: anger, sadness, joy, fear, surprise, love, disgust
-        We need to detect: excited, confused, calm, happy (as distinct from joy)
+        We need to detect: confused, neutral (map happy/excited to joy)
         """
-        
-        # Excited - high energy positive emotion
-        excited_patterns = [
-            r'(?:^|\W)(excited|pumped|thrilled|exhilarated|energized|hyped)(?:\W|$)',
-            r'(?:^|\W)(can\'?t\s+wait|so\s+pumped|bouncing|adrenaline|rush)(?:\W|$)',
-            r'(?:^|\W)(fired\s+up|psyched|amped|revved\s+up)(?:\W|$)'
-        ]
         
         # Confused - uncertainty, bewilderment
         confused_patterns = [
@@ -268,18 +261,25 @@ class SentimentHandler(BaseHTTPRequestHandler):
             r'(?:^|\W)(lost\s+in|totally\s+bewildered|absolutely\s+no\s+sense)(?:\W|$)'
         ]
         
-        # Calm - peaceful, serene (distinct from neutral)
-        calm_patterns = [
+        # Neutral - balanced, peaceful, serene (default state)
+        neutral_patterns = [
             r'(?:^|\W)(calm|peaceful|serene|tranquil|relaxed|zen)(?:\W|$)',
             r'(?:^|\W)(at\s+peace|deep\s+breath|quiet|still|centered)(?:\W|$)',
             r'(?:^|\W)(meditation|mindful|balanced)(?:\W|$)'
         ]
         
-        # Happy - content, pleased (distinct from joy which is more intense)
-        happy_patterns = [
+        # Joy patterns - merge happy and excited into joy (high-energy positive)
+        joy_patterns = [
+            # Former excited patterns
+            r'(?:^|\W)(excited|pumped|thrilled|exhilarated|energized|hyped)(?:\W|$)',
+            r'(?:^|\W)(can\'?t\s+wait|so\s+pumped|bouncing|adrenaline|rush)(?:\W|$)',
+            r'(?:^|\W)(fired\s+up|psyched|amped|revved\s+up)(?:\W|$)',
+            # Former happy patterns  
             r'(?:^|\W)(content|pleased|satisfied|glad|cheerful)(?:\W|$)',
             r'(?:^|\W)(good\s+mood|feeling\s+good|nice\s+day|pleasant)(?:\W|$)',
-            r'(?:^|\W)(smile|smiling|grinning)(?:\W|$)(?!.*excitement|thrilled|ecstatic)'
+            r'(?:^|\W)(smile|smiling|grinning)(?:\W|$)(?!.*excitement|thrilled|ecstatic)',
+            # Additional joy indicators
+            r'(?:^|\W)(happy|joyful|delighted|elated|ecstatic)(?:\W|$)'
         ]
         
         # Disgust - revulsion, nausea (HuggingFace maps to sadness, we need patterns)
@@ -302,14 +302,12 @@ class SentimentHandler(BaseHTTPRequestHandler):
             return 'angry'
         elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in disgust_patterns):
             return 'disgust'
-        elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in excited_patterns):
-            return 'excited'
+        elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in joy_patterns):
+            return 'joy'  # Map both happy and excited to joy
         elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in confused_patterns):
             return 'confused'  
-        elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in calm_patterns):
-            return 'calm'
-        elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in happy_patterns):
-            return 'happy'
+        elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in neutral_patterns):
+            return 'neutral'
         
         return None
     
