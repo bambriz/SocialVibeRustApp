@@ -386,22 +386,27 @@ function getSentimentClass(post) {
 function getSentimentLabel(post) {
     // Use the actual sentiment detected by our enhanced analysis system
     if (post.sentiment_colors && post.sentiment_colors.length > 0) {
-        const sentimentClass = getSentimentClass(post);
-        const sentimentType = getSentimentTypeFromClass(sentimentClass);
         
-        // For combo sentiments, show special labels with dual emojis
+        // For combo sentiments, show dual emojis
         if (post.sentiment_colors.length > 1) {
             const firstColor = post.sentiment_colors[0];
+            const secondColor = post.sentiment_colors[1];
+            
+            // Get the base emotion emoji from the second color
+            const baseEmoji = getEmojiFromColor(secondColor);
+            
             if (firstColor === '#7c3aed') {
-                return `😏${sentimentType} Sarcastic Combo`;
+                return `😏${baseEmoji} Sarcastic Combo`;
             } else if (firstColor === '#ec4899') {
-                return `💕${sentimentType} Affectionate Combo`;
+                return `💕${baseEmoji} Affectionate Combo`;
             } else {
-                return `${sentimentType} Combo`;
+                return `${getEmojiFromColor(firstColor)}${baseEmoji} Combo`;
             }
         }
         
-        // Show the actual detected emotion without percentage
+        // Single emotion - show the emoji for that emotion
+        const sentimentClass = getSentimentClass(post);
+        const sentimentType = getSentimentTypeFromClass(sentimentClass);
         return sentimentType;
     }
     
@@ -440,11 +445,30 @@ function getSentimentTypeFromClass(sentimentClass) {
         'sentiment-surprise': '😲',        // Surprise
         'sentiment-calm': '😌',
         'sentiment-affection': '💕',
-        'sentiment-sarcastic': '😏',
-        'sentiment-sarcastic-combo': '😏+'
+        'sentiment-sarcastic': '😏'
     };
     
     return classToEmoji[sentimentClass] || '😐';
+}
+
+// New helper function to get emoji directly from color
+function getEmojiFromColor(color) {
+    const colorToEmoji = {
+        '#fbbf24': '😊',      // Happy - bright yellow/gold
+        '#22d3ee': '😊',      // Joy - bright cyan (using same emoji as happy)
+        '#f59e0b': '🤩',      // Excited - bright orange  
+        '#1e3a8a': '😢',      // Sad - dark blue
+        '#dc2626': '😠',      // Angry - red
+        '#8b5cf6': '🤔',      // Confused - light purple
+        '#84cc16': '🤢',      // Disgust - lime green
+        '#f97316': '😲',      // Surprise - orange
+        '#374151': '😨',      // Fear - dark grey
+        '#059669': '😌',      // Calm - green
+        '#ec4899': '💕',      // Affection - pink
+        '#7c3aed': '😏'       // Sarcastic - purple
+    };
+    
+    return colorToEmoji[color] || '😐';
 }
 
 // Sentiment preview while typing
