@@ -90,6 +90,13 @@ impl PostService {
             .flat_map(|s| s.sentiment_type.colors_array())
             .collect();
         
+        // Extract sentiment type name for API response
+        let sentiment_type = if !sentiments.is_empty() {
+            Some(sentiments[0].sentiment_type.to_string())
+        } else {
+            None
+        };
+        
         // Calculate popularity score based on sentiment
         let popularity_score = self.calculate_popularity_score_from_sentiment(&sentiments);
         
@@ -104,6 +111,7 @@ impl PostService {
             comment_count: 0,
             sentiment_score,
             sentiment_colors,
+            sentiment_type,
             popularity_score,
             is_blocked: false, // Already checked above
         };

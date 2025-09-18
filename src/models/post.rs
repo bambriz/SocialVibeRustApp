@@ -14,6 +14,7 @@ pub struct Post {
     pub comment_count: u32,
     pub sentiment_score: Option<f64>, // -1.0 to 1.0
     pub sentiment_colors: Vec<String>, // Color codes for sentiment
+    pub sentiment_type: Option<String>, // Human-readable sentiment name (e.g., "angry", "joy", "sarcastic+happy")
     pub popularity_score: f64, // Calculated score for feed ranking
     pub is_blocked: bool, // Content moderation flag
 }
@@ -34,6 +35,7 @@ pub struct PostResponse {
     pub created_at: DateTime<Utc>,
     pub comment_count: u32,
     pub sentiment_colors: Vec<String>,
+    pub sentiment_type: Option<String>,
     pub popularity_score: f64,
 }
 
@@ -48,6 +50,7 @@ impl From<Post> for PostResponse {
             created_at: post.created_at,
             comment_count: post.comment_count,
             sentiment_colors: post.sentiment_colors,
+            sentiment_type: post.sentiment_type,
             popularity_score: post.popularity_score,
         }
     }

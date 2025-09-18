@@ -69,4 +69,27 @@ impl SentimentType {
         // For now, return a default
         vec![SentimentType::Calm]
     }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            SentimentType::Sad => "sad".to_string(),
+            SentimentType::Angry => "angry".to_string(),
+            SentimentType::Sarcastic => "sarcastic".to_string(),
+            SentimentType::Happy => "happy".to_string(),
+            SentimentType::Joy => "joy".to_string(),
+            SentimentType::Excited => "excited".to_string(),
+            SentimentType::Confused => "confused".to_string(),
+            SentimentType::Affection => "affection".to_string(),
+            SentimentType::Calm => "calm".to_string(),
+            SentimentType::Fear => "fear".to_string(),
+            SentimentType::Disgust => "disgust".to_string(),
+            SentimentType::Surprise => "surprise".to_string(),
+            SentimentType::SarcasticCombination(base_type) => {
+                format!("sarcastic+{}", base_type.to_string())
+            }
+            SentimentType::AffectionateCombination(base_type) => {
+                format!("affectionate+{}", base_type.to_string())
+            }
+        }
+    }
 }
