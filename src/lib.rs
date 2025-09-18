@@ -9,7 +9,7 @@ pub mod error;
 
 // Re-export commonly used types
 pub use error::{AppError, Result};
-pub use config::AppConfig;
+pub use config::{AppConfig, PythonServerMode};
 
 // Application state shared across handlers
 #[derive(Clone)]
@@ -22,6 +22,7 @@ pub struct AppState {
     pub sentiment_service: std::sync::Arc<services::SentimentService>,
     pub moderation_service: std::sync::Arc<services::ModerationService>,
     pub auth_service: std::sync::Arc<auth::AuthService>,
+    pub python_manager: Option<std::sync::Arc<services::PythonManager>>,
 }
 
 impl AppState {
@@ -46,6 +47,15 @@ impl AppState {
         ));
         let comment_service = std::sync::Arc::new(services::CommentService::new(db.comment_repo.clone()));
 
+        // Initialize PythonManager based on configuration
+        let python_manager = match config.python_server_mode {
+            PythonServerMode::Subprocess => {
+                let manager = services::PythonManager::new(None); // Use default config
+                Some(std::sync::Arc::new(manager))
+            }
+            PythonServerMode::External => None,
+        };
+
         Ok(Self {
             config,
             db,
@@ -55,6 +65,7 @@ impl AppState {
             sentiment_service,
             moderation_service,
             auth_service,
+            python_manager,
         })
     }
 }

@@ -8,10 +8,26 @@ pub struct AppConfig {
     pub cosmos_key: Option<String>,
     pub cosmos_database: String,
     pub jwt_secret: String,
+    pub python_server_mode: PythonServerMode,
+}
+
+#[derive(Debug, Clone)]
+pub enum PythonServerMode {
+    Subprocess,
+    External,
 }
 
 impl AppConfig {
     pub fn from_env() -> Self {
+        let python_mode = env::var("PYTHON_SERVER_MODE")
+            .unwrap_or_else(|_| "subprocess".to_string())
+            .to_lowercase();
+        
+        let python_server_mode = match python_mode.as_str() {
+            "external" => PythonServerMode::External,
+            _ => PythonServerMode::Subprocess, // Default to subprocess mode
+        };
+        
         Self {
             server_host: env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             server_port: env::var("PORT")
@@ -23,6 +39,7 @@ impl AppConfig {
             cosmos_key: env::var("COSMOS_KEY").ok(),
             cosmos_database: env::var("COSMOS_DATABASE").unwrap_or_else(|_| "social_media".to_string()),
             jwt_secret: env::var("JWT_SECRET").unwrap_or_else(|_| "dev-secret-change-in-production".to_string()),
+            python_server_mode,
         }
     }
 

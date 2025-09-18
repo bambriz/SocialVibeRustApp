@@ -1,4 +1,4 @@
-use social_media_app::{AppState, AppConfig};
+use social_media_app::{AppState, AppConfig, PythonServerMode};
 use social_media_app::routes::create_routes;
 use social_media_app::models::post::CreatePostRequest;
 // Removed unused import
@@ -325,25 +325,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting Social Media App server...");
 
-    // Wait for Python sentiment analysis server to be ready first
-    if !wait_for_python_server(12, 5).await {
-        error!("❌ STARTUP: Cannot start without Python sentiment analysis server");
-        return Err("Python server dependency not available".into());
-    }
-
     // Load configuration from environment
     let config = AppConfig::from_env();
-    info!("Server configuration loaded");
+    info!("Server configuration loaded: Python server mode = {:?}", config.python_server_mode);
 
     // Initialize application state
     let app_state = AppState::new(config.clone()).await?;
     info!("Application state initialized");
+
+    // Start or wait for Python sentiment analysis server based on mode
+    match config.python_server_mode {
+        PythonServerMode::Subprocess => {
+            if let Some(python_manager) = &app_state.python_manager {
+                info!("🚀 STARTUP: Starting Python server in subprocess mode");
+                match python_manager.start().await {
+                    Ok(()) => {
+                        info!("✅ STARTUP: Python server started successfully in subprocess mode");
+                    }
+                    Err(e) => {
+                        error!("❌ STARTUP: Failed to start Python server subprocess: {}", e);
+                        return Err(format!("Python server subprocess failed to start: {}", e).into());
+                    }
+                }
+            } else {
+                error!("❌ STARTUP: PythonManager not initialized despite subprocess mode");
+                return Err("PythonManager not available in subprocess mode".into());
+            }
+        }
+        PythonServerMode::External => {
+            info!("🔄 STARTUP: Waiting for external Python server to be ready");
+            if !wait_for_python_server(12, 30).await {
+                error!("❌ STARTUP: Cannot start without external Python sentiment analysis server");
+                return Err("External Python server dependency not available".into());
+            }
+        }
+    }
 
     // Populate sample posts for demonstration purposes
     populate_sample_posts(&app_state).await;
 
     // Run emotion migration on startup to update any posts with old emotion types
     run_startup_migration(&app_state).await;
+
+    // Set up graceful shutdown for Python server if in subprocess mode
+    let python_manager_for_shutdown = app_state.python_manager.clone();
 
     // Build our application with routes
     let app = create_routes()
@@ -356,8 +381,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     info!("Server running on http://{}", config.server_address());
     
-    // Start serving requests
-    axum::serve(listener, app).await?;
+    // Start serving requests with graceful shutdown handling
+    let server = axum::serve(listener, app);
     
+    tokio::select! {
+        result = server => {
+            if let Err(e) = result {
+                error!("Server error: {}", e);
+            }
+        }
+        _ = tokio::signal::ctrl_c() => {
+            info!("Received shutdown signal, stopping server...");
+        }
+    }
+    
+    // Gracefully shutdown Python server if running in subprocess mode
+    if let Some(python_manager) = python_manager_for_shutdown {
+        info!("Shutting down Python server subprocess...");
+        if let Err(e) = python_manager.shutdown().await {
+            warn!("Error during Python server shutdown: {}", e);
+        }
+    }
+    
+    info!("Server shutdown completed");
     Ok(())
 }
