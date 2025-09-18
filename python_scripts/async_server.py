@@ -160,9 +160,16 @@ class SentimentHandler(BaseHTTPRequestHandler):
         mapped_emotion = 'calm'
         base_confidence = 0.3
         
-        if HF_EMOTIONCLASSIFIER_AVAILABLE:
+        # First, check for emotions HuggingFace doesn't support using patterns
+        unsupported_emotion = self.detect_unsupported_emotions(text_lower)
+        if unsupported_emotion:
+            mapped_emotion = unsupported_emotion
+            base_confidence = 0.8
+            print(f"   🎨 Pattern-detected unsupported emotion: {mapped_emotion}")
+        
+        elif HF_EMOTIONCLASSIFIER_AVAILABLE:
             try:
-                # Use HuggingFace EmotionClassifier with exact syntax requested
+                # Use HuggingFace EmotionClassifier for supported emotions
                 print(f"   🧠 Calling HuggingFace EmotionClassifier...")
                 result = hf_emotion_classifier.predict(text_clean)
                 if result and 'label' in result and 'confidence' in result:
@@ -171,10 +178,11 @@ class SentimentHandler(BaseHTTPRequestHandler):
                     print(f"   🎯 HuggingFace result: {hf_emotion} (confidence: {hf_confidence})")
                     
                     # Map HuggingFace emotions to our system
+                    # HuggingFace supports: anger, sadness, joy, fear, surprise, love, disgust
                     emotion_mapping = {
                         'joy': 'joy',
-                        'happiness': 'happy', 
-                        'happy': 'happy',
+                        'happiness': 'joy', 
+                        'happy': 'joy',
                         'sadness': 'sad',
                         'sad': 'sad',
                         'anger': 'angry',
@@ -182,7 +190,6 @@ class SentimentHandler(BaseHTTPRequestHandler):
                         'fear': 'fear',
                         'surprise': 'surprise',
                         'disgust': 'disgust',
-                        'excitement': 'excited',
                         'love': 'affection',
                         'neutral': 'calm'
                     }
@@ -238,6 +245,73 @@ class SentimentHandler(BaseHTTPRequestHandler):
         print(f"   📤 Response sent")
         
         return final_result
+    
+    def detect_unsupported_emotions(self, text_lower):
+        """
+        Detect emotions that HuggingFace doesn't support using pattern matching.
+        HuggingFace supports: anger, sadness, joy, fear, surprise, love, disgust
+        We need to detect: excited, confused, calm, happy (as distinct from joy)
+        """
+        
+        # Excited - high energy positive emotion
+        excited_patterns = [
+            r'(?:^|\W)(excited|pumped|thrilled|exhilarated|energized|hyped)(?:\W|$)',
+            r'(?:^|\W)(can\'?t\s+wait|so\s+pumped|bouncing|adrenaline|rush)(?:\W|$)',
+            r'(?:^|\W)(fired\s+up|psyched|amped|revved\s+up)(?:\W|$)'
+        ]
+        
+        # Confused - uncertainty, bewilderment
+        confused_patterns = [
+            r'(?:^|\W)(confused|bewildered|puzzled|perplexed|baffled)(?:\W|$)',
+            r'(?:^|\W)(don\'?t\s+understand|makes\s+no\s+sense|no\s+sense|unclear)(?:\W|$)',
+            r'(?:^|\W)(what\s+just\s+happened|what\'?s\s+going\s+on|no\s+idea)(?:\W|$)',
+            r'(?:^|\W)(lost\s+in|totally\s+bewildered|absolutely\s+no\s+sense)(?:\W|$)'
+        ]
+        
+        # Calm - peaceful, serene (distinct from neutral)
+        calm_patterns = [
+            r'(?:^|\W)(calm|peaceful|serene|tranquil|relaxed|zen)(?:\W|$)',
+            r'(?:^|\W)(at\s+peace|deep\s+breath|quiet|still|centered)(?:\W|$)',
+            r'(?:^|\W)(meditation|mindful|balanced)(?:\W|$)'
+        ]
+        
+        # Happy - content, pleased (distinct from joy which is more intense)
+        happy_patterns = [
+            r'(?:^|\W)(content|pleased|satisfied|glad|cheerful)(?:\W|$)',
+            r'(?:^|\W)(good\s+mood|feeling\s+good|nice\s+day|pleasant)(?:\W|$)',
+            r'(?:^|\W)(smile|smiling|grinning)(?:\W|$)(?!.*excitement|thrilled|ecstatic)'
+        ]
+        
+        # Disgust - revulsion, nausea (HuggingFace maps to sadness, we need patterns)
+        disgust_patterns = [
+            r'(?:^|\W)(disgusting|revolting|nauseating|repulsive|gross|vile)(?:\W|$)',
+            r'(?:^|\W)(makes\s+me\s+sick|absolutely\s+nauseating|smell.*garbage)(?:\W|$)',
+            r'(?:^|\W)(moldy|rotten|stinks|putrid|foul|reeks)(?:\W|$)'
+        ]
+        
+        # Angry - frustration, rage (sometimes HuggingFace maps to sadness)
+        angry_patterns = [
+            r'(?:^|\W)(idiots|incompetent.*drivers|these.*idiots|stupid.*people)(?:\W|$)',
+            r'(?:^|\W)(furious|livid|enraged|outraged|pissed.*off)(?:\W|$)',
+            r'(?:^|\W)(so.*angry|absolutely.*furious|makes.*me.*mad)(?:\W|$)',
+            r'(?:^|\W)(can\'?t.*drive|traffic.*nightmare|stuck.*mess)(?:\W|$)'
+        ]
+        
+        # Check patterns in order of specificity
+        if any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in angry_patterns):
+            return 'angry'
+        elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in disgust_patterns):
+            return 'disgust'
+        elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in excited_patterns):
+            return 'excited'
+        elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in confused_patterns):
+            return 'confused'  
+        elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in calm_patterns):
+            return 'calm'
+        elif any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in happy_patterns):
+            return 'happy'
+        
+        return None
     
     def moderate_content(self, text):
         """
