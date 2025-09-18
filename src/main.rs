@@ -94,6 +94,72 @@ async fn populate_sample_posts(app_state: &AppState) {
             title: "Cleanup Day".to_string(),
             content: "I don't know what's worse—the mess, the smell, or the fact that nobody seems to care. It's like basic hygiene is optional.".to_string(),
         },
+        CreatePostRequest {
+            title: "Spoiled Food".to_string(),
+            content: "Opened the fridge and found something moldy and disgusting. The smell is absolutely nauseating and revolting.".to_string(),
+        },
+        CreatePostRequest {
+            title: "Public Restroom".to_string(),
+            content: "That was vile. I can't believe how gross and putrid it was in there. Makes me feel sick just thinking about it.".to_string(),
+        },
+        
+        // Confused posts
+        CreatePostRequest {
+            title: "Lost in Translation".to_string(),
+            content: "I'm totally bewildered and confused by these instructions. None of this makes any sense at all. What am I supposed to do?".to_string(),
+        },
+        CreatePostRequest {
+            title: "Tech Problems".to_string(),
+            content: "I'm completely puzzled and have no idea what just happened. This is absolutely no sense and I'm lost.".to_string(),
+        },
+        
+        // Additional Neutral posts
+        CreatePostRequest {
+            title: "Regular Tuesday".to_string(),
+            content: "Just a calm and peaceful day. Taking some deep breaths and feeling centered. Everything is balanced and serene.".to_string(),
+        },
+        
+        // Additional Angry posts  
+        CreatePostRequest {
+            title: "Traffic Nightmare".to_string(),
+            content: "These idiots can't drive! I'm absolutely furious and livid. This traffic is making me so angry I could scream.".to_string(),
+        },
+        
+        // Additional Fear posts
+        CreatePostRequest {
+            title: "Doctor Visit".to_string(),
+            content: "Waiting for test results and I'm terrified about what they might find. The anxiety is overwhelming and I'm scared.".to_string(),
+        },
+        
+        // Additional Surprise posts
+        CreatePostRequest {
+            title: "Plot Twist".to_string(),
+            content: "I did not see that coming at all! What a shocking and unexpected turn of events. I'm completely surprised!".to_string(),
+        },
+        
+        // Additional Angry posts (to ensure we have 2+)
+        CreatePostRequest {
+            title: "Complete Disaster".to_string(),
+            content: "These incompetent people are driving me absolutely furious! I'm so angry and livid right now. This is infuriating!".to_string(),
+        },
+        
+        // Additional Confused posts (to ensure we have 2+)
+        CreatePostRequest {
+            title: "No Clue".to_string(),
+            content: "I'm completely puzzled and bewildered by this situation. None of this makes any sense and I have no idea what's happening.".to_string(),
+        },
+        
+        // Ensuring we have enough Angry posts
+        CreatePostRequest {
+            title: "Furious Customer".to_string(),
+            content: "I'm absolutely LIVID and FURIOUS! This is the most infuriating experience ever! I'm ANGRY beyond words!".to_string(),
+        },
+        
+        // Ensuring we have enough Disgust posts  
+        CreatePostRequest {
+            title: "Nasty Smell".to_string(),
+            content: "That's absolutely DISGUSTING and NAUSEATING! The smell is so VILE and REPULSIVE I feel sick!".to_string(),
+        },
     ];
     
     let mut posts_created = 0;
