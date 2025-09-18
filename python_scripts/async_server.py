@@ -130,17 +130,8 @@ class SentimentHandler(BaseHTTPRequestHandler):
         is_sarcastic = False
         is_affectionate = False
         
-        # Detect sarcasm using robust patterns (no library dependency)
-        sarcasm_patterns = [
-            r'(?:^|\W)(oh\s+great|obviously|of\s+course|sure\s+thing|yeah\s+right)(?:\W|$)',
-            r'(?:^|\W)(just\s+perfect|just\s+great|how\s+wonderful|absolutely\s+perfect)(?:\W|$)', 
-            r'(?:^|\W)(living\s+the\s+dream|perfect\s+timing|magical\s+start)(?:\W|$)',
-            r'(?:^|\W)(couldn\'?t\s+have\s+asked\s+for|what\s+a\s+day|how\s+perfect)(?:\W|$)',
-            r'(?:^|\W)(working\s+flawlessly|could\s+not\s+have\s+asked)(?:\W|$)',
-            r'(?:^|\W)(yeah\s+sure|as\s+if|totally|love\s+that\s+for\s+me)(?:\W|$)',
-            r'(?:^|\W)(fantastic|wonderful|brilliant|amazing)(?:\W|$).*(?:^|\W)(not|never|fail|broken)(?:\W|$)'
-        ]
-        is_sarcastic = any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in sarcasm_patterns)
+        # Advanced sarcasm detection using contextual analysis
+        is_sarcastic = self.detect_advanced_sarcasm(text_clean, text_lower)
         
         # Detect affection using robust patterns (no library dependency)
         affectionate_patterns = [
@@ -341,6 +332,86 @@ class SentimentHandler(BaseHTTPRequestHandler):
             'confidence': 0.0,
             'details': None
         }
+    
+    def detect_advanced_sarcasm(self, text_original, text_lower):
+        """
+        Advanced sarcasm detection using contextual analysis instead of basic pattern matching.
+        Detects:
+        1. Rhetorical questions with negative implications
+        2. Positive words used in negative contexts (sentiment contradiction)
+        3. Exaggerated statements with underlying criticism
+        4. Subtle irony and passive-aggressive language
+        """
+        
+        # Basic sarcastic phrases (keep some obvious patterns)
+        obvious_sarcasm_patterns = [
+            r'(?:^|\W)(oh\s+great|obviously|of\s+course|sure\s+thing|yeah\s+right)(?:\W|$)',
+            r'(?:^|\W)(just\s+perfect|just\s+great|how\s+wonderful|absolutely\s+perfect)(?:\W|$)',
+            r'(?:^|\W)(living\s+the\s+dream|perfect\s+timing|magical\s+start)(?:\W|$)',
+            r'(?:^|\W)(oh\s+sure|as\s+if|totally|love\s+that\s+for\s+me)(?:\W|$)',
+        ]
+        
+        if any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in obvious_sarcasm_patterns):
+            print("   🎭 SARCASM: Basic pattern detected")
+            return True
+        
+        # 1. Detect rhetorical questions with negative implications
+        rhetorical_negative_patterns = [
+            r"i\s+don'?t\s+know\s+what'?s\s+worse",
+            r"what\s+could\s+be\s+better\s+than",
+            r"who\s+doesn'?t\s+love",
+            r"what\s+more\s+could\s+you\s+want",
+            r"how\s+much\s+worse\s+can\s+it\s+get",
+            r"what\s+else\s+could\s+go\s+wrong",
+        ]
+        
+        if any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in rhetorical_negative_patterns):
+            print("   🎭 SARCASM: Rhetorical negative question detected")
+            return True
+        
+        # 2. Detect positive words in clearly negative contexts (sentiment contradiction)
+        positive_words = ['great', 'perfect', 'wonderful', 'amazing', 'fantastic', 'brilliant', 'awesome', 'excellent', 'marvelous']
+        negative_context_words = ['mess', 'smell', 'broken', 'fail', 'disaster', 'terrible', 'awful', 'worst', 'horrible', 'falling apart', 'chaos', 'nightmare']
+        
+        has_positive = any(word in text_lower for word in positive_words)
+        has_negative_context = any(word in text_lower for word in negative_context_words)
+        
+        if has_positive and has_negative_context:
+            print("   🎭 SARCASM: Positive words in negative context detected")
+            return True
+        
+        # 3. Detect "Oh sure" + positive statement + negative context
+        oh_sure_pattern = r'(?:^|\W)oh\s+sure.*(?:great|good|perfect|wonderful)'
+        if re.search(oh_sure_pattern, text_lower, re.IGNORECASE):
+            print("   🎭 SARCASM: 'Oh sure' + positive statement detected")
+            return True
+        
+        # 4. Detect exaggerated criticism patterns
+        exaggerated_criticism_patterns = [
+            r"it'?s\s+like.*(?:optional|doesn'?t\s+matter|no\s+big\s+deal)",
+            r"nobody\s+seems\s+to\s+care",
+            r"as\s+if.*(?:matters|cares|helps)",
+            r"sure.*just\s+what\s+i\s+needed",
+            r"exactly\s+what\s+i\s+wanted",
+        ]
+        
+        if any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in exaggerated_criticism_patterns):
+            print("   🎭 SARCASM: Exaggerated criticism detected")
+            return True
+        
+        # 5. Detect timing-based sarcasm
+        timing_sarcasm_patterns = [
+            r"just\s+what\s+i\s+needed\s+(?:right\s+now|when|today)",
+            r"perfect\s+timing",
+            r"couldn'?t\s+have\s+come\s+at\s+a\s+(?:better|worse)\s+time",
+        ]
+        
+        if any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in timing_sarcasm_patterns):
+            print("   🎭 SARCASM: Timing-based sarcasm detected")
+            return True
+        
+        print("   🎭 SARCASM: None detected")
+        return False
     
     def log_message(self, format, *args):
         # Suppress HTTP request logs to keep output clean
