@@ -1,4 +1,4 @@
-modules = ["rust", "python-3.11", "rust-stable"]
+modules = ["rust", "python-3.11", "rust-stable", "python3"]
 [agent]
 expertMode = true
 
@@ -63,7 +63,3 @@ externalPort = 3002
 [[ports]]
 localPort = 39167
 externalPort = 3000
-
-[[ports]]
-localPort = 44731
-externalPort = 4200
