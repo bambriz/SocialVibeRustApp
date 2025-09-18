@@ -251,20 +251,20 @@ impl PostService {
             }
         }
         
-        // Filter out fallback Calm sentiments (parser failures) but preserve sarcastic combinations
+        // Filter out fallback Neutral sentiments (parser failures) but preserve sarcastic combinations
         let filtered_title: Vec<&Sentiment> = title_sentiments.iter()
-            .filter(|s| !(matches!(s.sentiment_type, SentimentType::Calm) && (s.confidence - 0.5).abs() < 0.01))
+            .filter(|s| !(matches!(s.sentiment_type, SentimentType::Neutral) && (s.confidence - 0.5).abs() < 0.01))
             .collect();
         let filtered_body: Vec<&Sentiment> = body_sentiments.iter()
-            .filter(|s| !(matches!(s.sentiment_type, SentimentType::Calm) && (s.confidence - 0.5).abs() < 0.01))
+            .filter(|s| !(matches!(s.sentiment_type, SentimentType::Neutral) && (s.confidence - 0.5).abs() < 0.01))
             .collect();
         
-        // If both are empty after filtering, default to calm
+        // If both are empty after filtering, default to neutral
         if filtered_body.is_empty() && filtered_title.is_empty() {
             return vec![Sentiment {
-                sentiment_type: SentimentType::Calm,
+                sentiment_type: SentimentType::Neutral,
                 confidence: 0.5,
-                color_code: SentimentType::Calm.color_code(),
+                color_code: SentimentType::Neutral.color_code(),
             }];
         }
         
@@ -308,9 +308,9 @@ impl PostService {
             }]
         } else {
             vec![Sentiment {
-                sentiment_type: SentimentType::Calm,
+                sentiment_type: SentimentType::Neutral,
                 confidence: 0.5,
-                color_code: SentimentType::Calm.color_code(),
+                color_code: SentimentType::Neutral.color_code(),
             }]
         }
     }
@@ -359,12 +359,10 @@ impl PostService {
         
         for sentiment in sentiments {
             let sentiment_multiplier = match sentiment.sentiment_type {
-                SentimentType::Happy => 1.2,
-                SentimentType::Joy => 1.4,      // Highest positive boost - pure joy
-                SentimentType::Excited => 1.3,  // High positive boost
+                SentimentType::Joy => 1.4,      // Highest positive boost - replaces Happy/Excited
                 SentimentType::Affection => 1.1,
                 SentimentType::Surprise => 1.1, // Slight positive boost - draws attention
-                SentimentType::Calm => 1.0,
+                SentimentType::Neutral => 1.0,  // Neutral scoring - replaces Calm
                 SentimentType::Confused => 0.95, // Slightly lower than neutral
                 SentimentType::Sarcastic => 0.9,
                 SentimentType::Disgust => 0.6,  // Low engagement like anger
@@ -374,12 +372,10 @@ impl PostService {
                 SentimentType::SarcasticCombination(ref base_type) => {
                     // For sarcastic combinations, reduce the base sentiment score
                     let base_score = match **base_type {
-                        SentimentType::Happy => 1.2,
                         SentimentType::Joy => 1.4,
-                        SentimentType::Excited => 1.3,
                         SentimentType::Affection => 1.1,
                         SentimentType::Surprise => 1.1,
-                        SentimentType::Calm => 1.0,
+                        SentimentType::Neutral => 1.0,
                         SentimentType::Confused => 0.95,
                         SentimentType::Sarcastic => 0.9,
                         SentimentType::Disgust => 0.6,
@@ -393,12 +389,10 @@ impl PostService {
                 SentimentType::AffectionateCombination(ref base_type) => {
                     // For affectionate combinations, boost the base sentiment score
                     let base_score = match **base_type {
-                        SentimentType::Happy => 1.2,
                         SentimentType::Joy => 1.4,
-                        SentimentType::Excited => 1.3,
                         SentimentType::Affection => 1.1,
                         SentimentType::Surprise => 1.1,
-                        SentimentType::Calm => 1.0,
+                        SentimentType::Neutral => 1.0,
                         SentimentType::Confused => 0.95,
                         SentimentType::Sarcastic => 0.9,
                         SentimentType::Disgust => 0.6,
@@ -425,54 +419,48 @@ impl PostService {
     // Helper method to parse sentiment type from string (handles combinations)
     fn parse_sentiment_type_from_string(&self, type_str: &str) -> SentimentType {
         if type_str.starts_with("affectionate+") {
-            let base_emotion = type_str.strip_prefix("affectionate+").unwrap_or("calm");
+            let base_emotion = type_str.strip_prefix("affectionate+").unwrap_or("neutral");
             let base_type = match base_emotion {
-                "happy" => SentimentType::Happy,
-                "joy" => SentimentType::Joy,
+                "happy" | "joy" => SentimentType::Joy, // Map happy to Joy
                 "sad" => SentimentType::Sad,
                 "angry" => SentimentType::Angry,
-                "excited" => SentimentType::Excited,
                 "confused" => SentimentType::Confused,
                 "fear" => SentimentType::Fear,
                 "disgust" => SentimentType::Disgust,
                 "surprise" => SentimentType::Surprise,
-                "calm" => SentimentType::Calm,
+                "neutral" => SentimentType::Neutral,
                 "affection" => SentimentType::Affection,
-                _ => SentimentType::Calm,
+                _ => SentimentType::Neutral,
             };
             SentimentType::AffectionateCombination(Box::new(base_type))
         } else if type_str.starts_with("sarcastic+") {
-            let base_emotion = type_str.strip_prefix("sarcastic+").unwrap_or("calm");
+            let base_emotion = type_str.strip_prefix("sarcastic+").unwrap_or("neutral");
             let base_type = match base_emotion {
-                "happy" => SentimentType::Happy,
-                "joy" => SentimentType::Joy,
+                "happy" | "joy" => SentimentType::Joy, // Map happy to Joy
                 "sad" => SentimentType::Sad,
                 "angry" => SentimentType::Angry,
-                "excited" => SentimentType::Excited,
                 "confused" => SentimentType::Confused,
                 "fear" => SentimentType::Fear,
                 "disgust" => SentimentType::Disgust,
                 "surprise" => SentimentType::Surprise,
-                "calm" => SentimentType::Calm,
+                "neutral" => SentimentType::Neutral,
                 "affection" => SentimentType::Affection,
-                _ => SentimentType::Calm,
+                _ => SentimentType::Neutral,
             };
             SentimentType::SarcasticCombination(Box::new(base_type))
         } else {
             match type_str {
-                "happy" => SentimentType::Happy,
-                "joy" => SentimentType::Joy,
+                "happy" | "joy" => SentimentType::Joy, // Map happy to Joy
                 "sad" => SentimentType::Sad,
                 "angry" => SentimentType::Angry,
-                "excited" => SentimentType::Excited,
                 "confused" => SentimentType::Confused,
                 "fear" => SentimentType::Fear,
-                "calm" => SentimentType::Calm,
+                "neutral" => SentimentType::Neutral,
                 "affection" => SentimentType::Affection,
                 "disgust" => SentimentType::Disgust,
                 "surprise" => SentimentType::Surprise,
                 "sarcastic" => SentimentType::Sarcastic,
-                _ => SentimentType::Calm,
+                _ => SentimentType::Neutral,
             }
         }
     }

@@ -27,7 +27,7 @@ async fn populate_sample_posts(app_state: &AppState) {
     
     // Sample posts designed to trigger different sentiment analysis results
     let sample_posts = vec![
-        // Joy/Happy posts
+        // Joy posts (primary positive emotion)
         CreatePostRequest {
             title: "Amazing day!".to_string(),
             content: "I am so excited and joyful today! Everything is wonderful and bright!".to_string(),

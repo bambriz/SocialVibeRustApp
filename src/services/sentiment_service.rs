@@ -18,9 +18,9 @@ impl SentimentService {
             Err(_) => {
                 eprintln!("Sentiment analysis timed out, returning default");
                 return Ok(vec![Sentiment {
-                    sentiment_type: SentimentType::Calm,
+                    sentiment_type: SentimentType::Neutral,
                     confidence: 0.30,
-                    color_code: SentimentType::Calm.color_code(),
+                    color_code: SentimentType::Neutral.color_code(),
                 }]);
             }
         };
@@ -28,7 +28,7 @@ impl SentimentService {
         // Robust parsing: handle different output formats
         let clean_result = result.lines().last().unwrap_or("").trim();
         if clean_result.is_empty() {
-            return Ok(vec![]); // Return empty instead of default Calm
+            return Ok(vec![]); // Return empty instead of default Neutral
         }
         
         // Parse the result (format: "sentiment_type:confidence") with resilient parsing
@@ -43,55 +43,49 @@ impl SentimentService {
             // Handle sarcasm combinations like "sarcastic+happy" or "sarcasm+happy"
             let base_sentiment = sentiment_label.strip_prefix("sarcastic+")
                 .or_else(|| sentiment_label.strip_prefix("sarcasm+"))
-                .unwrap_or("calm");
+                .unwrap_or("neutral");
             let base_type = match base_sentiment {
-                "happy" => SentimentType::Happy,
-                "joy" => SentimentType::Joy,
+                "happy" | "joy" => SentimentType::Joy, // Map happy to Joy
                 "sad" => SentimentType::Sad,
                 "angry" => SentimentType::Angry,
-                "excited" => SentimentType::Excited,
                 "confused" => SentimentType::Confused,
                 "fear" => SentimentType::Fear,
                 "disgust" => SentimentType::Disgust,
                 "surprise" => SentimentType::Surprise,
-                "calm" => SentimentType::Calm,
+                "neutral" => SentimentType::Neutral,
                 "affection" => SentimentType::Affection,
-                _ => SentimentType::Calm,
+                _ => SentimentType::Neutral,
             };
             SentimentType::SarcasticCombination(Box::new(base_type))
         } else if sentiment_label.starts_with("affectionate+") {
             // Handle affectionate combinations like "affectionate+happy" 
-            let base_sentiment = sentiment_label.strip_prefix("affectionate+").unwrap_or("calm");
+            let base_sentiment = sentiment_label.strip_prefix("affectionate+").unwrap_or("neutral");
             let base_type = match base_sentiment {
-                "happy" => SentimentType::Happy,
-                "joy" => SentimentType::Joy,
+                "happy" | "joy" => SentimentType::Joy, // Map happy to Joy
                 "sad" => SentimentType::Sad,
                 "angry" => SentimentType::Angry,
-                "excited" => SentimentType::Excited,
                 "confused" => SentimentType::Confused,
                 "fear" => SentimentType::Fear,
                 "disgust" => SentimentType::Disgust,
                 "surprise" => SentimentType::Surprise,
-                "calm" => SentimentType::Calm,
+                "neutral" => SentimentType::Neutral,
                 "affection" => SentimentType::Affection,
-                _ => SentimentType::Calm,
+                _ => SentimentType::Neutral,
             };
             SentimentType::AffectionateCombination(Box::new(base_type))
         } else {
             match sentiment_label.as_str() {
-                "happy" => SentimentType::Happy,
-                "joy" => SentimentType::Joy,
-                "excited" => SentimentType::Excited,
+                "happy" | "joy" => SentimentType::Joy, // Map happy to Joy
                 "confused" => SentimentType::Confused,
                 "sad" => SentimentType::Sad,
                 "angry" => SentimentType::Angry,
                 "fear" => SentimentType::Fear,
                 "disgust" => SentimentType::Disgust,
                 "surprise" => SentimentType::Surprise,
-                "calm" => SentimentType::Calm,
+                "neutral" => SentimentType::Neutral,
                 "affection" => SentimentType::Affection,
                 "sarcastic" => SentimentType::Sarcastic,
-                _ => SentimentType::Calm // Default to Calm instead of returning empty
+                _ => SentimentType::Neutral // Default to Neutral instead of returning empty
             }
         };
         
@@ -142,7 +136,7 @@ impl SentimentService {
                     println!("   📥 Raw response: {}", result);
                     
                     // Extract sentiment info from server response
-                    let sentiment_type = result["sentiment_type"].as_str().unwrap_or("calm");
+                    let sentiment_type = result["sentiment_type"].as_str().unwrap_or("neutral");
                     let confidence = result["confidence"].as_f64().unwrap_or(0.5);
                     let is_combo = result["is_combo"].as_bool().unwrap_or(false);
                     
