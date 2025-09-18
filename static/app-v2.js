@@ -345,7 +345,7 @@ function renderEmptyState() {
 
 function getSentimentClass(post) {
     if (!post.sentiment_colors || post.sentiment_colors.length === 0) {
-        return 'sentiment-calm';
+        return 'sentiment-neutral';
     }
     
     // Handle combo sentiments (multiple colors)
@@ -366,21 +366,19 @@ function getSentimentClass(post) {
     
     // Map colors to sentiment classes (updated with new backend colors)
     const colorToClass = {
-        '#fbbf24': 'sentiment-happy',      // Bright yellow/gold - Happy
         '#22d3ee': 'sentiment-joy',        // Bright cyan - Joy 😊
-        '#f59e0b': 'sentiment-excited',    // Bright orange - Excited  
         '#1e3a8a': 'sentiment-sad',        // Dark blue - Sad
         '#dc2626': 'sentiment-angry',      // Red - Angry
         '#8b5cf6': 'sentiment-confused',   // Light purple - Confused
         '#84cc16': 'sentiment-disgust',    // Lime green - Disgust 🤢
         '#f97316': 'sentiment-surprise',   // Orange - Surprise 😲
         '#374151': 'sentiment-fear',       // Dark grey - Fear
-        '#059669': 'sentiment-calm',       // Green - Calm
+        '#ffffff': 'sentiment-neutral',    // White - Neutral
         '#ec4899': 'sentiment-affection',  // Pink - Affection
         '#7c3aed': 'sentiment-sarcastic'   // Purple - Sarcastic
     };
     
-    return colorToClass[primaryColor] || 'sentiment-calm';
+    return colorToClass[primaryColor] || 'sentiment-neutral';
 }
 
 function getSentimentLabel(post) {
@@ -412,8 +410,8 @@ function getSentimentLabel(post) {
         return sentimentType;
     }
     
-    // If no sentiment data, show calm instead of neutral
-    return '😌 Calm';
+    // If no sentiment data, show neutral
+    return '😐 Neutral';
 }
 
 // New function to handle gradient backgrounds for sarcasm combinations
@@ -436,36 +434,32 @@ function getSentimentBackground(post) {
 
 function getSentimentTypeFromClass(sentimentClass) {
     const classToDisplay = {
-        'sentiment-happy': '😊 Happy',
-        'sentiment-joy': '😊 Joy',
-        'sentiment-excited': '🤩 Excited',
+        'sentiment-joy': '😊 Happy',
         'sentiment-sad': '😢 Sad',
         'sentiment-angry': '😠 Angry',
         'sentiment-confused': '🤔 Confused',
         'sentiment-fear': '😨 Fear',
         'sentiment-disgust': '🤢 Disgust',
         'sentiment-surprise': '😲 Surprise',
-        'sentiment-calm': '😌 Calm',
+        'sentiment-neutral': '😐 Neutral',
         'sentiment-affection': '💕 Affection',
         'sentiment-sarcastic': '😏 Sarcastic'
     };
     
-    return classToDisplay[sentimentClass] || '😐 Unknown';
+    return classToDisplay[sentimentClass] || '😐 Neutral';
 }
 
 // New helper function to get emoji directly from color
 function getEmojiFromColor(color) {
     const colorToEmoji = {
-        '#fbbf24': '😊',      // Happy - bright yellow/gold
-        '#22d3ee': '😊',      // Joy - bright cyan (using same emoji as happy)
-        '#f59e0b': '🤩',      // Excited - bright orange  
+        '#22d3ee': '😊',      // Joy - bright cyan (displays as Happy)
         '#1e3a8a': '😢',      // Sad - dark blue
         '#dc2626': '😠',      // Angry - red
         '#8b5cf6': '🤔',      // Confused - light purple
         '#84cc16': '🤢',      // Disgust - lime green
         '#f97316': '😲',      // Surprise - orange
         '#374151': '😨',      // Fear - dark grey
-        '#059669': '😌',      // Calm - green
+        '#ffffff': '😐',      // Neutral - white
         '#ec4899': '💕',      // Affection - pink
         '#7c3aed': '😏'       // Sarcastic - purple
     };
@@ -504,7 +498,7 @@ function predictSentiment(text) {
     };
     
     let maxScore = 0;
-    let predictedType = 'calm';
+    let predictedType = 'neutral';
     
     for (const [type, keywords] of Object.entries(patterns)) {
         let score = 0;
@@ -522,8 +516,8 @@ function predictSentiment(text) {
     
     const confidence = Math.min(maxScore * 20 + 50, 95);
     const emojis = {
-        happy: '😊', sad: '😢', angry: '😠', 
-        fear: '😨', calm: '😌', affection: '💕', sarcastic: '😏'
+        sad: '😢', angry: '😠', 
+        fear: '😨', neutral: '😐', affection: '💕', sarcastic: '😏'
     };
     
     return {

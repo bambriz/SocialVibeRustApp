@@ -353,11 +353,14 @@ body {
 }
 
 /* Sentiment Colors */
-.sentiment-happy { background: linear-gradient(135deg, #10b981, #34d399); }
+.sentiment-joy { background: linear-gradient(135deg, #22d3ee, #67e8f9); }
 .sentiment-sad { background: linear-gradient(135deg, #1e40af, #3b82f6); }
 .sentiment-angry { background: linear-gradient(135deg, #dc2626, #f87171); }
-.sentiment-fear { background: linear-gradient(135deg, #7c2d12, #ea580c); }
-.sentiment-calm { background: linear-gradient(135deg, #059669, #6ee7b7); }
+.sentiment-fear { background: linear-gradient(135deg, #374151, #6b7280); }
+.sentiment-confused { background: linear-gradient(135deg, #8b5cf6, #a78bfa); }
+.sentiment-disgust { background: linear-gradient(135deg, #84cc16, #a3e635); }
+.sentiment-surprise { background: linear-gradient(135deg, #f97316, #fb923c); }
+.sentiment-neutral { background: linear-gradient(135deg, #f8fafc, #e2e8f0); color: #64748b; }
 .sentiment-affection { background: linear-gradient(135deg, #be185d, #f472b6); }
 .sentiment-sarcastic { background: linear-gradient(135deg, #7c3aed, #a855f7); }
 
