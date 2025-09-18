@@ -31,12 +31,16 @@ The frontend uses **vanilla JavaScript with a Single Page Application (SPA) appr
 - **Real-time Sentiment Preview**: Provides immediate feedback on content sentiment as users type
 
 ### Content Processing Architecture
-The application implements a **dual-layer content processing system** using Python scripts for advanced text analysis.
+The application implements a **subprocess-managed content processing system** with tight integration between Rust and Python for advanced text analysis.
 
 **Key architectural decisions:**
-- **Python Script Integration**: Separates complex text processing from the main Rust application for modularity
+- **Subprocess Management**: Python server runs as a managed subprocess of the Rust application with automatic startup, health checking, and supervision
+- **Unified Logging**: Python subprocess logs are piped into Rust tracing with [PY] prefix for complete operational transparency
+- **Robust Supervision**: Implements bounded restart logic with exponential backoff when Python subprocess crashes (max 3 attempts)
+- **Graceful Process Lifecycle**: Automatic startup coordination and clean shutdown handling eliminate process management complexity
+- **Configuration Flexibility**: Supports both subprocess mode (default) and external server mode via PYTHON_SERVER_MODE environment variable
 - **Rule-based Analysis**: Uses pattern matching for both sentiment analysis and content moderation
-- **Extensible Design**: Python scripts can be easily replaced with ML models or external services
+- **Persistent Caching**: HuggingFace model caching dramatically reduces startup time on subsequent launches
 - **Real-time Processing**: Content is analyzed before storage to provide immediate feedback
 
 ### Data Management
