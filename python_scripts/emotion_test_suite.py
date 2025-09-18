@@ -9,19 +9,57 @@ Validates:
 - sentiment_type matches expected emotion
 - sentiment_colors match expected color mappings
 - popularity_scores are in expected ranges
+- UI visual verification (with --ui-verify flag)
 - Provides clear pass/fail reporting
 
 Usage:
-    python3 python_scripts/emotion_test_suite.py
+    python3 python_scripts/emotion_test_suite.py [--ui-verify]
 """
 import asyncio
 import aiohttp
 import json
 import sys
 import time
+import argparse
+import os
+import re
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from datetime import datetime
+
+# UI verification imports
+try:
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.chrome.options import Options as ChromeOptions
+    from selenium.webdriver.firefox.options import Options as FirefoxOptions
+    from selenium.webdriver.chrome.service import Service as ChromeService
+    from selenium.webdriver.firefox.service import Service as FirefoxService
+    from webdriver_manager.chrome import ChromeDriverManager
+    from webdriver_manager.firefox import GeckoDriverManager
+    from PIL import Image
+    import numpy as np
+    import cv2
+    from sklearn.cluster import KMeans
+    UI_VERIFICATION_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: UI verification dependencies not available: {e}")
+    UI_VERIFICATION_AVAILABLE = False
+    # Define dummy classes to prevent unbound errors
+    ChromeOptions = None
+    FirefoxOptions = None
+    ChromeService = None
+    FirefoxService = None
+    ChromeDriverManager = None
+    GeckoDriverManager = None
+    WebDriverWait = None
+    EC = None
+    By = None
+    np = None
+    cv2 = None
+    KMeans = None
 
 # Base server URL
 BASE_URL = "http://127.0.0.1:5000"
@@ -44,14 +82,28 @@ class TestResult:
     popularity_score: Optional[float]
     passed: bool
     errors: List[str]
+    ui_verification_passed: Optional[bool] = None
+    ui_verification_errors: Optional[List[str]] = None
+    screenshot_path: Optional[str] = None
+    
+    def __post_init__(self):
+        if self.ui_verification_errors is None:
+            self.ui_verification_errors = []
 
 class EmotionTestSuite:
-    def __init__(self):
+    def __init__(self, ui_verify=False):
         self.session = None
         self.auth_token = None
         self.test_user_id = None
         self.created_posts = []
         self.results = []
+        self.ui_verify = ui_verify
+        self.driver = None
+        self.screenshot_dir = "screenshots"
+        
+        # Create screenshots directory if UI verification is enabled
+        if self.ui_verify:
+            os.makedirs(self.screenshot_dir, exist_ok=True)
         
         # Expected color mappings based on actual code implementation
         self.color_mappings = {
@@ -97,6 +149,9 @@ class EmotionTestSuite:
         }
         
         self.test_cases = self._generate_test_cases()
+        
+        # Select key test cases for UI verification (reduced set for speed)
+        self.ui_test_cases = self._select_ui_test_cases() if ui_verify else []
     
     def _generate_test_cases(self) -> List[TestCase]:
         """Generate all 66 test cases (33 emotion types × 2 posts each)"""
@@ -283,6 +338,52 @@ class EmotionTestSuite:
         
         return test_cases
     
+    def _select_ui_test_cases(self) -> List[TestCase]:
+        """Select a subset of key test cases for UI verification"""
+        # Choose representative cases covering all major emotion types
+        ui_cases = []
+        
+        # Basic emotions - 1 case each for key emotions
+        basic_selections = {
+            "angry": 0,    # First angry test case
+            "joy": 0,      # First joy test case  
+            "sad": 0,      # First sad test case
+            "sarcastic": 0, # First sarcastic test case
+            "happy": 0,    # First happy test case
+            "affection": 0 # First affection test case
+        }
+        
+        # Combo emotions - key combinations
+        combo_selections = {
+            "sarcastic+joy": 0,        # Sarcastic combo
+            "sarcastic+angry": 0,      # Another sarcastic combo
+            "affectionate+joy": 0,     # Affectionate combo
+            "affectionate+sad": 0      # Another affectionate combo
+        }
+        
+        # Extract selected test cases
+        for test_case in self.test_cases:
+            emotion_type = test_case.emotion_type
+            
+            # Check basic emotions
+            for basic_emotion, selected_index in basic_selections.items():
+                if emotion_type.startswith(f"basic_{basic_emotion}"):
+                    case_index = int(emotion_type.split('_')[-1]) - 1  # Extract case number
+                    if case_index == selected_index:
+                        ui_cases.append(test_case)
+                        break
+            
+            # Check combo emotions
+            for combo_emotion, selected_index in combo_selections.items():
+                if combo_emotion in emotion_type:
+                    case_index = int(emotion_type.split('_')[-1]) - 1  # Extract case number  
+                    if case_index == selected_index:
+                        ui_cases.append(test_case)
+                        break
+        
+        print(f"📱 Selected {len(ui_cases)} test cases for UI verification")
+        return ui_cases
+    
     async def setup_session(self):
         """Initialize HTTP session and authenticate test user"""
         print("🔧 Setting up test session...")
@@ -380,7 +481,10 @@ class EmotionTestSuite:
             async with self.session.post(f"{API_BASE}/posts", json=post_data, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
-                    post = data["post"]
+                    if "post" in data:
+                        post = data["post"]
+                    else:
+                        post = data
                     
                     result.post_id = post["id"]
                     result.actual_sentiment_type = post.get("sentiment_type")
@@ -462,6 +566,10 @@ class EmotionTestSuite:
             # Brief pause between batches
             await asyncio.sleep(1)
         
+        # Run UI verification if enabled
+        if self.ui_verify:
+            await self.run_ui_verification()
+        
         await self.generate_report()
     
     async def generate_report(self):
@@ -526,26 +634,307 @@ class EmotionTestSuite:
             await self.session.close()
         
         print("✅ Cleanup completed")
+    
+    def setup_ui_verification(self):
+        """Setup Selenium webdriver for UI verification"""
+        if not UI_VERIFICATION_AVAILABLE:
+            raise Exception("UI verification dependencies not available. Please install selenium, pillow, opencv-python, and webdriver-manager.")
+        
+        print("🌐 Setting up browser for UI verification...")
+        
+        # Try Chrome first, fallback to Firefox
+        try:
+            chrome_options = ChromeOptions()
+            chrome_options.add_argument('--headless')
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+            chrome_options.add_argument('--window-size=1920,1080')
+            
+            # Use webdriver manager to handle driver installation
+            service = ChromeService(ChromeDriverManager().install())
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            print("✅ Chrome driver initialized")
+            
+        except Exception as e:
+            print(f"Chrome driver failed: {e}")
+            print("Trying Firefox...")
+            
+            try:
+                firefox_options = FirefoxOptions()
+                firefox_options.add_argument('--headless')
+                firefox_options.add_argument('--width=1920')
+                firefox_options.add_argument('--height=1080')
+                
+                service = FirefoxService(GeckoDriverManager().install())
+                self.driver = webdriver.Firefox(service=service, options=firefox_options)
+                print("✅ Firefox driver initialized")
+                
+            except Exception as e:
+                raise Exception(f"Failed to initialize both Chrome and Firefox drivers: {e}")
+    
+    def teardown_ui_verification(self):
+        """Clean up UI verification resources"""
+        if self.driver:
+            self.driver.quit()
+            self.driver = None
+            print("🔌 Browser driver closed")
+    
+    def take_screenshot(self, test_case: TestCase, post_id: str) -> str:
+        """Take a screenshot of the frontend with the test post visible"""
+        if not self.driver:
+            raise Exception("UI verification not initialized")
+        
+        # Navigate to the main page
+        self.driver.get(BASE_URL)
+        
+        # Wait for page to load
+        wait = WebDriverWait(self.driver, 10)
+        
+        try:
+            # Wait for posts to load
+            wait.until(EC.presence_of_element_located((By.ID, "postsList")))
+            
+            # Give extra time for all posts to render
+            time.sleep(2)
+            
+            # Take screenshot
+            timestamp = int(time.time())
+            emotion_type_clean = re.sub(r'[^a-zA-Z0-9_+]', '_', test_case.emotion_type)
+            screenshot_filename = f"{emotion_type_clean}_{timestamp}.png"
+            screenshot_path = os.path.join(self.screenshot_dir, screenshot_filename)
+            
+            self.driver.save_screenshot(screenshot_path)
+            print(f"📸 Screenshot saved: {screenshot_path}")
+            
+            return screenshot_path
+            
+        except Exception as e:
+            raise Exception(f"Failed to take screenshot: {e}")
+    
+    def analyze_post_colors(self, screenshot_path: str, test_case: TestCase) -> Tuple[bool, List[str]]:
+        """Analyze screenshot to verify post colors match expectations"""
+        try:
+            # Load screenshot
+            image = cv2.imread(screenshot_path)
+            if image is None:
+                return False, ["Could not load screenshot image"]
+            
+            # Convert BGR to RGB
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            # Get expected colors from test case
+            expected_colors = [color.lower() for color in test_case.expected_colors]
+            
+            # Analyze colors in the image
+            detected_colors = self._extract_sentiment_colors_from_image(image_rgb)
+            
+            errors = []
+            
+            # Check if expected colors are present
+            for expected_color in expected_colors:
+                if not self._is_color_present_in_image(expected_color, detected_colors, image_rgb):
+                    errors.append(f"Expected color {expected_color} not found in UI")
+            
+            # For combo emotions, verify gradient patterns
+            if len(expected_colors) > 1:
+                gradient_valid = self._verify_gradient_pattern(image_rgb, expected_colors)
+                if not gradient_valid:
+                    errors.append("Gradient pattern does not match expected combo emotion colors")
+            
+            return len(errors) == 0, errors
+            
+        except Exception as e:
+            return False, [f"Error analyzing screenshot: {str(e)}"]
+    
+    def _extract_sentiment_colors_from_image(self, image_rgb: np.ndarray) -> List[str]:
+        """Extract prominent colors from image that might be sentiment colors"""
+        # Reshape image to list of pixels
+        pixels = image_rgb.reshape(-1, 3)
+        
+        # Use kmeans clustering to find dominant colors
+        if KMeans is None:
+            return []
+        
+        # Cluster into 8 dominant colors
+        kmeans = KMeans(n_clusters=8, random_state=42, n_init='auto')
+        kmeans.fit(pixels)
+        
+        # Get cluster centers (dominant colors)
+        dominant_colors = kmeans.cluster_centers_.astype(int)
+        
+        # Convert to hex colors
+        hex_colors = []
+        for color in dominant_colors:
+            hex_color = f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
+            hex_colors.append(hex_color)
+        
+        return hex_colors
+    
+    def _is_color_present_in_image(self, expected_color: str, detected_colors: List[str], image_rgb: np.ndarray) -> bool:
+        """Check if expected color is present in the image with tolerance"""
+        # Convert expected color to RGB
+        expected_rgb = self._hex_to_rgb(expected_color)
+        
+        # Check against detected dominant colors first
+        for detected_color in detected_colors:
+            detected_rgb = self._hex_to_rgb(detected_color)
+            if self._colors_similar(expected_rgb, detected_rgb, tolerance=30):
+                return True
+        
+        # Also check by scanning the image for similar colors
+        # Sample pixels from different regions
+        h, w = image_rgb.shape[:2]
+        sample_points = [
+            (h//4, w//4), (h//4, 3*w//4),
+            (h//2, w//4), (h//2, w//2), (h//2, 3*w//4),
+            (3*h//4, w//4), (3*h//4, 3*w//4)
+        ]
+        
+        for y, x in sample_points:
+            pixel_color = image_rgb[y, x]
+            if self._colors_similar(expected_rgb, pixel_color, tolerance=40):
+                return True
+        
+        return False
+    
+    def _verify_gradient_pattern(self, image_rgb: np.ndarray, expected_colors: List[str]) -> bool:
+        """Verify that a gradient pattern exists for combo emotions"""
+        # For combo emotions, we expect to see both colors in close proximity
+        # This is a simplified check - in a real implementation you might want more sophisticated gradient detection
+        
+        color1_rgb = self._hex_to_rgb(expected_colors[0])
+        color2_rgb = self._hex_to_rgb(expected_colors[1])
+        
+        color1_found = False
+        color2_found = False
+        
+        # Sample multiple regions of the image
+        h, w = image_rgb.shape[:2]
+        for y in range(0, h, h//10):
+            for x in range(0, w, w//10):
+                if y < h and x < w:
+                    pixel = image_rgb[y, x]
+                    if self._colors_similar(color1_rgb, pixel, tolerance=50):
+                        color1_found = True
+                    if self._colors_similar(color2_rgb, pixel, tolerance=50):
+                        color2_found = True
+        
+        return color1_found and color2_found
+    
+    def _hex_to_rgb(self, hex_color: str) -> Tuple[int, int, int]:
+        """Convert hex color to RGB tuple"""
+        hex_color = hex_color.lstrip('#')
+        rgb_values = [int(hex_color[i:i+2], 16) for i in (0, 2, 4)]
+        return (rgb_values[0], rgb_values[1], rgb_values[2])
+    
+    def _colors_similar(self, color1: Tuple[int, int, int], color2: Tuple[int, int, int], tolerance: int = 30) -> bool:
+        """Check if two RGB colors are similar within tolerance"""
+        return all(abs(c1 - c2) <= tolerance for c1, c2 in zip(color1, color2))
 
-async def main():
+    async def run_ui_verification(self):
+        """Run UI verification tests on selected test cases"""
+        if not self.ui_verify or not self.ui_test_cases:
+            return
+        
+        print(f"\n🎨 Starting UI verification for {len(self.ui_test_cases)} test cases...")
+        
+        try:
+            self.setup_ui_verification()
+            
+            # Find the test results for our UI test cases
+            ui_results = []
+            for ui_test_case in self.ui_test_cases:
+                # Find the corresponding result from the main test run
+                matching_result = next(
+                    (r for r in self.results if r.test_case.emotion_type == ui_test_case.emotion_type),
+                    None
+                )
+                
+                if matching_result and matching_result.post_id:
+                    ui_results.append(matching_result)
+                else:
+                    print(f"⚠️ No result found for UI test case: {ui_test_case.emotion_type}")
+            
+            print(f"📱 Running UI verification on {len(ui_results)} posts...")
+            
+            # Verify each post's UI display
+            for result in ui_results:
+                print(f"🔍 UI verification: {result.test_case.emotion_type}")
+                
+                try:
+                    # Take screenshot
+                    screenshot_path = self.take_screenshot(result.test_case, result.post_id)
+                    result.screenshot_path = screenshot_path
+                    
+                    # Analyze colors
+                    ui_passed, ui_errors = self.analyze_post_colors(screenshot_path, result.test_case)
+                    result.ui_verification_passed = ui_passed
+                    result.ui_verification_errors = ui_errors
+                    
+                    if ui_passed:
+                        print(f"   ✅ UI PASS: Colors match expectations")
+                    else:
+                        print(f"   ❌ UI FAIL: {ui_errors}")
+                    
+                except Exception as e:
+                    result.ui_verification_passed = False
+                    result.ui_verification_errors = [f"UI verification error: {str(e)}"]
+                    print(f"   ❌ UI ERROR: {str(e)}")
+                
+                # Brief pause between screenshots
+                time.sleep(1)
+            
+        finally:
+            self.teardown_ui_verification()
+        
+        # Update overall results
+        ui_passed = sum(1 for r in ui_results if r.ui_verification_passed)
+        ui_failed = len(ui_results) - ui_passed
+        
+        print(f"\n🎨 UI Verification Summary:")
+        print(f"UI Tests Passed: {ui_passed}/{len(ui_results)}")
+        print(f"UI Tests Failed: {ui_failed}/{len(ui_results)}")
+        if len(ui_results) > 0:
+            print(f"UI Success Rate: {(ui_passed/len(ui_results)*100):.1f}%")
+
+async def main(args):
     """Main test runner"""
-    suite = EmotionTestSuite()
+    suite = EmotionTestSuite(ui_verify=args.ui_verify)
     
     try:
         success = await suite.run_all_tests()
         await suite.cleanup()
         
-        sys.exit(0 if success else 1)
+        return success
         
     except Exception as e:
         print(f"❌ Test suite failed: {e}")
         await suite.cleanup()
-        sys.exit(1)
+        raise e
 
 if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Emotion Testing Suite')
+    parser.add_argument('--ui-verify', action='store_true', 
+                       help='Enable UI verification with screenshots')
+    args = parser.parse_args()
+    
     print("🎯 Emotion Testing Suite - Comprehensive Regression Test")
     print("Testing 33 emotion combinations × 2 posts each = 66 total tests")
     print("Validating sentiment_type, sentiment_colors, and popularity_score")
+    
+    if args.ui_verify:
+        print("🎨 UI Verification ENABLED - will take screenshots and verify colors")
+        if not UI_VERIFICATION_AVAILABLE:
+            print("❌ ERROR: UI verification dependencies not available")
+            print("Please install: selenium, pillow, opencv-python, webdriver-manager, scikit-learn")
+            sys.exit(1)
+    
     print("-" * 80)
     
-    asyncio.run(main())
+    # Run the main function and handle the result
+    try:
+        success = asyncio.run(main(args))
+        sys.exit(0 if success else 1)
+    except Exception:
+        sys.exit(1)
