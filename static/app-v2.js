@@ -366,14 +366,14 @@ function getSentimentClass(post) {
     
     // Map colors to sentiment classes (updated with new backend colors)
     const colorToClass = {
-        '#22d3ee': 'sentiment-joy',        // Bright cyan - Joy 😊
+        '#fbbf24': 'sentiment-joy',        // Bright yellow/gold - Joy 😊 (matches backend)
         '#1e3a8a': 'sentiment-sad',        // Dark blue - Sad
         '#dc2626': 'sentiment-angry',      // Red - Angry
         '#8b5cf6': 'sentiment-confused',   // Light purple - Confused
         '#84cc16': 'sentiment-disgust',    // Lime green - Disgust 🤢
         '#f97316': 'sentiment-surprise',   // Orange - Surprise 😲
         '#374151': 'sentiment-fear',       // Dark grey - Fear
-        '#ffffff': 'sentiment-neutral',    // White - Neutral
+        '#6b7280': 'sentiment-neutral',    // Neutral gray - Neutral (matches backend)
         '#ec4899': 'sentiment-affection',  // Pink - Affection
         '#7c3aed': 'sentiment-sarcastic'   // Purple - Sarcastic
     };
@@ -452,14 +452,14 @@ function getSentimentTypeFromClass(sentimentClass) {
 // New helper function to get emoji directly from color
 function getEmojiFromColor(color) {
     const colorToEmoji = {
-        '#22d3ee': '😊',      // Joy - bright cyan (displays as Happy)
+        '#fbbf24': '😊',      // Joy - bright yellow/gold (displays as Happy, matches backend)
         '#1e3a8a': '😢',      // Sad - dark blue
         '#dc2626': '😠',      // Angry - red
         '#8b5cf6': '🤔',      // Confused - light purple
         '#84cc16': '🤢',      // Disgust - lime green
         '#f97316': '😲',      // Surprise - orange
         '#374151': '😨',      // Fear - dark grey
-        '#ffffff': '😐',      // Neutral - white
+        '#6b7280': '😐',      // Neutral - gray (matches backend)
         '#ec4899': '💕',      // Affection - pink
         '#7c3aed': '😏'       // Sarcastic - purple
     };
