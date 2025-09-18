@@ -305,10 +305,15 @@ class SentimentHandler(BaseHTTPRequestHandler):
     def moderate_content(self, text):
         """
         Content moderation with pattern matching for harmful content.
+        Provides comprehensive diagnostic logging for transparency.
         """
-        text_lower = text.lower()
+        print(f"🛡️ MODERATION: Incoming content moderation request")
+        print(f"   📄 Text: \"{text[:100]}{'...' if len(text) > 100 else ''}\"")
         
-        # Define moderation patterns
+        text_lower = text.lower()
+        print(f"   🔍 Processing text (length: {len(text)} chars)")
+        
+        # Define moderation patterns with enhanced categorization
         hate_patterns = {
             "racial_slurs": [r'\b(n[i1]gg[ae]r|ch[i1]nk|sp[i1]c|k[i1]ke)\b'],
             "homophobic_slurs": [r'\b(f[ae]gg[o0]t|d[i1]ke|tr[ae]nn[yi1]e?s?)\b'], 
@@ -316,15 +321,31 @@ class SentimentHandler(BaseHTTPRequestHandler):
             "excessive_profanity": [r'\b(fuck.*fuck|shit.*shit|damn.*damn)\b']
         }
         
+        print(f"   🔎 MODERATION: Scanning for {len(hate_patterns)} violation types...")
+        
+        # Check each violation type with detailed logging
         for violation_type, patterns in hate_patterns.items():
-            for pattern in patterns:
+            print(f"   📋 Checking {violation_type}: {len(patterns)} patterns")
+            
+            for i, pattern in enumerate(patterns):
                 if re.search(pattern, text_lower):
+                    print(f"   🚨 VIOLATION DETECTED!")
+                    print(f"      📌 Type: {violation_type}")
+                    print(f"      🎯 Pattern #{i+1} matched: {pattern}")
+                    print(f"      ⚖️ Confidence: 80%")
+                    print(f"   📤 MODERATION: Content BLOCKED")
+                    
                     return {
                         'is_blocked': True,
                         'violation_type': violation_type,
                         'confidence': 0.8,
                         'details': f'Pattern detected: {violation_type}'
                     }
+            
+            print(f"   ✅ {violation_type}: No violations found")
+        
+        print(f"   🟢 MODERATION: Content passed all checks")
+        print(f"   📤 MODERATION: Content APPROVED")
         
         return {
             'is_blocked': False,

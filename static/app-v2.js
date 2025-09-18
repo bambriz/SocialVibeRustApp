@@ -263,7 +263,7 @@ async function handleCreatePost(e) {
         console.error('Create post error:', error);
         console.error('Error details:', error.message);
         console.error('Auth token present:', !!authToken);
-        showToast('Failed to create post. Please try again.', 'error');
+        showToast(data.message || (response.status === 403 && data.validation_error ? `Post rejected: ${data.validation_error}` : 'Failed to create post. Please try again.'), 'error');
     }
 }
 
