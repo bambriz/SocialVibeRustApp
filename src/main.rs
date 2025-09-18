@@ -8,6 +8,45 @@ use tracing::{info, warn, error, Level};
 use tracing_subscriber;
 use std::net::SocketAddr;
 use uuid::Uuid;
+use reqwest;
+use tokio::time::{sleep, Duration};
+
+/// Wait for the Python sentiment analysis server to be ready
+async fn wait_for_python_server(max_retries: u32, retry_delay_secs: u64) -> bool {
+    info!("🔄 STARTUP: Waiting for Python sentiment analysis server...");
+    
+    for attempt in 1..=max_retries {
+        match reqwest::get("http://127.0.0.1:8001/health").await {
+            Ok(response) if response.status().is_success() => {
+                match response.json::<serde_json::Value>().await {
+                    Ok(health_data) => {
+                        info!("✅ STARTUP: Python server is ready! Health check passed");
+                        info!("   📚 Libraries: {:?}", health_data.get("libraries"));
+                        info!("   🎯 Primary detector: {:?}", health_data.get("primary_detector"));
+                        return true;
+                    },
+                    Err(e) => {
+                        warn!("⚠️ STARTUP: Python server responded but with invalid JSON: {}", e);
+                    }
+                }
+            },
+            Ok(response) => {
+                warn!("⚠️ STARTUP: Python server responded with status: {}", response.status());
+            },
+            Err(e) => {
+                warn!("⚠️ STARTUP: Attempt {}/{}: Python server not ready yet: {}", attempt, max_retries, e);
+            }
+        }
+        
+        if attempt < max_retries {
+            info!("⏳ STARTUP: Retrying in {} seconds...", retry_delay_secs);
+            sleep(Duration::from_secs(retry_delay_secs)).await;
+        }
+    }
+    
+    error!("❌ STARTUP: Python server failed to become ready after {} attempts", max_retries);
+    false
+}
 
 /// Populate the feed with sample posts during app startup
 async fn populate_sample_posts(app_state: &AppState) {
@@ -285,6 +324,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     info!("Starting Social Media App server...");
+
+    // Wait for Python sentiment analysis server to be ready first
+    if !wait_for_python_server(12, 5).await {
+        error!("❌ STARTUP: Cannot start without Python sentiment analysis server");
+        return Err("Python server dependency not available".into());
+    }
 
     // Load configuration from environment
     let config = AppConfig::from_env();

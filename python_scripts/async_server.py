@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
 """
-Social Pulse - Persistent Sentiment Analysis Server
+Social Pulse - Persistent Sentiment Analysis Server with Caching
 
 This server provides HTTP endpoints for sentiment analysis and content moderation,
 eliminating the need to reinitialize Python libraries on each request.
 Uses HuggingFace EmotionClassifier as primary detector with fallback chain.
+Implements persistent caching for faster startup times.
 """
 import json
 import sys
 import re
 import subprocess
 import time
+import pickle
+import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from nrclex import NRCLex
+
+# Caching configuration
+CACHE_DIR = "/tmp/social_pulse_cache"
+MODEL_CACHE_FILE = os.path.join(CACHE_DIR, "emotion_classifier.pkl")
+CACHE_VERSION = "v1.2"  # Update when model changes
 
 # Initialize HuggingFace EmotionClassifier as primary detector
 HF_EMOTIONCLASSIFIER_AVAILABLE = False
@@ -22,10 +30,64 @@ hf_emotion_classifier = None
 TEXT2EMOTION_AVAILABLE = False
 NRCLEX_AVAILABLE = True
 
+def save_model_to_cache():
+    """Save the loaded classifier to persistent cache"""
+    global hf_emotion_classifier
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        cache_data = {
+            'version': CACHE_VERSION,
+            'classifier': hf_emotion_classifier,
+            'timestamp': time.time()
+        }
+        with open(MODEL_CACHE_FILE, 'wb') as f:
+            pickle.dump(cache_data, f)
+        print("💾 Model saved to persistent cache for faster future startups")
+    except Exception as e:
+        print(f"⚠️ Failed to cache model: {e}")
+
+def load_model_from_cache():
+    """Load classifier from persistent cache if available"""
+    global hf_emotion_classifier, HF_EMOTIONCLASSIFIER_AVAILABLE
+    
+    if not os.path.exists(MODEL_CACHE_FILE):
+        print("📋 No model cache found, will load from scratch")
+        return False
+    
+    try:
+        with open(MODEL_CACHE_FILE, 'rb') as f:
+            cache_data = pickle.load(f)
+        
+        if cache_data.get('version') != CACHE_VERSION:
+            print("⚠️ Cache version mismatch, will reload model")
+            return False
+        
+        print("🚀 Loading model from persistent cache...")
+        hf_emotion_classifier = cache_data['classifier']
+        
+        # Test the cached classifier
+        test_result = hf_emotion_classifier.predict("I am happy")
+        if test_result and 'label' in test_result:
+            HF_EMOTIONCLASSIFIER_AVAILABLE = True
+            print("✅ Model loaded from cache successfully! (Much faster startup)")
+            return True
+        else:
+            print("⚠️ Cached model test failed, will reload from scratch")
+            return False
+            
+    except Exception as e:
+        print(f"⚠️ Failed to load from cache: {e}, will reload from scratch")
+        return False
+
 def initialize_hf_classifier_with_retry(max_retries=3):
-    """Initialize HuggingFace EmotionClassifier with retry logic and backoff"""
+    """Initialize HuggingFace EmotionClassifier with caching and retry logic"""
     global HF_EMOTIONCLASSIFIER_AVAILABLE, hf_emotion_classifier
     
+    # Try to load from cache first
+    if load_model_from_cache():
+        return True
+    
+    # If cache loading failed, load from scratch
     for attempt in range(max_retries):
         try:
             print(f"🔄 Attempt {attempt + 1}/{max_retries}: Loading HuggingFace EmotionClassifier...")
@@ -37,6 +99,9 @@ def initialize_hf_classifier_with_retry(max_retries=3):
             if test_result and 'label' in test_result:
                 HF_EMOTIONCLASSIFIER_AVAILABLE = True
                 print("✅ HuggingFace EmotionClassifier loaded successfully!")
+                
+                # Save to cache for future startups
+                save_model_to_cache()
                 return True
                 
         except Exception as e:
