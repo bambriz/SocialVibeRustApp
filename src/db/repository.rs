@@ -23,6 +23,9 @@ pub trait PostRepository: Send + Sync {
     async fn delete_post(&self, id: Uuid) -> Result<()>;
     async fn increment_comment_count(&self, post_id: Uuid) -> Result<()>;
     async fn update_popularity_score(&self, post_id: Uuid, score: f64) -> Result<()>;
+    // Migration support methods
+    async fn get_posts_with_old_sentiment_types(&self) -> Result<Vec<Post>>;
+    async fn update_post_sentiment(&self, post_id: Uuid, sentiment_type: Option<String>, sentiment_colors: Vec<String>, sentiment_score: Option<f64>) -> Result<()>;
 }
 
 #[async_trait]
@@ -411,6 +414,52 @@ impl PostRepository for MockPostRepository {
         
         Ok(())
     }
+
+    async fn get_posts_with_old_sentiment_types(&self) -> Result<Vec<Post>> {
+        let posts_list = self.posts_list.lock().unwrap();
+        let old_sentiment_types = ["happy", "excited", "calm"];
+        
+        let posts_with_old_sentiments: Vec<Post> = posts_list.iter()
+            .filter(|post| {
+                if let Some(ref sentiment_type) = post.sentiment_type {
+                    // Check for direct old sentiment types
+                    if old_sentiment_types.contains(&sentiment_type.as_str()) {
+                        return true;
+                    }
+                    // Check for combination sentiment types that contain old base emotions
+                    if sentiment_type.contains("happy") || sentiment_type.contains("excited") || sentiment_type.contains("calm") {
+                        return true;
+                    }
+                }
+                false
+            })
+            .cloned()
+            .collect();
+        
+        Ok(posts_with_old_sentiments)
+    }
+
+    async fn update_post_sentiment(&self, post_id: Uuid, sentiment_type: Option<String>, sentiment_colors: Vec<String>, sentiment_score: Option<f64>) -> Result<()> {
+        let mut posts = self.posts.lock().unwrap();
+        let mut posts_list = self.posts_list.lock().unwrap();
+        
+        if let Some(post) = posts.get_mut(&post_id) {
+            post.sentiment_type = sentiment_type;
+            post.sentiment_colors = sentiment_colors;
+            post.sentiment_score = sentiment_score;
+            post.updated_at = chrono::Utc::now();
+            
+            // Update in the list as well
+            if let Some(pos) = posts_list.iter().position(|p| p.id == post_id) {
+                posts_list[pos].sentiment_type = post.sentiment_type.clone();
+                posts_list[pos].sentiment_colors = post.sentiment_colors.clone();
+                posts_list[pos].sentiment_score = post.sentiment_score;
+                posts_list[pos].updated_at = post.updated_at;
+            }
+        }
+        
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -494,6 +543,43 @@ impl PostRepository for CsvPostRepository {
         let mut cache = self.posts_cache.lock().unwrap();
         if let Some(post) = cache.get_mut(&post_id) {
             post.popularity_score = score;
+        }
+        drop(cache); // Release lock before file I/O
+        
+        self.save_posts_to_csv()
+    }
+
+    async fn get_posts_with_old_sentiment_types(&self) -> Result<Vec<Post>> {
+        let cache = self.posts_cache.lock().unwrap();
+        let old_sentiment_types = ["happy", "excited", "calm"];
+        
+        let posts_with_old_sentiments: Vec<Post> = cache.values()
+            .filter(|post| {
+                if let Some(ref sentiment_type) = post.sentiment_type {
+                    // Check for direct old sentiment types
+                    if old_sentiment_types.contains(&sentiment_type.as_str()) {
+                        return true;
+                    }
+                    // Check for combination sentiment types that contain old base emotions
+                    if sentiment_type.contains("happy") || sentiment_type.contains("excited") || sentiment_type.contains("calm") {
+                        return true;
+                    }
+                }
+                false
+            })
+            .cloned()
+            .collect();
+        
+        Ok(posts_with_old_sentiments)
+    }
+
+    async fn update_post_sentiment(&self, post_id: Uuid, sentiment_type: Option<String>, sentiment_colors: Vec<String>, sentiment_score: Option<f64>) -> Result<()> {
+        let mut cache = self.posts_cache.lock().unwrap();
+        if let Some(post) = cache.get_mut(&post_id) {
+            post.sentiment_type = sentiment_type;
+            post.sentiment_colors = sentiment_colors;
+            post.sentiment_score = sentiment_score;
+            post.updated_at = chrono::Utc::now();
         }
         drop(cache); // Release lock before file I/O
         

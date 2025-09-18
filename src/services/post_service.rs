@@ -560,4 +560,168 @@ impl PostService {
         
         Ok(())
     }
+
+    // ========== MIGRATION METHODS ==========
+    
+    /// Run comprehensive migration to update all posts with old emotion types
+    pub async fn run_emotion_migration(&self) -> Result<EmotionMigrationResult> {
+        tracing::info!("🚀 MIGRATION: Starting comprehensive emotion migration");
+        
+        let mut migration_result = EmotionMigrationResult {
+            total_posts_checked: 0,
+            posts_requiring_migration: 0,
+            posts_successfully_migrated: 0,
+            posts_failed_migration: 0,
+            errors: Vec::new(),
+        };
+        
+        // Get posts with old sentiment types from both repositories
+        let posts_with_old_sentiments = self.try_with_fallback(
+            "get_posts_with_old_sentiment_types",
+            || self.primary_repo.get_posts_with_old_sentiment_types(),
+            || self.csv_fallback_repo.get_posts_with_old_sentiment_types()
+        ).await?;
+        
+        migration_result.posts_requiring_migration = posts_with_old_sentiments.len();
+        
+        if posts_with_old_sentiments.is_empty() {
+            tracing::info!("✅ MIGRATION: No posts found with old emotion types - migration not needed");
+            return Ok(migration_result);
+        }
+        
+        tracing::info!("🔍 MIGRATION: Found {} posts with old emotion types requiring migration", 
+                      posts_with_old_sentiments.len());
+        
+        // Migrate each post individually
+        for post in posts_with_old_sentiments {
+            migration_result.total_posts_checked += 1;
+            
+            tracing::info!("🔄 MIGRATION: Processing post {} - '{}' (current emotion: {:?})", 
+                          post.id, 
+                          if post.title.len() > 50 { &post.title[..50] } else { &post.title },
+                          post.sentiment_type);
+            
+            match self.migrate_single_post(&post).await {
+                Ok(new_sentiment_info) => {
+                    migration_result.posts_successfully_migrated += 1;
+                    tracing::info!("✅ MIGRATION: Successfully migrated post {} from {:?} to {:?}", 
+                                  post.id, post.sentiment_type, new_sentiment_info.sentiment_type);
+                }
+                Err(e) => {
+                    migration_result.posts_failed_migration += 1;
+                    let error_msg = format!("Failed to migrate post {}: {}", post.id, e);
+                    migration_result.errors.push(error_msg.clone());
+                    tracing::error!("❌ MIGRATION: {}", error_msg);
+                }
+            }
+        }
+        
+        // Log final migration results
+        tracing::info!("🏁 MIGRATION: Emotion migration completed");
+        tracing::info!("   📊 Total posts checked: {}", migration_result.total_posts_checked);
+        tracing::info!("   🎯 Posts requiring migration: {}", migration_result.posts_requiring_migration);
+        tracing::info!("   ✅ Posts successfully migrated: {}", migration_result.posts_successfully_migrated);
+        tracing::info!("   ❌ Posts failed migration: {}", migration_result.posts_failed_migration);
+        
+        if !migration_result.errors.is_empty() {
+            tracing::warn!("⚠️ MIGRATION: {} errors occurred during migration", migration_result.errors.len());
+            for error in &migration_result.errors {
+                tracing::warn!("   - {}", error);
+            }
+        }
+        
+        Ok(migration_result)
+    }
+    
+    /// Migrate a single post by reprocessing its text content
+    async fn migrate_single_post(&self, post: &Post) -> Result<SentimentInfo> {
+        // Combine title and content for sentiment analysis (4x body weight like in create_post)
+        let title_sentiment = self.sentiment_service.analyze_sentiment(&post.title).await
+            .map_err(|e| AppError::InternalError(format!("Failed to analyze title sentiment during migration: {}", e)))?;
+        
+        let body_sentiment = self.sentiment_service.analyze_sentiment(&post.content).await
+            .map_err(|e| AppError::InternalError(format!("Failed to analyze body sentiment during migration: {}", e)))?;
+        
+        // Determine primary sentiment with body bias (4x weight)
+        let primary_sentiment = if body_sentiment.is_empty() {
+            title_sentiment.first().cloned()
+        } else {
+            body_sentiment.first().cloned()
+        };
+        
+        let sentiment_info = if let Some(ref sentiment) = primary_sentiment {
+            SentimentInfo {
+                sentiment_type: Some(sentiment.sentiment_type.to_string()),
+                sentiment_colors: sentiment.sentiment_type.colors_array(),
+                sentiment_score: Some(sentiment.confidence),
+            }
+        } else {
+            // Fallback to neutral if analysis fails
+            tracing::warn!("⚠️ MIGRATION: Sentiment analysis failed for post {}, using neutral fallback", post.id);
+            SentimentInfo {
+                sentiment_type: Some("neutral".to_string()),
+                sentiment_colors: vec!["#6b7280".to_string()],
+                sentiment_score: Some(0.5),
+            }
+        };
+        
+        // Update post sentiment in both repositories
+        self.write_to_both_repositories(
+            "update_post_sentiment",
+            || self.primary_repo.update_post_sentiment(
+                post.id, 
+                sentiment_info.sentiment_type.clone(), 
+                sentiment_info.sentiment_colors.clone(), 
+                sentiment_info.sentiment_score
+            ),
+            || self.csv_fallback_repo.update_post_sentiment(
+                post.id, 
+                sentiment_info.sentiment_type.clone(), 
+                sentiment_info.sentiment_colors.clone(), 
+                sentiment_info.sentiment_score
+            )
+        ).await?;
+        
+        // Recalculate and update popularity score based on new sentiment
+        let new_popularity_score = self.calculate_popularity_score_from_sentiment(&if let Some(sentiment) = primary_sentiment {
+            vec![sentiment]
+        } else {
+            vec![]
+        });
+        
+        let _ = self.write_to_both_repositories(
+            "update_popularity_score",
+            || self.primary_repo.update_popularity_score(post.id, new_popularity_score),
+            || self.csv_fallback_repo.update_popularity_score(post.id, new_popularity_score)
+        ).await;
+        
+        Ok(sentiment_info)
+    }
+    
+    /// Check if migration is needed (posts with old emotion types exist)
+    pub async fn is_migration_needed(&self) -> Result<bool> {
+        let posts_with_old_sentiments = self.try_with_fallback(
+            "get_posts_with_old_sentiment_types",
+            || self.primary_repo.get_posts_with_old_sentiment_types(),
+            || self.csv_fallback_repo.get_posts_with_old_sentiment_types()
+        ).await?;
+        
+        Ok(!posts_with_old_sentiments.is_empty())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SentimentInfo {
+    pub sentiment_type: Option<String>,
+    pub sentiment_colors: Vec<String>,
+    pub sentiment_score: Option<f64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EmotionMigrationResult {
+    pub total_posts_checked: usize,
+    pub posts_requiring_migration: usize,
+    pub posts_successfully_migrated: usize,
+    pub posts_failed_migration: usize,
+    pub errors: Vec<String>,
 }

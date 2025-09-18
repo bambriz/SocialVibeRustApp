@@ -37,4 +37,38 @@ impl CommentService {
         // TODO: Implement comment tree building from flat list
         vec![]
     }
+
+    // ========== MIGRATION METHODS ==========
+    
+    /// Check if comment migration is needed (placeholder for future comment sentiment migration)
+    pub async fn is_migration_needed(&self) -> Result<bool> {
+        // Comments don't currently have sentiment_type field like posts do
+        // This method is here for future compatibility if comment sentiment analysis is added
+        tracing::info!("🔍 MIGRATION: Checking if comment migration is needed");
+        tracing::info!("✅ MIGRATION: Comments don't currently require migration (no sentiment_type field)");
+        Ok(false)
+    }
+    
+    /// Run comment migration (placeholder for future implementation)
+    pub async fn run_emotion_migration(&self) -> Result<CommentMigrationResult> {
+        tracing::info!("🚀 MIGRATION: Starting comment emotion migration");
+        tracing::info!("✅ MIGRATION: No comment migration needed - comments don't have sentiment_type field yet");
+        
+        Ok(CommentMigrationResult {
+            total_comments_checked: 0,
+            comments_requiring_migration: 0,
+            comments_successfully_migrated: 0,
+            comments_failed_migration: 0,
+            errors: Vec::new(),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CommentMigrationResult {
+    pub total_comments_checked: usize,
+    pub comments_requiring_migration: usize,
+    pub comments_successfully_migrated: usize,
+    pub comments_failed_migration: usize,
+    pub errors: Vec<String>,
 }

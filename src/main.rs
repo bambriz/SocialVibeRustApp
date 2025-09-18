@@ -129,6 +129,88 @@ async fn populate_sample_posts(app_state: &AppState) {
     }
 }
 
+/// Run emotion migration on server startup if needed
+async fn run_startup_migration(app_state: &AppState) {
+    info!("🔄 STARTUP: Checking if emotion migration is needed...");
+    
+    // Check if post migration is needed
+    let post_migration_needed = match app_state.post_service.is_migration_needed().await {
+        Ok(needed) => needed,
+        Err(e) => {
+            error!("❌ STARTUP: Failed to check if post migration is needed: {}. Skipping migration.", e);
+            return;
+        }
+    };
+    
+    // Check if comment migration is needed
+    let comment_migration_needed = match app_state.comment_service.is_migration_needed().await {
+        Ok(needed) => needed,
+        Err(e) => {
+            error!("❌ STARTUP: Failed to check if comment migration is needed: {}. Skipping migration.", e);
+            return;
+        }
+    };
+    
+    if !post_migration_needed && !comment_migration_needed {
+        info!("✅ STARTUP: No emotion migration needed - all posts and comments are up to date");
+        return;
+    }
+    
+    info!("🚀 STARTUP: Emotion migration needed. Starting migration process...");
+    info!("   📊 Post migration needed: {}", post_migration_needed);
+    info!("   📊 Comment migration needed: {}", comment_migration_needed);
+    
+    // Run post migration if needed
+    if post_migration_needed {
+        info!("🔄 STARTUP: Running post emotion migration...");
+        match app_state.post_service.run_emotion_migration().await {
+            Ok(result) => {
+                info!("✅ STARTUP: Post migration completed successfully");
+                info!("   📊 Posts checked: {}", result.total_posts_checked);
+                info!("   🎯 Posts requiring migration: {}", result.posts_requiring_migration);
+                info!("   ✅ Posts migrated: {}", result.posts_successfully_migrated);
+                info!("   ❌ Posts failed: {}", result.posts_failed_migration);
+                
+                if !result.errors.is_empty() {
+                    warn!("⚠️ STARTUP: {} errors occurred during post migration:", result.errors.len());
+                    for error in &result.errors {
+                        warn!("   - {}", error);
+                    }
+                }
+            }
+            Err(e) => {
+                error!("❌ STARTUP: Post migration failed: {}. Server will continue but posts may have outdated emotion types.", e);
+            }
+        }
+    }
+    
+    // Run comment migration if needed  
+    if comment_migration_needed {
+        info!("🔄 STARTUP: Running comment emotion migration...");
+        match app_state.comment_service.run_emotion_migration().await {
+            Ok(result) => {
+                info!("✅ STARTUP: Comment migration completed successfully");
+                info!("   📊 Comments checked: {}", result.total_comments_checked);
+                info!("   🎯 Comments requiring migration: {}", result.comments_requiring_migration);
+                info!("   ✅ Comments migrated: {}", result.comments_successfully_migrated);
+                info!("   ❌ Comments failed: {}", result.comments_failed_migration);
+                
+                if !result.errors.is_empty() {
+                    warn!("⚠️ STARTUP: {} errors occurred during comment migration:", result.errors.len());
+                    for error in &result.errors {
+                        warn!("   - {}", error);
+                    }
+                }
+            }
+            Err(e) => {
+                error!("❌ STARTUP: Comment migration failed: {}. Server will continue but comments may have outdated emotion types.", e);
+            }
+        }
+    }
+    
+    info!("🏁 STARTUP: Emotion migration process completed");
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing for logging
@@ -148,6 +230,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Populate sample posts for demonstration purposes
     populate_sample_posts(&app_state).await;
+
+    // Run emotion migration on startup to update any posts with old emotion types
+    run_startup_migration(&app_state).await;
 
     // Build our application with routes
     let app = create_routes()
