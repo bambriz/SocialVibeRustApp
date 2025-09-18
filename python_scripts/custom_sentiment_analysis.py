@@ -4,17 +4,17 @@ from nrclex import NRCLex
 from typing import Dict
 
 # Import emotionclassifier as specified by user
-# Note: Temporarily disabled due to initialization timeouts - will re-enable once optimized
 EMOTIONCLASSIFIER_AVAILABLE = False
 emotion_classifier = None
+EmotionClassifier = None
 
-# try:
-#     from emotionclassifier import EmotionClassifier
-#     emotion_classifier = None
-#     EMOTIONCLASSIFIER_AVAILABLE = True
-# except ImportError:
-#     EMOTIONCLASSIFIER_AVAILABLE = False
-#     emotion_classifier = None
+try:
+    from emotionclassifier import EmotionClassifier
+    EMOTIONCLASSIFIER_AVAILABLE = True
+except ImportError:
+    EMOTIONCLASSIFIER_AVAILABLE = False
+    emotion_classifier = None
+    EmotionClassifier = None
 
 def sarcasm_affection_analysis(text):
     """
@@ -85,7 +85,7 @@ def main_emotion_analysis(text):
     text = text.lower()
     
     # PRIMARY: Use EmotionClassifier as specified by user
-    if EMOTIONCLASSIFIER_AVAILABLE:
+    if EMOTIONCLASSIFIER_AVAILABLE and EmotionClassifier is not None:
         try:
             # Lazy initialization to avoid startup delays
             global emotion_classifier
@@ -124,7 +124,7 @@ def main_emotion_analysis(text):
                         emotion = max(result.keys(), key=lambda k: result[k]).lower()
                         confidence = result[emotion]
                     else:
-                        emotion = 'calm'
+                        emotion = 'neutral'  # CONSOLIDATED: fallback to neutral
                         confidence = 0.30
             elif isinstance(result, str):
                 emotion = result.lower() 
@@ -133,7 +133,7 @@ def main_emotion_analysis(text):
                 emotion = str(result).lower()
                 confidence = 0.70
             
-            mapped_emotion = emotion_mapping.get(emotion, 'calm')
+            mapped_emotion = emotion_mapping.get(emotion, 'neutral')  # CONSOLIDATED: fallback to neutral
             return f"{mapped_emotion}:{confidence:.2f}"
             
         except Exception as e:
@@ -148,7 +148,7 @@ def main_emotion_analysis(text):
         # Get the dominant emotion from NRCLex
         dominant_emotion = max(emotion_scores, key=emotion_scores.get)
         
-        # Map NRCLex emotions to your expanded set
+        # Map NRCLex emotions to consolidated system (joy replaces happy/excited, neutral replaces calm)
         emotion_mapping = {
             'joy': 'joy',
             'sadness': 'sad',
@@ -156,20 +156,20 @@ def main_emotion_analysis(text):
             'fear': 'fear',
             'disgust': 'disgust',
             'surprise': 'surprise',
-            'anticipation': 'excited',
+            'anticipation': 'joy',      # CONSOLIDATED: anticipation/excited → joy
             'trust': 'affection',
-            'positive': 'happy',
+            'positive': 'joy',          # CONSOLIDATED: positive/happy → joy
             'negative': 'sad'
         }
         
-        mapped_emotion = emotion_mapping.get(dominant_emotion, 'calm')
+        mapped_emotion = emotion_mapping.get(dominant_emotion, 'neutral')  # CONSOLIDATED: fallback to neutral
         
-        # Pattern-based enhancement for missing emotions (second pass)
+        # Pattern-based enhancement for missing emotions (second pass) - updated for consolidation
         text_patterns = {
-            'joy': [r'\b(celebration|celebrate|party|joyful|jubilant|triumph|victory)\b'],
+            'joy': [r'\b(celebration|celebrate|party|joyful|jubilant|triumph|victory|excited|thrilled|pumped|hyped|stoked|energized|happy|wonderful|amazing|fantastic)\b'],  # CONSOLIDATED: includes excited/happy patterns
             'disgust': [r'\b(disgusting|gross|revolting|nauseating|yuck|ew|horrible)\b'],
-            'surprise': [r'\b(surprised|shocked|wow|omg|unexpected|amazing|incredible)\b'],
-            'excited': [r'\b(excited|thrilled|pumped|hyped|stoked|energized)\b'],
+            'surprise': [r'\b(surprised|shocked|wow|omg|unexpected|incredible)\b'],
+            'neutral': [r'\b(calm|peaceful|tranquil|serene|balanced|centered|standard|regular|normal|factual)\b'],  # CONSOLIDATED: neutral patterns
             'confused': [r'\b(confused|puzzled|bewildered|don\'t\s+understand)\b']
         }
         
@@ -179,15 +179,17 @@ def main_emotion_analysis(text):
                 
         return f"{mapped_emotion}:0.60"
     
-    # Fallback to simple pattern matching if NRCLex fails
-    if re.search(r'\b(happy|joy|glad|cheerful|delighted)\b', text):
-        return 'happy:0.60'
+    # Fallback to simple pattern matching if NRCLex fails - updated for consolidation
+    if re.search(r'\b(happy|joy|glad|cheerful|delighted|excited|thrilled|wonderful|amazing|fantastic)\b', text):
+        return 'joy:0.60'  # CONSOLIDATED: happy/excited → joy
     elif re.search(r'\b(sad|depressed|miserable|heartbroken)\b', text):
         return 'sad:0.60'
     elif re.search(r'\b(angry|mad|furious|rage|hate)\b', text):
         return 'angry:0.60'
+    elif re.search(r'\b(calm|peaceful|tranquil|serene|balanced|neutral|standard)\b', text):
+        return 'neutral:0.50'  # CONSOLIDATED: calm → neutral
     else:
-        return 'calm:0.30'
+        return 'neutral:0.30'  # CONSOLIDATED: ultimate fallback to neutral
 
 def main():
     """Main function for command line usage"""
