@@ -149,27 +149,42 @@ impl CsvPostRepository {
     fn save_posts_to_csv(&self) -> Result<()> {
         let cache = self.posts_cache.lock().unwrap();
         
-        let file = File::create(&self.csv_file_path)
-            .map_err(|e| crate::AppError::InternalError(format!("Failed to create CSV file: {}", e)))?;
-        let mut writer = Writer::from_writer(BufWriter::new(file));
+        // Create a temporary file to ensure atomic writes and prevent corruption
+        let temp_path = format!("{}.tmp", self.csv_file_path);
+        let file = File::create(&temp_path)
+            .map_err(|e| crate::AppError::InternalError(format!("Failed to create temporary CSV file: {}", e)))?;
         
-        // Write header
-        writer.write_record(&[
-            "id", "title", "content", "author_id", "author_username", 
-            "created_at", "updated_at", "comment_count", "sentiment_score",
-            "sentiment_colors", "sentiment_type", "popularity_score", "is_blocked"
-        ])
-        .map_err(|e| crate::AppError::InternalError(format!("Failed to write CSV header: {}", e)))?;
+        {
+            let mut writer = Writer::from_writer(BufWriter::new(file));
+            
+            // Only write header if file is being created for the first time
+            // (this method is called for updates, so we need to check if we should write header)
+            let should_write_header = !std::path::Path::new(&self.csv_file_path).exists();
+            
+            if should_write_header {
+                writer.write_record(&[
+                    "id", "title", "content", "author_id", "author_username", 
+                    "created_at", "updated_at", "comment_count", "sentiment_score",
+                    "sentiment_colors", "sentiment_type", "popularity_score", "is_blocked"
+                ])
+                .map_err(|e| crate::AppError::InternalError(format!("Failed to write CSV header: {}", e)))?;
+            }
+            
+            // Write all posts
+            for post in cache.values() {
+                let csv_post = self.post_to_csv_post(post)?;
+                writer.serialize(&csv_post)
+                    .map_err(|e| crate::AppError::InternalError(format!("Failed to write CSV record: {}", e)))?;
+            }
+            
+            // Ensure all data is written before moving file
+            writer.flush()
+                .map_err(|e| crate::AppError::InternalError(format!("Failed to flush CSV file: {}", e)))?;
+        } // Writer is dropped here, ensuring file is closed
         
-        // Write all posts
-        for post in cache.values() {
-            let csv_post = self.post_to_csv_post(post)?;
-            writer.serialize(&csv_post)
-                .map_err(|e| crate::AppError::InternalError(format!("Failed to write CSV record: {}", e)))?;
-        }
-        
-        writer.flush()
-            .map_err(|e| crate::AppError::InternalError(format!("Failed to flush CSV file: {}", e)))?;
+        // Atomically replace the original file with the temporary file
+        std::fs::rename(&temp_path, &self.csv_file_path)
+            .map_err(|e| crate::AppError::InternalError(format!("Failed to replace CSV file: {}", e)))?;
         
         Ok(())
     }

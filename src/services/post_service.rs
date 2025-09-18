@@ -30,7 +30,7 @@ impl PostService {
         }
     }
     
-    // Helper method to try primary repository first, then fall back to CSV
+    // Helper method to try primary repository first, then fall back to CSV (for read operations)
     async fn try_with_fallback<T, F, C, PrimFut, CsvFut>(&self, operation_name: &str, primary_op: F, csv_op: C) -> Result<T>
     where
         F: FnOnce() -> PrimFut,
@@ -64,6 +64,60 @@ impl PostService {
                         tracing::error!("💥 FALLBACK_TRACE: Both repositories failed for {}", operation_name);
                         Err(AppError::InternalError(format!(
                             "Both primary and CSV fallback repositories failed. Primary: {:?}, CSV: {:?}", 
+                            primary_error, csv_error
+                        )))
+                    }
+                }
+            }
+        }
+    }
+
+    // Helper method to write to both primary and CSV repositories (for persistence)
+    async fn write_to_both_repositories<T, F, C, PrimFut, CsvFut>(&self, operation_name: &str, primary_op: F, csv_op: C) -> Result<T>
+    where
+        F: FnOnce() -> PrimFut,
+        C: FnOnce() -> CsvFut,
+        PrimFut: std::future::Future<Output = Result<T>>,
+        CsvFut: std::future::Future<Output = Result<T>>,
+        T: Clone + std::fmt::Debug,
+    {
+        tracing::info!("🔄 PERSISTENCE_TRACE: Starting {} operation (write to both repositories)", operation_name);
+        
+        // Always try primary repository first
+        match primary_op().await {
+            Ok(result) => {
+                tracing::info!("✅ PERSISTENCE_TRACE: {} succeeded with primary repository", operation_name);
+                tracing::debug!("Primary repository result: {:?}", result);
+                
+                // Also write to CSV for backup persistence (don't fail if CSV fails)
+                match csv_op().await {
+                    Ok(_) => {
+                        tracing::info!("📄 PERSISTENCE_TRACE: {} also persisted to CSV backup successfully", operation_name);
+                    }
+                    Err(csv_error) => {
+                        tracing::warn!("⚠️ PERSISTENCE_TRACE: {} failed to persist to CSV backup (non-fatal): {:?}", operation_name, csv_error);
+                        // Don't fail the operation if CSV backup fails - it's just a backup
+                    }
+                }
+                
+                Ok(result)
+            }
+            Err(primary_error) => {
+                tracing::error!("❌ PERSISTENCE_TRACE: {} failed with primary repository: {:?}", operation_name, primary_error);
+                tracing::warn!("🔄 PERSISTENCE_TRACE: Attempting CSV fallback for {}", operation_name);
+                
+                // If primary fails, try CSV as fallback
+                match csv_op().await {
+                    Ok(csv_result) => {
+                        tracing::info!("✅ PERSISTENCE_TRACE: {} succeeded with CSV fallback repository", operation_name);
+                        tracing::debug!("CSV fallback result: {:?}", csv_result);
+                        Ok(csv_result)
+                    }
+                    Err(csv_error) => {
+                        tracing::error!("❌ PERSISTENCE_TRACE: {} failed with CSV fallback: {:?}", operation_name, csv_error);
+                        tracing::error!("💥 PERSISTENCE_TRACE: Both repositories failed for {}", operation_name);
+                        Err(AppError::InternalError(format!(
+                            "Both primary and CSV repositories failed. Primary: {:?}, CSV: {:?}", 
                             primary_error, csv_error
                         )))
                     }
@@ -161,8 +215,8 @@ impl PostService {
             is_blocked: false, // Already checked above
         };
         
-        // Try primary repository first, then fallback to CSV using helper method
-        let created_post = self.try_with_fallback(
+        // Write to both primary and CSV repositories for persistence
+        let created_post = self.write_to_both_repositories(
             "create_post",
             || self.primary_repo.create_post(&post),
             || self.csv_fallback_repo.create_post(&post),
@@ -483,8 +537,8 @@ impl PostService {
         // Update popularity score
         updated_post.popularity_score = self.calculate_popularity_score_from_sentiment(&sentiments);
         
-        // Try primary repository first, then fallback to CSV using helper method
-        let result_post = self.try_with_fallback(
+        // Write to both primary and CSV repositories for persistence
+        let result_post = self.write_to_both_repositories(
             "update_post",
             || self.primary_repo.update_post(&updated_post),
             || self.csv_fallback_repo.update_post(&updated_post),
@@ -509,11 +563,11 @@ impl PostService {
             return Err(AppError::AuthError("Not authorized to delete this post".to_string()));
         }
         
-        // Try primary repository first, then fallback to CSV using helper method
-        self.try_with_fallback(
+        // Write to both primary and CSV repositories for persistence
+        self.write_to_both_repositories(
             "delete_post",
-            || self.primary_repo.delete_post(post_id),
-            || self.csv_fallback_repo.delete_post(post_id),
+            || async { self.primary_repo.delete_post(post_id).await.map(|_| ()) },
+            || async { self.csv_fallback_repo.delete_post(post_id).await.map(|_| ()) },
         ).await?;
         
         Ok(())
