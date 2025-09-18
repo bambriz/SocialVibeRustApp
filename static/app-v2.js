@@ -398,7 +398,9 @@ function getSentimentLabel(post) {
             if (firstColor === '#7c3aed') {
                 return `😏${baseEmoji} Sarcastic Combo`;
             } else if (firstColor === '#ec4899') {
-                return `💕${baseEmoji} Affectionate Combo`;
+                // For affectionate combos, avoid redundant emoji if base is affection
+                const displayEmoji = (secondColor === '#ec4899') ? '😊' : baseEmoji;
+                return `💕${displayEmoji} Affectionate Combo`;
             } else {
                 return `${getEmojiFromColor(firstColor)}${baseEmoji} Combo`;
             }
@@ -433,22 +435,22 @@ function getSentimentBackground(post) {
 }
 
 function getSentimentTypeFromClass(sentimentClass) {
-    const classToEmoji = {
-        'sentiment-happy': '😊',
-        'sentiment-joy': '😊',             // Joy - distinct from happy
-        'sentiment-excited': '🤩',
-        'sentiment-sad': '😢',             // Sadness
-        'sentiment-angry': '😠',           // Anger
-        'sentiment-confused': '🤔',
-        'sentiment-fear': '😨',            // Fear
-        'sentiment-disgust': '🤢',         // Disgust
-        'sentiment-surprise': '😲',        // Surprise
-        'sentiment-calm': '😌',
-        'sentiment-affection': '💕',
-        'sentiment-sarcastic': '😏'
+    const classToDisplay = {
+        'sentiment-happy': '😊 Happy',
+        'sentiment-joy': '😊 Joy',
+        'sentiment-excited': '🤩 Excited',
+        'sentiment-sad': '😢 Sad',
+        'sentiment-angry': '😠 Angry',
+        'sentiment-confused': '🤔 Confused',
+        'sentiment-fear': '😨 Fear',
+        'sentiment-disgust': '🤢 Disgust',
+        'sentiment-surprise': '😲 Surprise',
+        'sentiment-calm': '😌 Calm',
+        'sentiment-affection': '💕 Affection',
+        'sentiment-sarcastic': '😏 Sarcastic'
     };
     
-    return classToEmoji[sentimentClass] || '😐';
+    return classToDisplay[sentimentClass] || '😐 Unknown';
 }
 
 // New helper function to get emoji directly from color
@@ -482,7 +484,7 @@ function previewSentiment() {
     if (text.length > 10) {
         // Simple client-side sentiment preview (not as accurate as backend)
         const sentiment = predictSentiment(text);
-        preview.textContent = `Predicted mood: ${sentiment.emoji} ${sentiment.type} (${sentiment.confidence}% confidence)`;
+        preview.textContent = `Preview: ${sentiment.emoji} ${sentiment.displayText} (${sentiment.confidence}% confidence)`;
     } else {
         preview.textContent = '';
     }
@@ -520,13 +522,14 @@ function predictSentiment(text) {
     
     const confidence = Math.min(maxScore * 20 + 50, 95);
     const emojis = {
-        happy: '😊', sad: '😢', angry: '😡', 
+        happy: '😊', sad: '😢', angry: '😠', 
         fear: '😨', calm: '😌', affection: '💕', sarcastic: '😏'
     };
     
     return {
         type: predictedType,
         emoji: emojis[predictedType],
+        displayText: predictedType.charAt(0).toUpperCase() + predictedType.slice(1),
         confidence: confidence
     };
 }

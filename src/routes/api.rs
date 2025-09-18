@@ -1,4 +1,4 @@
-use axum::{routing::{get, post}, Router, Json, middleware};
+use axum::{routing::{get, post, put, delete}, Router, Json, middleware};
 use serde_json::{json, Value};
 use crate::AppState;
 use crate::routes::{users, posts, auth};
@@ -14,7 +14,9 @@ pub fn routes() -> Router<AppState> {
         .route("/posts/:post_id", get(posts::get_post));
 
     let protected_routes = Router::new()
-        .route("/posts", post(posts::create_post));
+        .route("/posts", post(posts::create_post))
+        .route("/posts/:post_id", put(posts::update_post))
+        .route("/posts/:post_id", delete(posts::delete_post));
 
     public_routes.merge(protected_routes)
 }
@@ -39,7 +41,9 @@ async fn api_health() -> Json<Value> {
             "posts": {
                 "create": "POST /api/posts (requires auth)",
                 "list": "GET /api/posts",
-                "get": "GET /api/posts/:id"
+                "get": "GET /api/posts/:id",
+                "update": "PUT /api/posts/:id (requires auth)",
+                "delete": "DELETE /api/posts/:id (requires auth)"
             }
         }
     }))

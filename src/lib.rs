@@ -34,8 +34,13 @@ impl AppState {
         let user_service = std::sync::Arc::new(services::UserService::new(db.user_repo.clone()));
         let sentiment_service = std::sync::Arc::new(services::SentimentService::new());
         let moderation_service = std::sync::Arc::new(services::ModerationService::new());
+        
+        // Create CSV fallback repository
+        let csv_fallback_repo = std::sync::Arc::new(db::repository::CsvPostRepository::new(None)); // Uses default "posts_backup.csv"
+        
         let post_service = std::sync::Arc::new(services::PostService::new(
-            db.post_repo.clone(),
+            db.post_repo.clone() as std::sync::Arc<dyn db::repository::PostRepository>,
+            csv_fallback_repo,
             sentiment_service.clone(),
             moderation_service.clone()
         ));

@@ -4,7 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["freetype", "geckodriver", "glibcLocales", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "openssl", "pkg-config", "tcl", "tk", "xsimd", "zlib"]
+packages = ["freetype", "geckodriver", "glibcLocales", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "openssl", "pkg-config", "tcl", "tk", "xsimd", "zlib", "jq"]
 
 [workflows]
 runButton = "Project"
@@ -67,7 +67,3 @@ externalPort = 3000
 [[ports]]
 localPort = 40553
 externalPort = 4200
-
-[[ports]]
-localPort = 44805
-externalPort = 5000

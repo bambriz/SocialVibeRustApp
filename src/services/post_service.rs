@@ -1,7 +1,7 @@
 use crate::models::Post;
 use crate::models::post::{CreatePostRequest, PostResponse};
 use crate::models::sentiment::{Sentiment, SentimentType};
-use crate::db::repository::{PostRepository, MockPostRepository};
+use crate::db::repository::{PostRepository, MockPostRepository, CsvPostRepository};
 use crate::services::{SentimentService, ModerationService};
 use crate::{AppError, Result};
 use uuid::Uuid;
@@ -9,21 +9,66 @@ use std::sync::Arc;
 use chrono::Utc;
 
 pub struct PostService {
-    post_repo: Arc<MockPostRepository>,
+    primary_repo: Arc<dyn PostRepository>,
+    csv_fallback_repo: Arc<CsvPostRepository>,
     sentiment_service: Arc<SentimentService>,
     moderation_service: Arc<ModerationService>,
 }
 
 impl PostService {
     pub fn new(
-        post_repo: Arc<MockPostRepository>, 
+        primary_repo: Arc<dyn PostRepository>, 
+        csv_fallback_repo: Arc<CsvPostRepository>,
         sentiment_service: Arc<SentimentService>,
         moderation_service: Arc<ModerationService>
     ) -> Self {
         Self { 
-            post_repo, 
+            primary_repo,
+            csv_fallback_repo,
             sentiment_service,
             moderation_service 
+        }
+    }
+    
+    // Helper method to try primary repository first, then fall back to CSV
+    async fn try_with_fallback<T, F, C, PrimFut, CsvFut>(&self, operation_name: &str, primary_op: F, csv_op: C) -> Result<T>
+    where
+        F: FnOnce() -> PrimFut,
+        C: FnOnce() -> CsvFut,
+        PrimFut: std::future::Future<Output = Result<T>>,
+        CsvFut: std::future::Future<Output = Result<T>>,
+        T: Clone + std::fmt::Debug,
+    {
+        // Enhanced trace logging for fallback testing
+        tracing::info!("🔄 FALLBACK_TRACE: Starting {} operation", operation_name);
+        
+        match primary_op().await {
+            Ok(result) => {
+                tracing::info!("✅ FALLBACK_TRACE: {} succeeded with primary repository", operation_name);
+                tracing::debug!("Primary repository result: {:?}", result);
+                Ok(result)
+            }
+            Err(primary_error) => {
+                tracing::error!("❌ FALLBACK_TRACE: {} failed with primary repository: {:?}", operation_name, primary_error);
+                tracing::warn!("🔄 FALLBACK_TRACE: Attempting CSV fallback for {}", operation_name);
+                
+                match csv_op().await {
+                    Ok(csv_result) => {
+                        tracing::info!("✅ FALLBACK_TRACE: {} succeeded with CSV fallback repository", operation_name);
+                        tracing::info!("📄 FALLBACK_TRACE: CSV operation completed successfully");
+                        tracing::debug!("CSV fallback result: {:?}", csv_result);
+                        Ok(csv_result)
+                    }
+                    Err(csv_error) => {
+                        tracing::error!("❌ FALLBACK_TRACE: {} failed with CSV fallback: {:?}", operation_name, csv_error);
+                        tracing::error!("💥 FALLBACK_TRACE: Both repositories failed for {}", operation_name);
+                        Err(AppError::InternalError(format!(
+                            "Both primary and CSV fallback repositories failed. Primary: {:?}, CSV: {:?}", 
+                            primary_error, csv_error
+                        )))
+                    }
+                }
+            }
         }
     }
 
@@ -116,13 +161,31 @@ impl PostService {
             is_blocked: false, // Already checked above
         };
         
-        let created_post = self.post_repo.create_post(&post).await?;
+        // Try primary repository first, then fallback to CSV using helper method
+        let created_post = self.try_with_fallback(
+            "create_post",
+            || self.primary_repo.create_post(&post),
+            || self.csv_fallback_repo.create_post(&post),
+        ).await?;
         Ok(PostResponse::from(created_post))
     }
 
     // Helper method to combine sentiments with weighting bias
     fn combine_sentiments_with_bias(&self, title_sentiments: &[Sentiment], body_sentiments: &[Sentiment], title_weight: f64, body_weight: f64) -> Vec<Sentiment> {
-        // PRIORITIZE SARCASTIC COMBINATIONS - if either title or body has sarcasm, use it
+        // PRIORITIZE COMBINATION SENTIMENTS - if either title or body has sarcasm or affection combos, use them
+        // Check for affectionate combinations first (slightly higher priority)
+        for sentiment in body_sentiments.iter() {
+            if matches!(sentiment.sentiment_type, SentimentType::AffectionateCombination(_)) {
+                return vec![sentiment.clone()];
+            }
+        }
+        for sentiment in title_sentiments.iter() {
+            if matches!(sentiment.sentiment_type, SentimentType::AffectionateCombination(_)) {
+                return vec![sentiment.clone()];
+            }
+        }
+        
+        // Then check for sarcastic combinations
         for sentiment in body_sentiments.iter() {
             if matches!(sentiment.sentiment_type, SentimentType::SarcasticCombination(_)) {
                 return vec![sentiment.clone()];
@@ -170,33 +233,19 @@ impl PostService {
         
         // Add title sentiments with title weight
         for sentiment in filtered_title {
-            let key = format!("{:?}", sentiment.sentiment_type);
+            let key = sentiment.sentiment_type.to_string();
             *combined_score_map.entry(key).or_insert(0.0) += sentiment.confidence * title_weight;
         }
         
         // Add body sentiments with body weight (higher priority)
         for sentiment in filtered_body {
-            let key = format!("{:?}", sentiment.sentiment_type);
+            let key = sentiment.sentiment_type.to_string();
             *combined_score_map.entry(key).or_insert(0.0) += sentiment.confidence * body_weight;
         }
         
         // Return the highest scoring sentiment
         if let Some((dominant_type, score)) = combined_score_map.iter().max_by(|a, b| a.1.partial_cmp(b.1).unwrap()) {
-            let sentiment_type = match dominant_type.as_str() {
-                "Happy" => SentimentType::Happy,
-                "Joy" => SentimentType::Joy,
-                "Sad" => SentimentType::Sad,
-                "Angry" => SentimentType::Angry,
-                "Excited" => SentimentType::Excited,
-                "Confused" => SentimentType::Confused,
-                "Fear" => SentimentType::Fear,
-                "Calm" => SentimentType::Calm,
-                "Affection" => SentimentType::Affection,
-                "Disgust" => SentimentType::Disgust,
-                "Surprise" => SentimentType::Surprise,
-                "Sarcastic" => SentimentType::Sarcastic,
-                _ => SentimentType::Calm,
-            };
+            let sentiment_type = self.parse_sentiment_type_from_string(dominant_type);
             
             vec![Sentiment {
                 sentiment_type: sentiment_type.clone(),
@@ -213,12 +262,22 @@ impl PostService {
     }
 
     pub async fn get_post(&self, post_id: Uuid) -> Result<Option<PostResponse>> {
-        let post = self.post_repo.get_post_by_id(post_id).await?;
+        // Try primary repository first, then fallback to CSV using helper method
+        let post = self.try_with_fallback(
+            "get_post_by_id",
+            || self.primary_repo.get_post_by_id(post_id),
+            || self.csv_fallback_repo.get_post_by_id(post_id),
+        ).await?;
         Ok(post.map(PostResponse::from))
     }
 
     pub async fn get_posts_feed(&self, limit: u32, offset: u32) -> Result<Vec<PostResponse>> {
-        let posts = self.post_repo.get_posts_by_popularity(limit, offset).await?;
+        // Try primary repository first, then fallback to CSV using helper method
+        let posts = self.try_with_fallback(
+            "get_posts_by_popularity",
+            || self.primary_repo.get_posts_by_popularity(limit, offset),
+            || self.csv_fallback_repo.get_posts_by_popularity(limit, offset),
+        ).await?;
         Ok(posts.into_iter().map(PostResponse::from).collect())
     }
 
@@ -307,5 +366,156 @@ impl PostService {
         } else {
             1.0
         }
+    }
+    
+    // Helper method to parse sentiment type from string (handles combinations)
+    fn parse_sentiment_type_from_string(&self, type_str: &str) -> SentimentType {
+        if type_str.starts_with("affectionate+") {
+            let base_emotion = type_str.strip_prefix("affectionate+").unwrap_or("calm");
+            let base_type = match base_emotion {
+                "happy" => SentimentType::Happy,
+                "joy" => SentimentType::Joy,
+                "sad" => SentimentType::Sad,
+                "angry" => SentimentType::Angry,
+                "excited" => SentimentType::Excited,
+                "confused" => SentimentType::Confused,
+                "fear" => SentimentType::Fear,
+                "disgust" => SentimentType::Disgust,
+                "surprise" => SentimentType::Surprise,
+                "calm" => SentimentType::Calm,
+                "affection" => SentimentType::Affection,
+                _ => SentimentType::Calm,
+            };
+            SentimentType::AffectionateCombination(Box::new(base_type))
+        } else if type_str.starts_with("sarcastic+") {
+            let base_emotion = type_str.strip_prefix("sarcastic+").unwrap_or("calm");
+            let base_type = match base_emotion {
+                "happy" => SentimentType::Happy,
+                "joy" => SentimentType::Joy,
+                "sad" => SentimentType::Sad,
+                "angry" => SentimentType::Angry,
+                "excited" => SentimentType::Excited,
+                "confused" => SentimentType::Confused,
+                "fear" => SentimentType::Fear,
+                "disgust" => SentimentType::Disgust,
+                "surprise" => SentimentType::Surprise,
+                "calm" => SentimentType::Calm,
+                "affection" => SentimentType::Affection,
+                _ => SentimentType::Calm,
+            };
+            SentimentType::SarcasticCombination(Box::new(base_type))
+        } else {
+            match type_str {
+                "happy" => SentimentType::Happy,
+                "joy" => SentimentType::Joy,
+                "sad" => SentimentType::Sad,
+                "angry" => SentimentType::Angry,
+                "excited" => SentimentType::Excited,
+                "confused" => SentimentType::Confused,
+                "fear" => SentimentType::Fear,
+                "calm" => SentimentType::Calm,
+                "affection" => SentimentType::Affection,
+                "disgust" => SentimentType::Disgust,
+                "surprise" => SentimentType::Surprise,
+                "sarcastic" => SentimentType::Sarcastic,
+                _ => SentimentType::Calm,
+            }
+        }
+    }
+    
+    pub async fn get_posts_paginated(&self, limit: u32, offset: u32) -> Result<Vec<PostResponse>> {
+        // Try primary repository first, then fallback to CSV using helper method
+        let posts = self.try_with_fallback(
+            "get_posts_paginated",
+            || self.primary_repo.get_posts_paginated(limit, offset),
+            || self.csv_fallback_repo.get_posts_paginated(limit, offset),
+        ).await?;
+        
+        Ok(posts.into_iter().map(PostResponse::from).collect())
+    }
+    
+    pub async fn update_post(&self, post_id: Uuid, request: CreatePostRequest, author_id: Uuid) -> Result<PostResponse> {
+        // First, get the existing post using fallback helper
+        let existing_post = match self.try_with_fallback(
+            "get_post_by_id_for_update",
+            || self.primary_repo.get_post_by_id(post_id),
+            || self.csv_fallback_repo.get_post_by_id(post_id),
+        ).await? {
+            Some(post) => post,
+            None => return Err(AppError::NotFound("Post not found".to_string())),
+        };
+        
+        // Verify the author owns the post
+        if existing_post.author_id != author_id {
+            return Err(AppError::AuthError("Not authorized to update this post".to_string()));
+        }
+        
+        // Run moderation check on updated content
+        let combined_text = format!("{} {}", request.title, request.content);
+        let moderation_result = self.moderation_service.check_content(&combined_text).await
+            .map_err(|e| AppError::InternalError(format!("Content moderation system error: {}", e)))?;
+        
+        if moderation_result.is_blocked {
+            return Err(AppError::ValidationError("Updated content violates community guidelines".to_string()));
+        }
+        
+        // Run sentiment analysis on updated content
+        let title_sentiments = self.sentiment_service.analyze_sentiment(&request.title).await
+            .map_err(|e| AppError::InternalError(format!("Sentiment analysis error (title): {}", e)))?;
+        let body_sentiments = self.sentiment_service.analyze_sentiment(&request.content).await
+            .map_err(|e| AppError::InternalError(format!("Sentiment analysis error (content): {}", e)))?;
+        
+        let sentiments = self.combine_sentiments_with_bias(&title_sentiments, &body_sentiments, 0.2, 0.8);
+        
+        // Update post fields
+        let mut updated_post = existing_post;
+        updated_post.title = request.title;
+        updated_post.content = request.content;
+        updated_post.updated_at = chrono::Utc::now();
+        
+        // Update sentiment data
+        if !sentiments.is_empty() {
+            updated_post.sentiment_score = Some(sentiments.iter().map(|s| s.confidence).sum::<f64>() / sentiments.len() as f64);
+            updated_post.sentiment_colors = sentiments.iter().flat_map(|s| s.sentiment_type.colors_array()).collect();
+            updated_post.sentiment_type = Some(sentiments[0].sentiment_type.to_string());
+        }
+        
+        // Update popularity score
+        updated_post.popularity_score = self.calculate_popularity_score_from_sentiment(&sentiments);
+        
+        // Try primary repository first, then fallback to CSV using helper method
+        let result_post = self.try_with_fallback(
+            "update_post",
+            || self.primary_repo.update_post(&updated_post),
+            || self.csv_fallback_repo.update_post(&updated_post),
+        ).await?;
+        
+        Ok(PostResponse::from(result_post))
+    }
+    
+    pub async fn delete_post(&self, post_id: Uuid, author_id: Uuid) -> Result<()> {
+        // First, get the existing post to verify ownership using fallback helper
+        let existing_post = match self.try_with_fallback(
+            "get_post_by_id_for_delete",
+            || self.primary_repo.get_post_by_id(post_id),
+            || self.csv_fallback_repo.get_post_by_id(post_id),
+        ).await? {
+            Some(post) => post,
+            None => return Err(AppError::NotFound("Post not found".to_string())),
+        };
+        
+        // Verify the author owns the post
+        if existing_post.author_id != author_id {
+            return Err(AppError::AuthError("Not authorized to delete this post".to_string()));
+        }
+        
+        // Try primary repository first, then fallback to CSV using helper method
+        self.try_with_fallback(
+            "delete_post",
+            || self.primary_repo.delete_post(post_id),
+            || self.csv_fallback_repo.delete_post(post_id),
+        ).await?;
+        
+        Ok(())
     }
 }
