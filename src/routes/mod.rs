@@ -3,6 +3,7 @@ pub mod web;
 pub mod users;
 pub mod posts;
 pub mod auth;
+pub mod comments;
 
 use axum::Router;
 use crate::AppState;

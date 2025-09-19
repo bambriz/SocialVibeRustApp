@@ -1,7 +1,7 @@
 use axum::{routing::{get, post, put, delete}, Router, Json, middleware};
 use serde_json::{json, Value};
 use crate::AppState;
-use crate::routes::{users, posts, auth};
+use crate::routes::{users, posts, auth, comments};
 use crate::auth::middleware::auth_middleware;
 
 pub fn routes() -> Router<AppState> {
@@ -18,7 +18,9 @@ pub fn routes() -> Router<AppState> {
         .route("/posts/:post_id", put(posts::update_post))
         .route("/posts/:post_id", delete(posts::delete_post));
 
-    public_routes.merge(protected_routes)
+    public_routes
+        .merge(protected_routes)
+        .merge(comments::create_routes()) // Add comment routes
 }
 
 async fn api_health() -> Json<Value> {
@@ -29,7 +31,7 @@ async fn api_health() -> Json<Value> {
         "features": {
             "authentication": "implemented",
             "posts": "implemented",
-            "comments": "not_implemented",
+            "comments": "implemented",
             "sentiment_analysis": "implemented",
             "content_moderation": "implemented"
         },
@@ -44,6 +46,14 @@ async fn api_health() -> Json<Value> {
                 "get": "GET /api/posts/:id",
                 "update": "PUT /api/posts/:id (requires auth)",
                 "delete": "DELETE /api/posts/:id (requires auth)"
+            },
+            "comments": {
+                "list": "GET /api/posts/:post_id/comments",
+                "create": "POST /api/posts/:post_id/comments (requires auth)",
+                "get": "GET /api/comments/:comment_id",
+                "thread": "GET /api/comments/:comment_id/thread",
+                "update": "PUT /api/comments/:comment_id (requires auth)",
+                "delete": "DELETE /api/comments/:comment_id (requires auth)"
             }
         }
     }))

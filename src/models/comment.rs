@@ -101,9 +101,9 @@ pub struct CommentResponse {
     #[serde(flatten)]
     pub comment: Comment,
     
-    /// Author information for UI display
+    /// Author information for UI display  
     /// LEARNING: Join related data to avoid N+1 query problems
-    pub author: Option<crate::models::user::UserSummary>,
+    pub author: Option<crate::models::user::User>,
     
     /// Nested replies for tree structure display
     /// LEARNING: Recursive data structure - CommentResponse contains Vec<CommentResponse>
