@@ -3,11 +3,17 @@ let currentUser = null;
 let authToken = localStorage.getItem('authToken');
 let posts = [];
 
+// Content filter state - tracks which toxicity types should be hidden
+let contentFilters = {
+    hiddenToxicityTypes: new Set() // Empty set means show all
+};
+
 // API Configuration
 const API_BASE = '/api';
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
+    loadContentFilterState(); // Load saved filter preferences first
     initializeApp();
     setupEventListeners();
     
@@ -292,7 +298,16 @@ async function loadPosts() {
         
         if (response.ok) {
             posts = Array.isArray(data) ? data : data.posts || [];
-            renderPosts(posts);
+            
+            // Apply active filters consistently on reload
+            const activeFilterBtn = document.querySelector('.filter-btn.active');
+            if (activeFilterBtn) {
+                const sentiment = activeFilterBtn.dataset.filter;
+                filterFeed(sentiment); // This applies both emotion and content filters
+            } else {
+                // If no active emotion filter, just apply content filters
+                renderPosts(applyContentFiltering(posts));
+            }
         } else {
             showToast('Failed to load posts', 'error');
             renderEmptyState();
@@ -604,28 +619,104 @@ function predictSentiment(text) {
 }
 
 // Feed filtering
-function filterFeed(sentiment) {
+function filterFeed(sentiment, buttonElement = null) {
     // Update active filter button
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    event.target.classList.add('active');
+    
+    // If buttonElement is provided, use it; otherwise find the button by data-filter
+    if (buttonElement) {
+        buttonElement.classList.add('active');
+    } else {
+        const targetBtn = document.querySelector(`[data-filter="${sentiment}"]`);
+        if (targetBtn) {
+            targetBtn.classList.add('active');
+        }
+    }
     
     if (sentiment === 'all') {
-        renderPosts(posts);
+        renderPosts(applyContentFiltering(posts));
     } else {
         const filtered = posts.filter(post => {
             const sentimentClass = getSentimentClass(post);
             
-            // Handle sarcastic combinations
-            if (sentiment === 'sarcastic' && sentimentClass === 'sentiment-sarcastic-combo') {
+            // Handle sarcastic combinations - fixed class name
+            if (sentiment === 'sarcastic' && sentimentClass === 'sentiment-sarcastic') {
                 return true;
             }
             
             return sentimentClass.includes(sentiment);
         });
-        renderPosts(filtered);
+        renderPosts(applyContentFiltering(filtered));
     }
+}
+
+// Content filtering functions
+function applyContentFilters() {
+    // Update the hidden toxicity types based on unchecked checkboxes
+    contentFilters.hiddenToxicityTypes.clear();
+    
+    const filterCheckboxes = [
+        'filter-toxicity',
+        'filter-severe_toxicity', 
+        'filter-obscene',
+        'filter-threat',
+        'filter-insult'
+    ];
+    
+    filterCheckboxes.forEach(checkboxId => {
+        const checkbox = document.getElementById(checkboxId);
+        if (!checkbox.checked) {
+            // Extract toxicity type from checkbox ID
+            const toxicityType = checkboxId.replace('filter-', '');
+            contentFilters.hiddenToxicityTypes.add(toxicityType);
+        }
+    });
+    
+    // Save filter state to localStorage
+    saveContentFilterState();
+    
+    // Re-apply current filters
+    const activeFilterBtn = document.querySelector('.filter-btn.active');
+    if (activeFilterBtn) {
+        const currentFilter = activeFilterBtn.dataset.filter || 'all';
+        
+        // Get currently filtered posts by sentiment
+        let currentPosts = posts;
+        if (currentFilter !== 'all') {
+            currentPosts = posts.filter(post => {
+                const sentimentClass = getSentimentClass(post);
+                if (currentFilter === 'sarcastic' && sentimentClass === 'sentiment-sarcastic') {
+                    return true;
+                }
+                return sentimentClass.includes(currentFilter);
+            });
+        }
+        
+        // Apply content filtering and render
+        renderPosts(applyContentFiltering(currentPosts));
+    }
+}
+
+function applyContentFiltering(postsArray) {
+    if (contentFilters.hiddenToxicityTypes.size === 0) {
+        return postsArray; // No content filters applied
+    }
+    
+    return postsArray.filter(post => {
+        if (!post.toxicity_tags || post.toxicity_tags.length === 0) {
+            return true; // Show posts with no toxicity tags
+        }
+        
+        // Check if any of the post's toxicity tags should hide it
+        const hasHiddenToxicity = post.toxicity_tags.some(tag => {
+            const normalized = tag.toLowerCase().replace(/\s+/g, '_');
+            return contentFilters.hiddenToxicityTypes.has(normalized);
+        });
+        
+        return !hasHiddenToxicity; // Show post only if it doesn't have hidden toxicity types
+    });
 }
 
 // Utility functions
@@ -668,6 +759,45 @@ window.addEventListener('unhandledrejection', function(event) {
     console.error('Unhandled promise rejection:', event.reason);
     showToast('Something went wrong. Please try again.', 'error');
 });
+
+// Content filter persistence functions
+function saveContentFilterState() {
+    const filterState = {
+        hiddenToxicityTypes: Array.from(contentFilters.hiddenToxicityTypes)
+    };
+    localStorage.setItem('socialPulse_contentFilters', JSON.stringify(filterState));
+}
+
+function loadContentFilterState() {
+    try {
+        const saved = localStorage.getItem('socialPulse_contentFilters');
+        if (saved) {
+            const filterState = JSON.parse(saved);
+            contentFilters.hiddenToxicityTypes = new Set(filterState.hiddenToxicityTypes || []);
+            
+            // Update checkbox states to match saved preferences
+            const filterCheckboxes = [
+                'filter-toxicity',
+                'filter-severe_toxicity',
+                'filter-obscene',
+                'filter-threat',
+                'filter-insult'
+            ];
+            
+            filterCheckboxes.forEach(checkboxId => {
+                const checkbox = document.getElementById(checkboxId);
+                const toxicityType = checkboxId.replace('filter-', '');
+                if (checkbox && contentFilters.hiddenToxicityTypes.has(toxicityType)) {
+                    checkbox.checked = false; // Uncheck boxes for hidden types
+                }
+            });
+        }
+    } catch (error) {
+        console.warn('Failed to load content filter preferences:', error);
+        // Reset to default state on error
+        contentFilters.hiddenToxicityTypes.clear();
+    }
+}
 
 // Refresh posts periodically (every 30 seconds)
 setInterval(() => {

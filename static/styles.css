@@ -282,6 +282,82 @@ body {
     color: white;
 }
 
+/* Content Filters */
+.content-filters {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.content-filters h3 {
+    color: #4f46e5;
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.filter-description {
+    font-size: 0.8rem;
+    color: #6b7280;
+    margin-bottom: 1rem;
+    margin-top: 0;
+}
+
+.toxicity-filters {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* Custom Checkboxes */
+.filter-checkbox {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: #374151;
+    user-select: none;
+    position: relative;
+    padding: 0.25rem 0;
+}
+
+.filter-checkbox input[type="checkbox"] {
+    display: none;
+}
+
+.filter-checkbox .checkmark {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #d1d5db;
+    border-radius: 3px;
+    margin-right: 0.5rem;
+    position: relative;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.filter-checkbox input[type="checkbox"]:checked + .checkmark {
+    background-color: #4f46e5;
+    border-color: #4f46e5;
+}
+
+.filter-checkbox input[type="checkbox"]:checked + .checkmark::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.filter-checkbox:hover .checkmark {
+    border-color: #4f46e5;
+    background-color: rgba(79, 70, 229, 0.05);
+}
+
 .posts-container {
     max-height: 70vh;
     overflow-y: auto;
