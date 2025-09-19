@@ -41,38 +41,12 @@ impl SentimentService {
         
         let sentiment_type = if sentiment_label.starts_with("sarcastic+") || sentiment_label.starts_with("sarcasm+") {
             // Handle sarcasm combinations like "sarcastic+happy" or "sarcasm+happy"
-            let base_sentiment = sentiment_label.strip_prefix("sarcastic+")
-                .or_else(|| sentiment_label.strip_prefix("sarcasm+"))
-                .unwrap_or("neutral");
-            let base_type = match base_sentiment {
-                "happy" | "joy" => SentimentType::Joy, // Map happy to Joy
-                "sad" => SentimentType::Sad,
-                "angry" => SentimentType::Angry,
-                "confused" => SentimentType::Confused,
-                "fear" => SentimentType::Fear,
-                "disgust" => SentimentType::Disgust,
-                "surprise" => SentimentType::Surprise,
-                "neutral" => SentimentType::Neutral,
-                "affection" => SentimentType::Affection,
-                _ => SentimentType::Neutral,
-            };
-            SentimentType::SarcasticCombination(Box::new(base_type))
+            // Now return standalone Sarcastic instead of combo
+            SentimentType::Sarcastic
         } else if sentiment_label.starts_with("affectionate+") {
             // Handle affectionate combinations like "affectionate+happy" 
-            let base_sentiment = sentiment_label.strip_prefix("affectionate+").unwrap_or("neutral");
-            let base_type = match base_sentiment {
-                "happy" | "joy" => SentimentType::Joy, // Map happy to Joy
-                "sad" => SentimentType::Sad,
-                "angry" => SentimentType::Angry,
-                "confused" => SentimentType::Confused,
-                "fear" => SentimentType::Fear,
-                "disgust" => SentimentType::Disgust,
-                "surprise" => SentimentType::Surprise,
-                "neutral" => SentimentType::Neutral,
-                "affection" => SentimentType::Affection,
-                _ => SentimentType::Neutral,
-            };
-            SentimentType::AffectionateCombination(Box::new(base_type))
+            // Now return standalone Affection instead of combo
+            SentimentType::Affection
         } else {
             match sentiment_label.as_str() {
                 "happy" | "joy" => SentimentType::Joy, // Map happy to Joy

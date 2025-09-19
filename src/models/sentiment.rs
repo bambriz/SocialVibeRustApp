@@ -12,9 +12,6 @@ pub enum SentimentType {
     Fear,
     Disgust,
     Surprise,
-    // Mixed sentiments (e.g., Sarcastic + Joy, Affectionate + Sad)
-    SarcasticCombination(Box<SentimentType>),
-    AffectionateCombination(Box<SentimentType>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,27 +34,11 @@ impl SentimentType {
             SentimentType::Fear => "#374151".to_string(), // Dark grey - 😨
             SentimentType::Disgust => "#84cc16".to_string(), // Lime green - 🤢
             SentimentType::Surprise => "#f97316".to_string(), // Orange - 😲
-            SentimentType::SarcasticCombination(base_type) => {
-                // Create a gradient effect by combining sarcasm purple with base sentiment
-                format!("linear-gradient(45deg, #7c3aed, {})", base_type.color_code())
-            }
-            SentimentType::AffectionateCombination(base_type) => {
-                // Create a gradient effect by combining affection pink with base sentiment
-                format!("linear-gradient(45deg, #ec4899, {})", base_type.color_code())
-            }
         }
     }
     
     pub fn colors_array(&self) -> Vec<String> {
-        match self {
-            SentimentType::SarcasticCombination(base_type) => {
-                vec!["#7c3aed".to_string(), base_type.color_code()]
-            }
-            SentimentType::AffectionateCombination(base_type) => {
-                vec!["#ec4899".to_string(), base_type.color_code()]
-            }
-            _ => vec![self.color_code()]
-        }
+        vec![self.color_code()]
     }
 
     pub fn from_analysis(analysis_result: &str) -> Vec<Self> {
@@ -78,12 +59,6 @@ impl SentimentType {
             SentimentType::Fear => "fear".to_string(),
             SentimentType::Disgust => "disgust".to_string(),
             SentimentType::Surprise => "surprise".to_string(),
-            SentimentType::SarcasticCombination(base_type) => {
-                format!("sarcastic+{}", base_type.to_string())
-            }
-            SentimentType::AffectionateCombination(base_type) => {
-                format!("affectionate+{}", base_type.to_string())
-            }
         }
     }
 }

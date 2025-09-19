@@ -359,19 +359,6 @@ function getSentimentClass(post) {
         return 'sentiment-neutral';
     }
     
-    // Handle combo sentiments (multiple colors)
-    if (post.sentiment_colors.length > 1) {
-        // Check if first color indicates sarcastic or affectionate combo
-        const firstColor = post.sentiment_colors[0];
-        if (firstColor === '#7c3aed') {
-            return 'sentiment-sarcastic-combo';
-        } else if (firstColor === '#ec4899') {
-            return 'sentiment-affectionate-combo';
-        } else {
-            return 'sentiment-combo'; // Generic combo
-        }
-    }
-    
     // Use the first sentiment color to determine class
     const primaryColor = post.sentiment_colors[0];
     
@@ -395,27 +382,7 @@ function getSentimentClass(post) {
 function getSentimentLabel(post) {
     // Use the actual sentiment detected by our enhanced analysis system
     if (post.sentiment_colors && post.sentiment_colors.length > 0) {
-        
-        // For combo sentiments, show dual emojis
-        if (post.sentiment_colors.length > 1) {
-            const firstColor = post.sentiment_colors[0];
-            const secondColor = post.sentiment_colors[1];
-            
-            // Get the base emotion emoji from the second color
-            const baseEmoji = getEmojiFromColor(secondColor);
-            
-            if (firstColor === '#7c3aed') {
-                return `😏${baseEmoji} Sarcastic Combo`;
-            } else if (firstColor === '#ec4899') {
-                // For affectionate combos, avoid redundant emoji if base is affection
-                const displayEmoji = (secondColor === '#ec4899') ? '😊' : baseEmoji;
-                return `💕${displayEmoji} Affectionate Combo`;
-            } else {
-                return `${getEmojiFromColor(firstColor)}${baseEmoji} Combo`;
-            }
-        }
-        
-        // Single emotion - show the emoji for that emotion
+        // Show the emoji for the detected emotion (no more combo logic)
         const sentimentClass = getSentimentClass(post);
         const sentimentType = getSentimentTypeFromClass(sentimentClass);
         return sentimentType;
@@ -425,20 +392,13 @@ function getSentimentLabel(post) {
     return '😐 Neutral';
 }
 
-// New function to handle gradient backgrounds for sarcasm combinations
+// Function to handle single color backgrounds (no more gradients)
 function getSentimentBackground(post) {
     if (!post.sentiment_colors || post.sentiment_colors.length === 0) {
         return '';
     }
     
-    // Handle sarcasm combinations with gradient
-    if (post.sentiment_colors.length > 1) {
-        const color1 = post.sentiment_colors[0];
-        const color2 = post.sentiment_colors[1];
-        return `border-left: 4px solid ${color1}; background: linear-gradient(135deg, ${color1}22, ${color2}22);`;
-    }
-    
-    // Single sentiment color
+    // Use single sentiment color (first color if multiple exist)
     const color = post.sentiment_colors[0];
     return `border-left: 4px solid ${color}; background: ${color}11;`;
 }
