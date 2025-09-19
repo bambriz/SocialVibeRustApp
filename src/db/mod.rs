@@ -3,13 +3,13 @@ pub mod repository;
 
 // Database connection and state management
 use crate::config::AppConfig;
-use repository::{MockUserRepository, MockPostRepository, MockCommentRepository};
+use repository::{MockUserRepository, MockPostRepository, MockCommentRepository, CsvUserRepository, UserRepository};
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct DatabaseClient {
-    // Mock repositories for development
-    pub user_repo: Arc<MockUserRepository>,
+    // Repositories for development with CSV persistence for users
+    pub user_repo: Arc<dyn UserRepository>,
     pub post_repo: Arc<MockPostRepository>, 
     pub comment_repo: Arc<MockCommentRepository>,
     // TODO: Add Cosmos DB client when reintroduced
@@ -19,7 +19,7 @@ pub struct DatabaseClient {
 impl DatabaseClient {
     pub async fn new(_config: &AppConfig) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
-            user_repo: Arc::new(MockUserRepository::new()),
+            user_repo: Arc::new(CsvUserRepository::new(None)), // Uses default "users_backup.csv"
             post_repo: Arc::new(MockPostRepository::new()),
             comment_repo: Arc::new(MockCommentRepository::new()),
         })

@@ -62,10 +62,28 @@ pub struct MockCommentRepository {
     comments: Arc<Mutex<HashMap<Uuid, Comment>>>, // id -> Comment
 }
 
+// CSV-based user repository for persistent storage
+pub struct CsvUserRepository {
+    csv_file_path: String,
+    users_cache: Arc<Mutex<HashMap<String, User>>>, // email -> User
+    users_by_id_cache: Arc<Mutex<HashMap<Uuid, User>>>, // id -> User
+}
+
 // CSV-based post repository for fallback storage
 pub struct CsvPostRepository {
     csv_file_path: String,
     posts_cache: Arc<Mutex<HashMap<Uuid, Post>>>, // In-memory cache for performance
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct CsvUser {
+    id: String,
+    username: String,
+    email: String,
+    password_hash: String,
+    created_at: String,
+    updated_at: String,
+    is_active: bool,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -85,6 +103,135 @@ struct CsvPost {
     is_blocked: bool,
     toxicity_tags: String, // Serialize Vec<String> as JSON string
     toxicity_scores: String, // Serialize Option<serde_json::Value> as JSON string
+}
+
+impl CsvUserRepository {
+    pub fn new(csv_file_path: Option<String>) -> Self {
+        let path = csv_file_path.unwrap_or_else(|| "users_backup.csv".to_string());
+        let repo = Self {
+            csv_file_path: path.clone(),
+            users_cache: Arc::new(Mutex::new(HashMap::new())),
+            users_by_id_cache: Arc::new(Mutex::new(HashMap::new())),
+        };
+        
+        // Initialize CSV file with headers if it doesn't exist
+        if !Path::new(&path).exists() {
+            if let Err(e) = repo.initialize_csv_file() {
+                eprintln!("Warning: Failed to initialize user CSV file: {}", e);
+            }
+        }
+        
+        // Load existing users into cache
+        if let Err(e) = repo.load_users_from_csv() {
+            eprintln!("Warning: Failed to load existing users from CSV: {}", e);
+        }
+        
+        repo
+    }
+    
+    fn initialize_csv_file(&self) -> Result<()> {
+        let file = File::create(&self.csv_file_path)
+            .map_err(|e| crate::AppError::InternalError(format!("Failed to create user CSV file: {}", e)))?;
+        let mut writer = Writer::from_writer(file);
+        
+        // Write header
+        writer.write_record(&[
+            "id", "username", "email", "password_hash", 
+            "created_at", "updated_at", "is_active"
+        ])
+        .map_err(|e| crate::AppError::InternalError(format!("Failed to write user CSV header: {}", e)))?;
+        
+        writer.flush()
+            .map_err(|e| crate::AppError::InternalError(format!("Failed to flush user CSV writer: {}", e)))?;
+        
+        Ok(())
+    }
+    
+    fn load_users_from_csv(&self) -> Result<()> {
+        if !Path::new(&self.csv_file_path).exists() {
+            return Ok(()); // File doesn't exist yet, that's OK
+        }
+        
+        let file = File::open(&self.csv_file_path)
+            .map_err(|e| crate::AppError::InternalError(format!("Failed to open user CSV file: {}", e)))?;
+        let mut reader = Reader::from_reader(BufReader::new(file));
+        
+        let mut users_cache = self.users_cache.lock().unwrap();
+        let mut users_by_id_cache = self.users_by_id_cache.lock().unwrap();
+        
+        for result in reader.deserialize() {
+            let csv_user: CsvUser = result
+                .map_err(|e| crate::AppError::InternalError(format!("Failed to deserialize user from CSV: {}", e)))?;
+            let user = self.csv_user_to_user(csv_user)?;
+            users_cache.insert(user.email.clone(), user.clone());
+            users_by_id_cache.insert(user.id, user);
+        }
+        
+        Ok(())
+    }
+    
+    fn save_users_to_csv(&self) -> Result<()> {
+        let file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&self.csv_file_path)
+            .map_err(|e| crate::AppError::InternalError(format!("Failed to open user CSV file for writing: {}", e)))?;
+            
+        let mut writer = Writer::from_writer(BufWriter::new(file));
+        
+        // Write header
+        writer.write_record(&[
+            "id", "username", "email", "password_hash", 
+            "created_at", "updated_at", "is_active"
+        ])
+        .map_err(|e| crate::AppError::InternalError(format!("Failed to write user CSV header: {}", e)))?;
+        
+        let users_cache = self.users_cache.lock().unwrap();
+        for user in users_cache.values() {
+            let csv_user = self.user_to_csv_user(user);
+            writer.serialize(&csv_user)
+                .map_err(|e| crate::AppError::InternalError(format!("Failed to serialize user to CSV: {}", e)))?;
+        }
+        
+        writer.flush()
+            .map_err(|e| crate::AppError::InternalError(format!("Failed to flush user CSV writer: {}", e)))?;
+        
+        Ok(())
+    }
+    
+    fn user_to_csv_user(&self, user: &User) -> CsvUser {
+        CsvUser {
+            id: user.id.to_string(),
+            username: user.username.clone(),
+            email: user.email.clone(),
+            password_hash: user.password_hash.clone(),
+            created_at: user.created_at.to_rfc3339(),
+            updated_at: user.updated_at.to_rfc3339(),
+            is_active: user.is_active,
+        }
+    }
+    
+    fn csv_user_to_user(&self, csv_user: CsvUser) -> Result<User> {
+        let id = Uuid::parse_str(&csv_user.id)
+            .map_err(|e| crate::AppError::InternalError(format!("Invalid user ID in CSV: {}", e)))?;
+        let created_at = DateTime::parse_from_rfc3339(&csv_user.created_at)
+            .map_err(|e| crate::AppError::InternalError(format!("Invalid created_at in CSV: {}", e)))?
+            .with_timezone(&Utc);
+        let updated_at = DateTime::parse_from_rfc3339(&csv_user.updated_at)
+            .map_err(|e| crate::AppError::InternalError(format!("Invalid updated_at in CSV: {}", e)))?
+            .with_timezone(&Utc);
+        
+        Ok(User {
+            id,
+            username: csv_user.username,
+            email: csv_user.email,
+            password_hash: csv_user.password_hash,
+            created_at,
+            updated_at,
+            is_active: csv_user.is_active,
+        })
+    }
 }
 
 impl CsvPostRepository {
@@ -280,6 +427,58 @@ impl CsvPostRepository {
             toxicity_tags,
             toxicity_scores,
         })
+    }
+}
+
+#[async_trait]
+impl UserRepository for CsvUserRepository {
+    async fn create_user(&self, user: &User) -> Result<User> {
+        let mut users_cache = self.users_cache.lock().unwrap();
+        let mut users_by_id_cache = self.users_by_id_cache.lock().unwrap();
+        
+        users_cache.insert(user.email.clone(), user.clone());
+        users_by_id_cache.insert(user.id, user.clone());
+        drop(users_cache); // Release locks before file I/O
+        drop(users_by_id_cache);
+        
+        self.save_users_to_csv()?;
+        Ok(user.clone())
+    }
+
+    async fn get_user_by_id(&self, id: Uuid) -> Result<Option<User>> {
+        let users_by_id_cache = self.users_by_id_cache.lock().unwrap();
+        Ok(users_by_id_cache.get(&id).cloned())
+    }
+
+    async fn get_user_by_email(&self, email: &str) -> Result<Option<User>> {
+        let users_cache = self.users_cache.lock().unwrap();
+        Ok(users_cache.get(email).cloned())
+    }
+
+    async fn update_user(&self, user: &User) -> Result<User> {
+        let mut users_cache = self.users_cache.lock().unwrap();
+        let mut users_by_id_cache = self.users_by_id_cache.lock().unwrap();
+        
+        users_cache.insert(user.email.clone(), user.clone());
+        users_by_id_cache.insert(user.id, user.clone());
+        drop(users_cache); // Release locks before file I/O
+        drop(users_by_id_cache);
+        
+        self.save_users_to_csv()?;
+        Ok(user.clone())
+    }
+
+    async fn delete_user(&self, id: Uuid) -> Result<()> {
+        let mut users_by_id_cache = self.users_by_id_cache.lock().unwrap();
+        if let Some(user) = users_by_id_cache.remove(&id) {
+            let mut users_cache = self.users_cache.lock().unwrap();
+            users_cache.remove(&user.email);
+            drop(users_cache); // Release locks before file I/O
+        }
+        drop(users_by_id_cache);
+        
+        self.save_users_to_csv()?;
+        Ok(())
     }
 }
 

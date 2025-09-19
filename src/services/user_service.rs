@@ -1,17 +1,17 @@
 use crate::models::{User};
 use crate::models::user::{CreateUserRequest, UserResponse};
-use crate::db::repository::{UserRepository, MockUserRepository};
+use crate::db::repository::UserRepository;
 use crate::{AppError, Result};
 use uuid::Uuid;
 use std::sync::Arc;
 use chrono::Utc;
 
 pub struct UserService {
-    user_repo: Arc<MockUserRepository>,
+    user_repo: Arc<dyn UserRepository>,
 }
 
 impl UserService {
-    pub fn new(user_repo: Arc<MockUserRepository>) -> Self {
+    pub fn new(user_repo: Arc<dyn UserRepository>) -> Self {
         Self { user_repo }
     }
 
