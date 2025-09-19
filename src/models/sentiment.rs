@@ -28,7 +28,7 @@ impl SentimentType {
             SentimentType::Angry => "#dc2626".to_string(), // Red - 😠
             SentimentType::Sarcastic => "#7c3aed".to_string(), // Purple
             SentimentType::Joy => "#fbbf24".to_string(), // Bright yellow/gold - 😊 (replaces Happy/Excited)
-            SentimentType::Confused => "#8b5cf6".to_string(), // Light purple
+            SentimentType::Confused => "#a16207".to_string(), // Brown/amber
             SentimentType::Affection => "#ec4899".to_string(), // Pink
             SentimentType::Neutral => "#6b7280".to_string(), // Neutral gray (replaces Calm)
             SentimentType::Fear => "#374151".to_string(), // Dark grey - 😨
