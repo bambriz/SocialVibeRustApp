@@ -4,6 +4,7 @@ use crate::models::sentiment::{Sentiment, SentimentType};
 use crate::db::repository::{PostRepository, MockPostRepository, CsvPostRepository};
 use crate::services::{SentimentService, ModerationService};
 use crate::{AppError, Result};
+use crate::error::ContentModerationError;
 use uuid::Uuid;
 use std::sync::Arc;
 use chrono::Utc;
@@ -166,7 +167,14 @@ impl PostService {
                 },
                 _ => "🚫 Post blocked: Your message violates our community guidelines against hate speech and offensive content. Please revise your message to use respectful language and try again.".to_string()
             };
-            return Err(AppError::ValidationError(error_message));
+            
+            let content_moderation_error = ContentModerationError {
+                message: error_message,
+                violation_type: moderation_result.violation_type.clone(),
+                details: moderation_result.details.clone(),
+            };
+            
+            return Err(AppError::ContentModerationError(content_moderation_error));
         }
         
         // Run sentiment analysis on title and body separately

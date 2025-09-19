@@ -257,24 +257,24 @@ async function handleCreatePost(e) {
             showToast('Post created successfully!', 'success');
             loadPosts(); // Refresh posts
         } else {
-            const errorMessage =
-              response.status === 403 && data.validation_error
-                ? `Post rejected: ${data.validation_error}`
-                : data.message || 'Failed to create post. Please try again.';
-
-            showToast(errorMessage, 'error');
-            //showToast(data.message || 'Failed to create post', 'error');
+            console.log('Error details:', data);
+            
+            // Check if this is a content moderation error
+            if (data.error_type === 'content_moderation') {
+                // Show specific violation reason for content moderation errors
+                showToast(data.error || 'Post blocked due to content violation', 'error');
+            } else {
+                // Show generic message for other errors
+                showToast('Failed to create post. Please try again.', 'error');
+            }
         }
     } catch (error) {
         console.error('Create post error:', error);
         console.error('Error details:', error.message);
         console.error('Auth token present:', !!authToken);
-        const errorMessage =
-          response.status === 403 && data.validation_error
-            ? `Post rejected: ${data.validation_error}`
-            : data.message || 'Failed to create post. Please try again.';
-
-        showToast(errorMessage, 'error');
+        
+        // For network errors or other exceptions, show generic message
+        showToast('Failed to create post. Please check your connection and try again.', 'error');
     }
 }
 
