@@ -96,7 +96,7 @@ class ContentModerator:
                     for category in toxicity_categories:
                         if category in all_scores:
                             score = all_scores[category]
-                            is_toxic = score >= 0.5
+                            is_toxic = score >= toxicity_thresholds[category]
                             status = "TAGGED" if is_toxic else "below threshold"
                             emoji_map = {
                                 'toxicity': '😵',
@@ -117,7 +117,7 @@ class ContentModerator:
                         for tag in toxicity_tags:
                             print(f"      📌 {tag}: {all_scores[tag]:.3f}")
                     else:
-                        print(f"   🏷️ TOXICITY TAGS: No categories met ≥ 0.5 threshold")
+                        print(f"   🏷️ TOXICITY TAGS: No categories met threshold")
                     
                     # Check for identity_attack blocking (existing behavior)
                     if identity_attack_score >= 0.8:
