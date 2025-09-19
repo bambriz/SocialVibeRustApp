@@ -48,9 +48,23 @@ async fn wait_for_python_server(max_retries: u32, retry_delay_secs: u64) -> bool
     false
 }
 
-/// Populate the feed with sample posts during app startup
+/// Populate the feed with sample posts during app startup (only if database is empty)
 async fn populate_sample_posts(app_state: &AppState) {
-    info!("Populating feed with sample posts...");
+    info!("🔍 STARTUP: Checking if database already contains posts...");
+    
+    // Check if posts already exist in the database
+    match app_state.post_service.get_posts_feed(1, 0).await {
+        Ok(posts) if !posts.is_empty() => {
+            info!("✅ STARTUP: Database already contains posts, skipping sample post creation");
+            return;
+        }
+        Ok(_) => {
+            info!("🚀 STARTUP: Database is empty, populating with sample posts...");
+        }
+        Err(e) => {
+            warn!("⚠️ STARTUP: Error checking existing posts: {}, proceeding with sample creation", e);
+        }
+    }
     
     // Sample users for post authors
     let sample_users = vec![
