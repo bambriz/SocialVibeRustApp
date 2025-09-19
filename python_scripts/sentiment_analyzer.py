@@ -17,13 +17,30 @@ class SentimentAnalyzer:
         self.text2emotion_available = False
         self.nrclex_available = True
         
-        # Try to initialize secondary detectors
+        # Try to initialize secondary detectors with robust error handling
         try:
+            # Pre-download NLTK data to prevent text2emotion from failing
+            import nltk
+            import os
+            nltk_data_dir = os.path.expanduser('~/nltk_data')
+            os.makedirs(nltk_data_dir, exist_ok=True)
+            
+            # Download required data with error handling
+            for package in ['stopwords', 'punkt', 'wordnet']:
+                try:
+                    nltk.download(package, quiet=True, force=False)
+                except Exception as pkg_error:
+                    print(f"⚠️ NLTK package {package} download failed: {pkg_error}")
+            
             from text2emotion import get_emotion
+            self.get_emotion = get_emotion
             self.text2emotion_available = True
             print("✅ text2emotion available as secondary detector")
-        except ImportError as e:
+        except Exception as e:
             print(f"⚠️ text2emotion not available: {e}")
+            # Create fallback function for text2emotion
+            self.get_emotion = self._fallback_emotion_detection
+            self.text2emotion_available = False
 
         print("✅ NRCLex available as fallback detector")
         
@@ -354,3 +371,23 @@ class SentimentAnalyzer:
             "supports_combo_sentiments": True,
             "hf_available": self.hf_available
         }
+    
+    def _fallback_emotion_detection(self, text):
+        """Fallback emotion detection when text2emotion is not available"""
+        # Simple pattern-based emotion detection as fallback
+        text_lower = text.lower()
+        
+        # Basic emotion patterns
+        if any(word in text_lower for word in ['happy', 'joy', 'excited', 'great', 'awesome', 'wonderful', 'amazing', 'fantastic']):
+            return {'Happy': 0.8, 'Sad': 0.0, 'Angry': 0.0, 'Fear': 0.0, 'Surprise': 0.2}
+        elif any(word in text_lower for word in ['sad', 'depressed', 'down', 'disappointed', 'upset', 'hurt']):
+            return {'Happy': 0.0, 'Sad': 0.8, 'Angry': 0.0, 'Fear': 0.2, 'Surprise': 0.0}
+        elif any(word in text_lower for word in ['angry', 'mad', 'furious', 'annoyed', 'irritated', 'frustrated']):
+            return {'Happy': 0.0, 'Sad': 0.0, 'Angry': 0.8, 'Fear': 0.0, 'Surprise': 0.2}
+        elif any(word in text_lower for word in ['scared', 'afraid', 'worried', 'anxious', 'nervous', 'terrified']):
+            return {'Happy': 0.0, 'Sad': 0.2, 'Angry': 0.0, 'Fear': 0.8, 'Surprise': 0.0}
+        elif any(word in text_lower for word in ['surprised', 'shocked', 'amazed', 'wow', 'unexpected', 'sudden']):
+            return {'Happy': 0.3, 'Sad': 0.0, 'Angry': 0.0, 'Fear': 0.0, 'Surprise': 0.7}
+        else:
+            # Neutral fallback
+            return {'Happy': 0.2, 'Sad': 0.2, 'Angry': 0.2, 'Fear': 0.2, 'Surprise': 0.2}
