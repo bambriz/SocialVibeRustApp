@@ -2,7 +2,7 @@
 
 ## Overview
 
-Social Pulse is a modern social media application that combines traditional social networking features with sentiment analysis and content moderation capabilities. The platform allows users to create posts, interact with content, and provides real-time sentiment analysis of user-generated content. Built with a Rust backend using Axum framework and a vanilla JavaScript frontend, the application focuses on creating a safe and emotionally-aware social environment.
+Social Pulse is a modern social media application that combines traditional social networking features with sentiment analysis and content moderation capabilities. The platform allows users to create posts, interact with content, and provides real-time sentiment analysis of user-generated content. Built with a Rust backend using Axum framework and a vanilla JavaScript frontend, the application focuses on creating a safe and emotionally-aware social environment with Instagram/Facebook/Reddit-style infinite scroll functionality.
 
 ## User Preferences
 
@@ -19,6 +19,7 @@ The application uses a **Rust-based microservices architecture** with Axum as th
 - **Argon2 Password Hashing**: Uses industry-standard password hashing for security
 - **Middleware-based Authorization**: Implements authentication checks through Axum middleware for consistent security across endpoints
 - **RESTful API Design**: Follows REST principles for predictable and maintainable API endpoints
+- **Secure Pagination System**: Implements validated pagination with bounds checking (limit: 1-50, offset: ≤10000) and division-by-zero protection
 
 ### Frontend Architecture
 The frontend uses **vanilla JavaScript with a Single Page Application (SPA) approach**. This decision prioritizes simplicity and reduces build complexity while maintaining modern user experience patterns.
@@ -29,6 +30,7 @@ The frontend uses **vanilla JavaScript with a Single Page Application (SPA) appr
 - **Local Storage for Auth**: Stores JWT tokens locally for session persistence
 - **Modal-based Interactions**: Uses overlay modals for forms and detailed views
 - **Real-time Sentiment Preview**: Provides immediate feedback on content sentiment as users type
+- **Infinite Scroll Feed**: Implements continuous scrolling pagination with loading indicators for smooth Instagram/Facebook/Reddit-style user experience
 
 ### Content Processing Architecture
 The application implements a **subprocess-managed content processing system** with tight integration between Rust and Python for advanced text analysis.
