@@ -16,6 +16,7 @@ import pickle
 import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from nrclex import NRCLex
+from torch import threshold
 
 # Caching configuration
 CACHE_DIR = "/tmp/social_pulse_cache"
@@ -510,11 +511,13 @@ class SentimentHandler(BaseHTTPRequestHandler):
                     # Categories for toxicity tagging (threshold ≥ 0.5)
                     toxicity_categories = ['toxicity', 'severe_toxicity', 'obscene', 'threat', 'insult']
                     toxicity_tags = []
-                    
+                    # Dictionary of taxic tag with their thresholds to label
+                    toxicity_thresholds = {'toxicity': 0.76, 'severe_toxicity': 0.6, 'obscene': 0.95, 'threat': 0.7, 'insult': 0.75}
+
                     for category in toxicity_categories:
                         if category in all_scores:
                             score = all_scores[category]
-                            is_toxic = score >= 0.5
+                            is_toxic = score >= toxicity_thresholds[category]
                             status = "TAGGED" if is_toxic else "below threshold"
                             emoji_map = {
                                 'toxicity': '😵',
