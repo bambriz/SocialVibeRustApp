@@ -306,9 +306,21 @@ body {
 
 .post-header {
     display: flex;
-    justify-content: between;
+    justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 1rem;
+}
+
+.post-author-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.post-badges {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
 }
 
 .post-author {
@@ -328,7 +340,6 @@ body {
     font-size: 0.75rem;
     font-weight: 500;
     color: white;
-    margin-left: auto;
 }
 
 .post-title {
@@ -350,6 +361,51 @@ body {
     align-items: center;
     color: #6b7280;
     font-size: 0.8rem;
+}
+
+/* Toxicity Tags Styling */
+.toxicity-tags-container {
+    margin: 0.75rem 0;
+    padding: 0.75rem 0;
+    border-top: 1px solid #f3f4f6;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.toxicity-tags-container::before {
+    content: "⚠️ Content Flags: ";
+    font-size: 0.7rem;
+    color: #9ca3af;
+    font-weight: 500;
+    margin-right: 0.25rem;
+    white-space: nowrap;
+}
+
+.toxicity-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.6rem;
+    border-radius: 0.75rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    border: 1px solid;
+    transition: all 0.2s ease;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: help;
+}
+
+.toxicity-tag:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    opacity: 0.9;
+}
+
+/* Hide toxicity container when empty */
+.toxicity-tags-container:empty {
+    display: none;
 }
 
 /* Sentiment Colors */
@@ -454,6 +510,30 @@ body {
     
     .feed-controls {
         justify-content: center;
+    }
+    
+    .post-header {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .post-badges {
+        align-items: flex-start;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    
+    .toxicity-tags-container::before {
+        content: "⚠️";
+    }
+    
+    .toxicity-tags-container {
+        gap: 0.3rem;
+    }
+    
+    .toxicity-tag {
+        font-size: 0.65rem;
+        padding: 0.15rem 0.5rem;
     }
     
     .toast {

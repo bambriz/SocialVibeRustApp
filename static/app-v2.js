@@ -322,17 +322,24 @@ function renderPosts(postsToRender) {
         const backgroundStyle = getSentimentBackground(post);
         const timeAgo = formatTimeAgo(post.created_at);
         
+        // Get toxicity tags for this post
+        const toxicityTags = getToxicityTags(post);
+        const toxicityTagsHTML = renderToxicityTags(toxicityTags);
+        
         return `
             <article class="post-card" style="${backgroundStyle}">
                 <div class="post-header">
-                    <div>
+                    <div class="post-author-section">
                         <div class="post-author">${escapeHtml(post.author_username)}</div>
                         <div class="post-time">${timeAgo}</div>
                     </div>
-                    ${sentimentLabel ? `<div class="sentiment-badge ${sentimentClass}">${sentimentLabel}</div>` : ''}
+                    <div class="post-badges">
+                        ${sentimentLabel ? `<div class="sentiment-badge ${sentimentClass}">${sentimentLabel}</div>` : ''}
+                    </div>
                 </div>
                 <h3 class="post-title">${escapeHtml(post.title)}</h3>
                 <p class="post-content">${escapeHtml(post.content)}</p>
+                ${toxicityTagsHTML}
                 <div class="post-footer">
                     <div>Popularity: ${(post.popularity_score || 1.0).toFixed(1)}</div>
                     <div>${post.comment_count || 0} comments</div>
@@ -392,6 +399,58 @@ function getSentimentLabel(post) {
     return '😐 Neutral';
 }
 
+// New function to get toxicity tags for display
+function getToxicityTags(post) {
+    if (!post.toxicity_tags || post.toxicity_tags.length === 0) {
+        return [];
+    }
+    
+    // Map toxicity categories to display info
+    const toxicityMap = {
+        'toxicity': { emoji: '⚠️', label: 'Toxic', color: '#f59e0b' },
+        'super_toxic': { emoji: '🚨', label: 'Super Toxic', color: '#dc2626' },
+        'obscene': { emoji: '🚫', label: 'Obscene', color: '#7c2d12' },
+        'threat': { emoji: '⚡', label: 'Threatening', color: '#991b1b' },
+        'threatening': { emoji: '⚡', label: 'Threatening', color: '#991b1b' },
+        'insult': { emoji: '💢', label: 'Insulting', color: '#c2410c' },
+        'insulting': { emoji: '💢', label: 'Insulting', color: '#c2410c' },
+        'identity_attack': { emoji: '🛡️', label: 'Identity Attack', color: '#7f1d1d' },
+        'severe_toxicity': { emoji: '💀', label: 'Severe', color: '#450a0a' }
+    };
+    
+    return post.toxicity_tags.map(tag => {
+        const normalized = tag.toLowerCase().replace(/\s+/g, '_');
+        const config = toxicityMap[normalized] || { 
+            emoji: '⚠️', 
+            label: tag, 
+            color: '#6b7280' 
+        };
+        
+        return {
+            tag: normalized,
+            emoji: config.emoji,
+            label: config.label,
+            color: config.color,
+            displayText: `${config.emoji} ${config.label}`
+        };
+    });
+}
+
+// Function to render toxicity tags HTML
+function renderToxicityTags(toxicityTags) {
+    if (toxicityTags.length === 0) {
+        return '';
+    }
+    
+    const tagsHTML = toxicityTags.map(tag => 
+        `<span class="toxicity-tag" style="background-color: ${tag.color}20; border: 1px solid ${tag.color}60; color: ${tag.color}">
+            ${tag.displayText}
+        </span>`
+    ).join('');
+    
+    return `<div class="toxicity-tags-container">${tagsHTML}</div>`;
+}
+
 // Function to handle single color backgrounds (no more gradients)
 function getSentimentBackground(post) {
     if (!post.sentiment_colors || post.sentiment_colors.length === 0) {
@@ -438,7 +497,7 @@ function getEmojiFromColor(color) {
     return colorToEmoji[color] || '😐';
 }
 
-// Sentiment preview while typing
+// Enhanced preview with both sentiment and toxicity
 function previewSentiment() {
     const title = document.getElementById('postTitle').value;
     const content = document.getElementById('postContent').value;
@@ -449,10 +508,55 @@ function previewSentiment() {
     if (text.length > 10) {
         // Simple client-side sentiment preview (not as accurate as backend)
         const sentiment = predictSentiment(text);
-        preview.textContent = `Preview: ${sentiment.emoji} ${sentiment.displayText} (${sentiment.confidence}% confidence)`;
+        const toxicity = predictToxicity(text);
+        
+        let previewText = `Preview: ${sentiment.emoji} ${sentiment.displayText} (${sentiment.confidence}% confidence)`;
+        
+        if (toxicity.tags.length > 0) {
+            const toxicityText = toxicity.tags.map(tag => tag.displayText).join(', ');
+            previewText += ` | ⚠️ Toxicity: ${toxicityText}`;
+        }
+        
+        preview.innerHTML = previewText;
     } else {
         preview.textContent = '';
     }
+}
+
+// Simple client-side toxicity prediction for preview
+function predictToxicity(text) {
+    const lowerText = text.toLowerCase();
+    const detectedTags = [];
+    
+    // Simple keyword-based toxicity detection
+    const toxicityPatterns = {
+        insult: ['stupid', 'idiot', 'moron', 'dumb', 'loser', 'pathetic'],
+        threat: ['kill', 'die', 'hurt', 'destroy', 'eliminate'],
+        obscene: ['damn', 'hell', 'crap'],
+        toxicity: ['hate', 'suck', 'terrible', 'awful', 'disgusting']
+    };
+    
+    for (const [category, keywords] of Object.entries(toxicityPatterns)) {
+        let hasMatch = keywords.some(keyword => lowerText.includes(keyword));
+        if (hasMatch) {
+            const config = {
+                insult: { emoji: '💢', label: 'Insulting', color: '#c2410c' },
+                threat: { emoji: '⚡', label: 'Threatening', color: '#991b1b' },
+                obscene: { emoji: '🚫', label: 'Obscene', color: '#7c2d12' },
+                toxicity: { emoji: '⚠️', label: 'Toxic', color: '#f59e0b' }
+            }[category];
+            
+            detectedTags.push({
+                tag: category,
+                emoji: config.emoji,
+                label: config.label,
+                color: config.color,
+                displayText: `${config.emoji} ${config.label}`
+            });
+        }
+    }
+    
+    return { tags: detectedTags };
 }
 
 function predictSentiment(text) {
