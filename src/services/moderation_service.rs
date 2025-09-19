@@ -111,10 +111,10 @@ impl ModerationService {
     }
 
     async fn call_python_moderator(&self, text: &str) -> Result<String, Box<dyn std::error::Error>> {
-        // Configure client with timeouts and retry logic
+        // Configure client with more generous timeouts for content moderation processing
         let client = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_millis(500))
-            .timeout(std::time::Duration::from_secs(2))
+            .connect_timeout(std::time::Duration::from_millis(2000))  // Increased from 500ms to 2s
+            .timeout(std::time::Duration::from_secs(8))              // Increased from 2s to 8s
             .build()?;
         
         // Try connecting to persistent Python server with retry
