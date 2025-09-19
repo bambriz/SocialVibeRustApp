@@ -99,14 +99,23 @@ class ContentModerator:
                             is_toxic = score >= toxicity_thresholds[category]
                             status = "TAGGED" if is_toxic else "below threshold"
                             emoji_map = {
-                                'toxicity': '😵',
-                                'severe_toxicity': '💥', 
-                                'obscene': '😡',
+                                'toxicity': '💩',
+                                'severe_toxicity': '☣️', 
+                                'obscene': '🤬',
                                 'threat': '⚡',
-                                'insult': '😠'
+                                'insult': '🖕'
                             }
                             emoji = emoji_map.get(category, '🔍')
-                            print(f"      {emoji} {category.replace('_', ' ').title()}: {score:.3f} ({status})")
+                            # Map category names to display labels
+                            label_map = {
+                                'toxicity': 'Crude',
+                                'severe_toxicity': 'Toxic',
+                                'obscene': 'Obscene',
+                                'threat': 'Threat',
+                                'insult': 'Insult'
+                            }
+                            display_label = label_map.get(category, category.replace('_', ' ').title())
+                            print(f"      {emoji} {display_label}: {score:.3f} ({status})")
                             
                             if is_toxic:
                                 toxicity_tags.append(category)

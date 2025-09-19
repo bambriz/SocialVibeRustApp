@@ -422,15 +422,15 @@ function getToxicityTags(post) {
     
     // Map toxicity categories to display info
     const toxicityMap = {
-        'toxicity': { emoji: '⚠️', label: 'Toxic', color: '#f59e0b' },
+        'toxicity': { emoji: '💩', label: 'Crude', color: '#f59e0b' },
         'super_toxic': { emoji: '🚨', label: 'Super Toxic', color: '#dc2626' },
-        'obscene': { emoji: '🚫', label: 'Obscene', color: '#7c2d12' },
+        'obscene': { emoji: '🤬', label: 'Obscene', color: '#7c2d12' },
         'threat': { emoji: '⚡', label: 'Threatening', color: '#991b1b' },
         'threatening': { emoji: '⚡', label: 'Threatening', color: '#991b1b' },
-        'insult': { emoji: '💢', label: 'Insulting', color: '#c2410c' },
-        'insulting': { emoji: '💢', label: 'Insulting', color: '#c2410c' },
+        'insult': { emoji: '🖕', label: 'Insulting', color: '#c2410c' },
+        'insulting': { emoji: '🖕', label: 'Insulting', color: '#c2410c' },
         'identity_attack': { emoji: '🛡️', label: 'Identity Attack', color: '#7f1d1d' },
-        'severe_toxicity': { emoji: '💀', label: 'Severe', color: '#450a0a' }
+        'severe_toxicity': { emoji: '☣️', label: 'Toxic', color: '#450a0a' }
     };
     
     return post.toxicity_tags.map(tag => {
@@ -555,10 +555,10 @@ function predictToxicity(text) {
         let hasMatch = keywords.some(keyword => lowerText.includes(keyword));
         if (hasMatch) {
             const config = {
-                insult: { emoji: '💢', label: 'Insulting', color: '#c2410c' },
+                insult: { emoji: '🖕', label: 'Insulting', color: '#c2410c' },
                 threat: { emoji: '⚡', label: 'Threatening', color: '#991b1b' },
-                obscene: { emoji: '🚫', label: 'Obscene', color: '#7c2d12' },
-                toxicity: { emoji: '⚠️', label: 'Toxic', color: '#f59e0b' }
+                obscene: { emoji: '🤬', label: 'Obscene', color: '#7c2d12' },
+                toxicity: { emoji: '💩', label: 'Crude', color: '#f59e0b' }
             }[category];
             
             detectedTags.push({
