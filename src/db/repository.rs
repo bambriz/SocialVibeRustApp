@@ -83,6 +83,8 @@ struct CsvPost {
     sentiment_type: String, // Serialize Option<String> as string
     popularity_score: f64,
     is_blocked: bool,
+    toxicity_tags: String, // Serialize Vec<String> as JSON string
+    toxicity_scores: String, // Serialize Option<serde_json::Value> as JSON string
 }
 
 impl CsvPostRepository {
@@ -117,7 +119,8 @@ impl CsvPostRepository {
         writer.write_record(&[
             "id", "title", "content", "author_id", "author_username", 
             "created_at", "updated_at", "comment_count", "sentiment_score",
-            "sentiment_colors", "sentiment_type", "popularity_score", "is_blocked"
+            "sentiment_colors", "sentiment_type", "popularity_score", "is_blocked",
+            "toxicity_tags", "toxicity_scores"
         ])
         .map_err(|e| crate::AppError::InternalError(format!("Failed to write CSV header: {}", e)))?;
         
@@ -168,7 +171,8 @@ impl CsvPostRepository {
                 writer.write_record(&[
                     "id", "title", "content", "author_id", "author_username", 
                     "created_at", "updated_at", "comment_count", "sentiment_score",
-                    "sentiment_colors", "sentiment_type", "popularity_score", "is_blocked"
+                    "sentiment_colors", "sentiment_type", "popularity_score", "is_blocked",
+                    "toxicity_tags", "toxicity_scores"
                 ])
                 .map_err(|e| crate::AppError::InternalError(format!("Failed to write CSV header: {}", e)))?;
             }
@@ -208,6 +212,13 @@ impl CsvPostRepository {
             sentiment_type: post.sentiment_type.clone().unwrap_or_else(|| "".to_string()),
             popularity_score: post.popularity_score,
             is_blocked: post.is_blocked,
+            toxicity_tags: serde_json::to_string(&post.toxicity_tags)
+                .map_err(|e| crate::AppError::InternalError(format!("Failed to serialize toxicity tags: {}", e)))?,
+            toxicity_scores: post.toxicity_scores.as_ref()
+                .map(|scores| serde_json::to_string(scores)
+                    .map_err(|e| crate::AppError::InternalError(format!("Failed to serialize toxicity scores: {}", e))))
+                .transpose()?
+                .unwrap_or_else(|| "".to_string()),
         })
     }
     
@@ -236,6 +247,22 @@ impl CsvPostRepository {
             Some(csv_post.sentiment_type)
         };
         
+        // Parse toxicity tags from JSON
+        let toxicity_tags: Vec<String> = if csv_post.toxicity_tags.is_empty() {
+            Vec::new()
+        } else {
+            serde_json::from_str(&csv_post.toxicity_tags)
+                .map_err(|e| crate::AppError::InternalError(format!("Failed to parse toxicity tags from CSV: {}", e)))?
+        };
+        
+        // Parse toxicity scores from JSON
+        let toxicity_scores: Option<serde_json::Value> = if csv_post.toxicity_scores.is_empty() {
+            None
+        } else {
+            Some(serde_json::from_str(&csv_post.toxicity_scores)
+                .map_err(|e| crate::AppError::InternalError(format!("Failed to parse toxicity scores from CSV: {}", e)))?)
+        };
+        
         Ok(Post {
             id,
             title: csv_post.title,
@@ -250,6 +277,8 @@ impl CsvPostRepository {
             sentiment_type,
             popularity_score: csv_post.popularity_score,
             is_blocked: csv_post.is_blocked,
+            toxicity_tags,
+            toxicity_scores,
         })
     }
 }

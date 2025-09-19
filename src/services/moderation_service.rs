@@ -3,11 +3,13 @@ use std::process::Stdio;
 use std::time::Duration;
 use tokio::time::timeout;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ModerationResult {
     pub is_blocked: bool,
     pub violation_type: Option<String>,
     pub details: Option<String>,
+    pub toxicity_tags: Vec<String>,
+    pub all_scores: Option<serde_json::Value>,
 }
 
 pub struct ModerationService;
@@ -27,9 +29,47 @@ impl ModerationService {
                     is_blocked: false,
                     violation_type: Some("moderation_timeout".to_string()),
                     details: Some("system_timeout".to_string()),
+                    toxicity_tags: Vec::new(),
+                    all_scores: None,
                 });
             }
         };
+        
+        // Check if the result is in the new JSON format
+        if result.starts_with("new_format:") {
+            // Parse the JSON response from the new format
+            let json_str = &result[11..]; // Remove "new_format:" prefix
+            match serde_json::from_str::<serde_json::Value>(json_str) {
+                Ok(parsed) => {
+                    let is_blocked = parsed["is_blocked"].as_bool().unwrap_or(false);
+                    let violation_type = parsed["violation_type"].as_str().map(|s| s.to_string());
+                    let details = parsed["details"].as_str().map(|s| s.to_string());
+                    
+                    // Extract toxicity tags
+                    let toxicity_tags: Vec<String> = parsed["toxicity_tags"]
+                        .as_array()
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+                        .unwrap_or_default();
+                    
+                    // Extract all scores
+                    let all_scores = parsed["all_scores"].clone();
+                    
+                    return Ok(ModerationResult {
+                        is_blocked,
+                        violation_type,
+                        details,
+                        toxicity_tags,
+                        all_scores: if all_scores.is_null() { None } else { Some(all_scores) },
+                    });
+                }
+                Err(e) => {
+                    eprintln!("Failed to parse new format JSON: {}", e);
+                    // Fall through to old format parsing
+                }
+            }
+        }
+        
+        // Handle old string-based format for backward compatibility
         let trimmed = result.trim();
         
         if trimmed == "allowed" {
@@ -37,6 +77,8 @@ impl ModerationService {
                 is_blocked: false,
                 violation_type: None,
                 details: None,
+                toxicity_tags: Vec::new(),
+                all_scores: None,
             });
         }
         
@@ -53,6 +95,8 @@ impl ModerationService {
                 is_blocked: true,
                 violation_type: Some(violation_type),
                 details,
+                toxicity_tags: Vec::new(), // Fallback format doesn't have toxicity tags
+                all_scores: None, // Fallback format doesn't have all scores
             })
         } else {
             // Fallback for old format or unexpected responses
@@ -60,6 +104,8 @@ impl ModerationService {
                 is_blocked: trimmed == "blocked",
                 violation_type: Some("unknown_violation".to_string()),
                 details: None,
+                toxicity_tags: Vec::new(), // Fallback format doesn't have toxicity tags
+                all_scores: None, // Fallback format doesn't have all scores
             })
         }
     }
@@ -87,8 +133,35 @@ impl ModerationService {
                 Ok(response) if response.status().is_success() => {
                 let result: serde_json::Value = response.json().await?;
                 
-                let is_blocked = result["is_blocked"].as_bool().unwrap_or(false);
-                
+                // Check if the response has the new format with toxicity_tags and all_scores
+                if result.get("toxicity_tags").is_some() && result.get("all_scores").is_some() {
+                    // NEW FORMAT: Parse the enhanced response
+                    let is_blocked = result["is_blocked"].as_bool().unwrap_or(false);
+                    let violation_type = result["violation_type"].as_str().map(|s| s.to_string());
+                    let details = result["details"].as_str().map(|s| s.to_string());
+                    
+                    // Extract toxicity tags (new field)
+                    let toxicity_tags: Vec<String> = result["toxicity_tags"]
+                        .as_array()
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+                        .unwrap_or_default();
+                    
+                    // Extract all scores for diagnostic data (new field)
+                    let all_scores = result["all_scores"].clone();
+                    
+                    let moderation_result = ModerationResult {
+                        is_blocked,
+                        violation_type,
+                        details,
+                        toxicity_tags,
+                        all_scores: if all_scores.is_null() { None } else { Some(all_scores) },
+                    };
+                    
+                    return Ok(format!("new_format:{}", serde_json::to_string(&moderation_result).unwrap_or_default()));
+                } else {
+                    // OLD FORMAT: Backward compatibility
+                    let is_blocked = result["is_blocked"].as_bool().unwrap_or(false);
+                    
                     if is_blocked {
                         let violation_type = result["violation_type"].as_str().unwrap_or("unknown");
                         let details = result["details"].as_str().unwrap_or("");
@@ -96,6 +169,7 @@ impl ModerationService {
                     } else {
                         return Ok("allowed".to_string());
                     }
+                }
                 },
                 Ok(_) => {
                     // Server responded but with error status

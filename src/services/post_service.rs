@@ -221,6 +221,8 @@ impl PostService {
             sentiment_type,
             popularity_score,
             is_blocked: false, // Already checked above
+            toxicity_tags: moderation_result.toxicity_tags, // Include toxicity tags from moderation service
+            toxicity_scores: moderation_result.all_scores, // Include diagnostic scores from moderation service
         };
         
         // Write to both primary and CSV repositories for persistence

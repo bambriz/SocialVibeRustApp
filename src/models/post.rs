@@ -17,6 +17,8 @@ pub struct Post {
     pub sentiment_type: Option<String>, // Human-readable sentiment name (e.g., "angry", "joy", "sarcastic+happy")
     pub popularity_score: f64, // Calculated score for feed ranking
     pub is_blocked: bool, // Content moderation flag
+    pub toxicity_tags: Vec<String>, // Toxicity categories (e.g., "toxicity", "insult", "threat")
+    pub toxicity_scores: Option<serde_json::Value>, // Complete diagnostic data from moderation system
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +39,8 @@ pub struct PostResponse {
     pub sentiment_colors: Vec<String>,
     pub sentiment_type: Option<String>,
     pub popularity_score: f64,
+    pub toxicity_tags: Vec<String>, // Include toxicity tags for frontend
+    pub toxicity_scores: Option<serde_json::Value>, // Include scores for diagnostic purposes
 }
 
 impl From<Post> for PostResponse {
@@ -52,6 +56,8 @@ impl From<Post> for PostResponse {
             sentiment_colors: post.sentiment_colors,
             sentiment_type: post.sentiment_type,
             popularity_score: post.popularity_score,
+            toxicity_tags: post.toxicity_tags,
+            toxicity_scores: post.toxicity_scores,
         }
     }
 }
