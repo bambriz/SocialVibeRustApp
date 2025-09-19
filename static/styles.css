@@ -5,6 +5,21 @@
     box-sizing: border-box;
 }
 
+/* Loading spinner animation for infinite scroll */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.infinite-scroll-loader {
+    transition: opacity 0.3s ease;
+}
+
+.infinite-scroll-loader.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

@@ -8,6 +8,14 @@ let contentFilters = {
     hiddenToxicityTypes: new Set() // Empty set means show all
 };
 
+// Pagination state for infinite scroll
+let paginationState = {
+    offset: 0,
+    limit: 10,
+    hasMore: true,
+    isLoading: false
+};
+
 // API Configuration
 const API_BASE = '/api';
 
@@ -126,6 +134,9 @@ function setupEventListeners() {
     
     titleInput?.addEventListener('input', previewSentiment);
     contentInput?.addEventListener('input', previewSentiment);
+    
+    // Infinite scroll detection
+    window.addEventListener('scroll', handleScroll);
 }
 
 // Authentication functions
@@ -284,50 +295,75 @@ async function handleCreatePost(e) {
     }
 }
 
-async function loadPosts() {
+async function loadPosts(reset = true) {
+    if (paginationState.isLoading) return;
+    
+    paginationState.isLoading = true;
+    
+    if (reset) {
+        paginationState.offset = 0;
+        paginationState.hasMore = true;
+        posts = [];
+    }
+    
     const container = document.getElementById('postsContainer');
     const spinner = document.getElementById('loadingSpinner');
     
-    if (spinner) {
+    if (spinner && reset) {
         spinner.classList.remove('hidden');
     }
     
     try {
-        const response = await fetch(`${API_BASE}/posts`);
+        const url = `${API_BASE}/posts?limit=${paginationState.limit}&offset=${paginationState.offset}`;
+        const response = await fetch(url);
         const data = await response.json();
         
         if (response.ok) {
-            posts = Array.isArray(data) ? data : data.posts || [];
+            const newPosts = Array.isArray(data) ? data : data.posts || [];
             
-            // Apply active filters consistently on reload
+            if (reset) {
+                posts = newPosts;
+            } else {
+                posts = [...posts, ...newPosts];
+            }
+            
+            // Update pagination state
+            paginationState.hasMore = data.has_more !== false && newPosts.length === paginationState.limit;
+            paginationState.offset += newPosts.length;
+            
+            // Apply active filters consistently
             const activeFilterBtn = document.querySelector('.filter-btn.active');
             if (activeFilterBtn) {
                 const sentiment = activeFilterBtn.dataset.filter;
                 filterFeed(sentiment); // This applies both emotion and content filters
             } else {
                 // If no active emotion filter, just apply content filters
-                renderPosts(applyContentFiltering(posts));
+                renderPosts(applyContentFiltering(posts), reset);
             }
         } else {
             showToast('Failed to load posts', 'error');
-            renderEmptyState();
+            if (reset) renderEmptyState();
         }
     } catch (error) {
         console.error('Load posts error:', error);
         showToast('Failed to load posts', 'error');
-        renderEmptyState();
+        if (reset) renderEmptyState();
     } finally {
-        if (spinner) {
+        paginationState.isLoading = false;
+        if (spinner && reset) {
             spinner.classList.add('hidden');
         }
+        hideInfiniteScrollLoader();
     }
 }
 
-function renderPosts(postsToRender) {
+function renderPosts(postsToRender, replace = true) {
     const container = document.getElementById('postsList');
     
     if (postsToRender.length === 0) {
-        renderEmptyState();
+        if (replace) {
+            renderEmptyState();
+        }
         return;
     }
     
@@ -363,7 +399,11 @@ function renderPosts(postsToRender) {
         `;
     }).join('');
     
-    container.innerHTML = postsHTML;
+    if (replace) {
+        container.innerHTML = postsHTML;
+    } else {
+        container.insertAdjacentHTML('beforeend', postsHTML);
+    }
 }
 
 function renderEmptyState() {
@@ -374,6 +414,46 @@ function renderEmptyState() {
             <p>Be the first to share something!</p>
         </div>
     `;
+}
+
+// Infinite scroll functions
+function showInfiniteScrollLoader() {
+    let loader = document.getElementById('infiniteScrollLoader');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.id = 'infiniteScrollLoader';
+        loader.className = 'infinite-scroll-loader';
+        loader.innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: #6b7280;">
+                <div class="loading-spinner" style="display: inline-block; width: 20px; height: 20px; border: 2px solid #d1d5db; border-top: 2px solid #3b82f6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                <p style="margin: 1rem 0 0 0; font-size: 0.9rem;">Loading more posts...</p>
+            </div>
+        `;
+        document.getElementById('postsList').appendChild(loader);
+    }
+    loader.classList.remove('hidden');
+}
+
+function hideInfiniteScrollLoader() {
+    const loader = document.getElementById('infiniteScrollLoader');
+    if (loader) {
+        loader.classList.add('hidden');
+    }
+}
+
+function handleScroll() {
+    // Check if we're near the bottom of the page
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const windowHeight = window.innerHeight;
+    const documentHeight = document.documentElement.scrollHeight;
+    
+    // Load more when user is within 200px of the bottom
+    if (scrollTop + windowHeight >= documentHeight - 200) {
+        if (paginationState.hasMore && !paginationState.isLoading) {
+            showInfiniteScrollLoader();
+            loadPosts(false); // Load more posts (don't reset)
+        }
+    }
 }
 
 function getSentimentClass(post) {

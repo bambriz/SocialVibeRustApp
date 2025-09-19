@@ -1,12 +1,30 @@
 use axum::{
-    extract::{State, Json, Path},
+    extract::{State, Json, Path, Query},
     http::{header, HeaderMap},
     response::Json as ResponseJson,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 use crate::{AppState, AppError, Result};
 use crate::models::post::{CreatePostRequest, PostResponse};
+
+#[derive(Debug, Deserialize)]
+pub struct PaginationParams {
+    #[serde(default = "default_limit")]
+    pub limit: u32,
+    #[serde(default)]
+    pub offset: u32,
+}
+
+fn default_limit() -> u32 {
+    20
+}
+
+// Validation constants
+const MIN_LIMIT: u32 = 1;
+const MAX_LIMIT: u32 = 50;
+const MAX_OFFSET: u32 = 10000;
 
 pub async fn create_post(
     State(app_state): State<AppState>,
@@ -49,13 +67,38 @@ pub async fn create_post(
 
 pub async fn get_posts(
     State(app_state): State<AppState>,
+    Query(params): Query<PaginationParams>,
 ) -> Result<ResponseJson<Value>> {
-    let posts = app_state.post_service.get_posts_feed(20, 0).await?;
+    // Validate pagination parameters
+    if params.limit < MIN_LIMIT || params.limit > MAX_LIMIT {
+        return Err(AppError::ValidationError(format!(
+            "Invalid limit. Must be between {} and {}", MIN_LIMIT, MAX_LIMIT
+        )));
+    }
+    
+    if params.offset > MAX_OFFSET {
+        return Err(AppError::ValidationError(format!(
+            "Invalid offset. Must be <= {}", MAX_OFFSET
+        )));
+    }
+    
+    let posts = app_state.post_service.get_posts_feed(params.limit, params.offset).await?;
+    
+    // Calculate pagination metadata (safe from division by zero)
+    let page = if params.limit > 0 {
+        (params.offset / params.limit) + 1
+    } else {
+        1
+    };
+    let has_more = posts.len() == params.limit as usize;
     
     Ok(ResponseJson(json!({
         "posts": posts,
         "total": posts.len(),
-        "page": 1
+        "page": page,
+        "limit": params.limit,
+        "offset": params.offset,
+        "has_more": has_more
     })))
 }
 
