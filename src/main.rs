@@ -7,7 +7,6 @@ use tower_http::cors::CorsLayer;
 use tracing::{info, warn, error, Level};
 use tracing_subscriber;
 use std::net::SocketAddr;
-use socket2::{Domain, Protocol, Socket, Type};
 use uuid::Uuid;
 use reqwest;
 use tokio::time::{sleep, Duration};
@@ -377,24 +376,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(app_state);
 
     // Bind to port 5000 on all interfaces as required by Replit
-    // ARCHITECT GUIDANCE: Set socket address reuse to avoid "Address already in use" errors
+    // ARCHITECT GUIDANCE: Use tokio TcpListener directly to avoid blocking socket registration
     let addr: SocketAddr = config.server_address().parse()?;
     
-    let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))?;
-    socket.set_reuse_address(true)?;
-    #[cfg(unix)]
-    socket.set_reuse_port(true)?;
-    socket.bind(&addr.into())?;
-    socket.listen(1024)?;
-    
-    let listener = match TcpListener::from_std(socket.into()) {
+    let listener = match TcpListener::bind(addr).await {
         Ok(listener) => {
-            info!("✅ Server successfully bound to http://{} with address reuse enabled", config.server_address());
+            info!("✅ Server successfully bound to http://{}", config.server_address());
             listener
         }
         Err(e) => {
             if e.kind() == std::io::ErrorKind::AddrInUse {
-                error!("❌ STARTUP: Port {} is still in use after enabling address reuse. Another server instance may be running.", config.server_port);
+                error!("❌ STARTUP: Port {} is already in use. Another server instance may be running.", config.server_port);
                 error!("   🔍 Check if another Rust server is already bound to this port.");
                 error!("   💡 Ensure only one workflow instance is running at a time.");
                 

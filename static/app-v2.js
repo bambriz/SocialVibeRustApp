@@ -257,13 +257,24 @@ async function handleCreatePost(e) {
             showToast('Post created successfully!', 'success');
             loadPosts(); // Refresh posts
         } else {
-            showToast(data.message || 'Failed to create post', 'error');
+            const errorMessage =
+              response.status === 403 && data.validation_error
+                ? `Post rejected: ${data.validation_error}`
+                : data.message || 'Failed to create post. Please try again.';
+
+            showToast(errorMessage, 'error');
+            //showToast(data.message || 'Failed to create post', 'error');
         }
     } catch (error) {
         console.error('Create post error:', error);
         console.error('Error details:', error.message);
         console.error('Auth token present:', !!authToken);
-        showToast(data.message || (response.status === 403 && data.validation_error ? `Post rejected: ${data.validation_error}` : 'Failed to create post. Please try again.'), 'error');
+        const errorMessage =
+          response.status === 403 && data.validation_error
+            ? `Post rejected: ${data.validation_error}`
+            : data.message || 'Failed to create post. Please try again.';
+
+        showToast(errorMessage, 'error');
     }
 }
 
