@@ -16,8 +16,8 @@ let paginationState = {
     isLoading: false
 };
 
-// API Configuration
-const API_BASE = '/api';
+// API Configuration - Use full domain for Replit environment
+const API_BASE = window.location.origin + '/api';
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
