@@ -8,6 +8,7 @@
 
 use axum::{
     extract::{Path, Query, State},
+    Extension, middleware,
     http::StatusCode,
     response::Json,
     routing::{get, post, put, delete},
@@ -60,20 +61,32 @@ pub struct SuccessResponse {
 }
 
 /// Create comment routes
-pub fn create_routes() -> Router<crate::AppState> {
+/// Public comment routes (no authentication required)
+pub fn public_routes() -> Router<crate::AppState> {
     Router::new()
         // Get comments for a specific post
         .route("/posts/:post_id/comments", get(get_post_comments))
-        // Create a new comment on a post
-        .route("/posts/:post_id/comments", post(create_comment))
         // Get a specific comment thread (for deep-linking)
         .route("/comments/:comment_id/thread", get(get_comment_thread))
         // Get a specific comment by ID
         .route("/comments/:comment_id", get(get_comment_by_id))
+}
+
+/// Protected comment routes (authentication required)
+pub fn protected_routes() -> Router<crate::AppState> {
+    Router::new()
+        // Create a new comment on a post
+        .route("/posts/:post_id/comments", post(create_comment))
         // Update a comment
         .route("/comments/:comment_id", put(update_comment))
         // Delete a comment
         .route("/comments/:comment_id", delete(delete_comment))
+        // TODO: Add auth middleware - for now allowing access to protected routes
+}
+
+/// Legacy function for backward compatibility
+pub fn create_routes() -> Router<crate::AppState> {
+    public_routes().merge(protected_routes())
 }
 
 /// Get all comments for a post with Reddit-style hierarchy
@@ -105,10 +118,11 @@ async fn get_post_comments(
 async fn create_comment(
     Path(post_id): Path<Uuid>,
     State(app_state): State<crate::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(request): Json<CreateCommentRequest>,
 ) -> Result<Json<CreateCommentResponse>> {
-    // For now, use a mock user ID - TODO: Implement proper auth
-    let user_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
+    let user_id = Uuid::parse_str(&claims.user_id)
+        .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;
     
     tracing::debug!("📝 Creating comment on post: {} by user: {}", post_id, user_id);
     
@@ -180,10 +194,11 @@ async fn get_comment_by_id(
 async fn update_comment(
     Path(comment_id): Path<Uuid>,
     State(app_state): State<crate::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(update_data): Json<serde_json::Value>,
 ) -> Result<Json<UpdateCommentResponse>> {
-    // For now, use a mock user ID - TODO: Implement proper auth
-    let user_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
+    let user_id = Uuid::parse_str(&claims.user_id)
+        .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;
     
     tracing::debug!("📝 Updating comment: {} by user: {}", comment_id, user_id);
     
@@ -211,9 +226,10 @@ async fn update_comment(
 async fn delete_comment(
     Path(comment_id): Path<Uuid>,
     State(app_state): State<crate::AppState>,
+    Extension(claims): Extension<Claims>,
 ) -> Result<Json<SuccessResponse>> {
-    // For now, use a mock user ID - TODO: Implement proper auth
-    let user_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
+    let user_id = Uuid::parse_str(&claims.user_id)
+        .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;
     
     tracing::debug!("📝 Deleting comment: {} by user: {}", comment_id, user_id);
     

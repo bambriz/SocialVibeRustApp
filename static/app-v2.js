@@ -393,7 +393,24 @@ function renderPosts(postsToRender, replace = true) {
                 ${toxicityTagsHTML}
                 <div class="post-footer">
                     <div>Popularity: ${(post.popularity_score || 1.0).toFixed(1)}</div>
-                    <div>${post.comment_count || 0} comments</div>
+                    <button class="comment-toggle" onclick="toggleComments('${post.id}')">
+                        💬 ${post.comment_count || 0} comments
+                    </button>
+                </div>
+                
+                <!-- Comments Section -->
+                <div id="comments-${post.id}" class="comments-section hidden" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <div class="comment-form" ${!authToken ? 'style="display:none;"' : ''}>
+                        <textarea id="comment-input-${post.id}" placeholder="Share your thoughts..." 
+                                class="comment-textarea" rows="3" maxlength="2000"></textarea>
+                        <div class="comment-form-actions">
+                            <span class="comment-counter">0/2000</span>
+                            <button onclick="postComment('${post.id}')" class="comment-submit-btn">Post Comment</button>
+                        </div>
+                    </div>
+                    <div id="comments-list-${post.id}" class="comments-list">
+                        <!-- Comments will be loaded here -->
+                    </div>
                 </div>
             </article>
         `;
@@ -404,6 +421,11 @@ function renderPosts(postsToRender, replace = true) {
     } else {
         container.insertAdjacentHTML('beforeend', postsHTML);
     }
+    
+    // Setup comment input character counters
+    document.querySelectorAll('.comment-textarea').forEach(textarea => {
+        textarea.addEventListener('input', updateCommentCounter);
+    });
 }
 
 function renderEmptyState() {
@@ -877,6 +899,305 @@ function loadContentFilterState() {
         // Reset to default state on error
         contentFilters.hiddenToxicityTypes.clear();
     }
+}
+
+// ===== COMMENT SYSTEM =====
+
+// Comment system state
+let loadedComments = new Set(); // Track which post IDs have loaded comments
+
+// Toggle comment section visibility
+function toggleComments(postId) {
+    const commentsSection = document.getElementById(`comments-${postId}`);
+    const isHidden = commentsSection.classList.contains('hidden');
+    
+    if (isHidden) {
+        commentsSection.classList.remove('hidden');
+        // Load comments if not already loaded
+        if (!loadedComments.has(postId)) {
+            loadComments(postId);
+        }
+    } else {
+        commentsSection.classList.add('hidden');
+    }
+}
+
+// Load comments for a post
+async function loadComments(postId) {
+    if (loadedComments.has(postId)) return;
+    
+    const commentsList = document.getElementById(`comments-list-${postId}`);
+    commentsList.innerHTML = '<div class="loading-comments">Loading comments...</div>';
+    
+    try {
+        const response = await fetch(`${API_BASE}/posts/${postId}/comments`);
+        const data = await response.json();
+        
+        if (response.ok) {
+            loadedComments.add(postId);
+            renderComments(postId, data.comments || []);
+        } else {
+            commentsList.innerHTML = '<div class="error-message">Failed to load comments</div>';
+        }
+    } catch (error) {
+        console.error('Load comments error:', error);
+        commentsList.innerHTML = '<div class="error-message">Failed to load comments</div>';
+    }
+}
+
+// Post a new comment
+async function postComment(postId) {
+    if (!authToken) {
+        showToast('Please log in to comment', 'error');
+        return;
+    }
+    
+    const textarea = document.getElementById(`comment-input-${postId}`);
+    const content = textarea.value.trim();
+    
+    if (!content) {
+        showToast('Please enter a comment', 'error');
+        return;
+    }
+    
+    if (content.length > 2000) {
+        showToast('Comment is too long (max 2000 characters)', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/posts/${postId}/comments`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+                post_id: postId,
+                content: content,
+                parent_id: null // Top-level comment
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            textarea.value = '';
+            updateCommentCounter({ target: textarea });
+            showToast('Comment posted!', 'success');
+            
+            // Reload comments to show the new one
+            loadedComments.delete(postId);
+            loadComments(postId);
+            
+            // Update comment count in post
+            updatePostCommentCount(postId);
+        } else {
+            showToast(data.message || 'Failed to post comment', 'error');
+        }
+    } catch (error) {
+        console.error('Post comment error:', error);
+        showToast('Failed to post comment', 'error');
+    }
+}
+
+// Render comments with nesting and emotion colors
+function renderComments(postId, comments) {
+    const commentsList = document.getElementById(`comments-list-${postId}`);
+    
+    if (!comments || comments.length === 0) {
+        commentsList.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
+        return;
+    }
+    
+    // Build nested comment structure (simplified for now - full nesting will be added later)
+    const commentsHTML = comments.map(commentData => {
+        const comment = commentData.comment;
+        const author = commentData.author;
+        const timeAgo = formatTimeAgo(comment.created_at);
+        
+        // Get sentiment styling
+        const sentimentClass = getCommentSentimentClass(comment);
+        const sentimentEmoji = getCommentSentimentEmoji(comment);
+        
+        return `
+            <div class="comment ${sentimentClass}" data-comment-id="${comment.id}">
+                <div class="comment-header">
+                    <span class="comment-author">${escapeHtml(author?.username || 'Anonymous')}</span>
+                    <span class="comment-time">${timeAgo}</span>
+                    ${sentimentEmoji ? `<span class="comment-emotion">${sentimentEmoji}</span>` : ''}
+                </div>
+                <div class="comment-content">${escapeHtml(comment.content)}</div>
+                <div class="comment-actions">
+                    ${authToken ? `<button onclick="showReplyForm('${comment.id}')" class="reply-btn">Reply</button>` : ''}
+                    <div class="emotion-voting" id="emotion-voting-${comment.id}">
+                        ${renderEmotionVoting(comment)}
+                    </div>
+                </div>
+                
+                <!-- Reply form (initially hidden) -->
+                ${authToken ? `
+                <div id="reply-form-${comment.id}" class="reply-form hidden">
+                    <textarea id="reply-input-${comment.id}" placeholder="Write a reply..." 
+                            class="reply-textarea" rows="2" maxlength="2000"></textarea>
+                    <div class="reply-form-actions">
+                        <button onclick="cancelReply('${comment.id}')" class="cancel-btn">Cancel</button>
+                        <button onclick="postReply('${comment.id}', '${postId}')" class="reply-submit-btn">Reply</button>
+                    </div>
+                </div>` : ''}
+                
+                <!-- Nested replies will go here -->
+                <div id="replies-${comment.id}" class="replies-container">
+                    ${renderReplies(commentData.replies || [])}
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    commentsList.innerHTML = commentsHTML;
+}
+
+// Get comment sentiment class for styling
+function getCommentSentimentClass(comment) {
+    if (!comment.sentiment_analysis) return '';
+    
+    try {
+        const sentiments = JSON.parse(comment.sentiment_analysis);
+        if (Array.isArray(sentiments) && sentiments.length > 0) {
+            const primarySentiment = sentiments[0];
+            return `sentiment-${primarySentiment.toLowerCase()}`;
+        }
+    } catch (e) {
+        console.warn('Failed to parse comment sentiment:', e);
+    }
+    return '';
+}
+
+// Get comment sentiment emoji
+function getCommentSentimentEmoji(comment) {
+    if (!comment.sentiment_analysis) return '';
+    
+    try {
+        const sentiments = JSON.parse(comment.sentiment_analysis);
+        if (Array.isArray(sentiments) && sentiments.length > 0) {
+            const primarySentiment = sentiments[0];
+            const emojiMap = {
+                'joy': '😊',
+                'sad': '😢', 
+                'angry': '😠',
+                'fear': '😨',
+                'surprise': '😲',
+                'disgust': '🤢',
+                'confused': '😕',
+                'sarcastic': '😏',
+                'affectionate': '🥰',
+                'neutral': '😐'
+            };
+            return emojiMap[primarySentiment.toLowerCase()] || '';
+        }
+    } catch (e) {
+        console.warn('Failed to parse comment sentiment:', e);
+    }
+    return '';
+}
+
+// Render emotion voting buttons (placeholder for now)
+function renderEmotionVoting(comment) {
+    // TODO: Implement full emotion voting system
+    // For now, just show a simple like count
+    return `<span class="vote-count">👍 0</span>`;
+}
+
+// Render nested replies
+function renderReplies(replies) {
+    if (!replies || replies.length === 0) return '';
+    
+    return replies.map(replyData => {
+        const reply = replyData.comment;
+        const author = replyData.author;
+        const timeAgo = formatTimeAgo(reply.created_at);
+        const sentimentClass = getCommentSentimentClass(reply);
+        const sentimentEmoji = getCommentSentimentEmoji(reply);
+        
+        return `
+            <div class="reply ${sentimentClass}" data-comment-id="${reply.id}">
+                <div class="comment-header">
+                    <span class="comment-author">${escapeHtml(author?.username || 'Anonymous')}</span>
+                    <span class="comment-time">${timeAgo}</span>
+                    ${sentimentEmoji ? `<span class="comment-emotion">${sentimentEmoji}</span>` : ''}
+                </div>
+                <div class="comment-content">${escapeHtml(reply.content)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Update comment counter
+function updateCommentCounter(event) {
+    const textarea = event.target;
+    const counter = textarea.closest('.comment-form, .reply-form').querySelector('.comment-counter, .reply-counter');
+    if (counter) {
+        const length = textarea.value.length;
+        counter.textContent = `${length}/2000`;
+        counter.style.color = length > 1800 ? '#ef4444' : '';
+    }
+}
+
+// Update post comment count after posting
+function updatePostCommentCount(postId) {
+    const commentButton = document.querySelector(`button[onclick="toggleComments('${postId}')"]`);
+    if (commentButton) {
+        // Extract current count and increment
+        const match = commentButton.textContent.match(/(\d+)/);
+        if (match) {
+            const currentCount = parseInt(match[1]);
+            commentButton.innerHTML = `💬 ${currentCount + 1} comments`;
+        }
+    }
+}
+
+// Show reply form
+function showReplyForm(commentId) {
+    const replyForm = document.getElementById(`reply-form-${commentId}`);
+    replyForm.classList.remove('hidden');
+    const textarea = document.getElementById(`reply-input-${commentId}`);
+    textarea.focus();
+}
+
+// Cancel reply
+function cancelReply(commentId) {
+    const replyForm = document.getElementById(`reply-form-${commentId}`);
+    replyForm.classList.add('hidden');
+    const textarea = document.getElementById(`reply-input-${commentId}`);
+    textarea.value = '';
+}
+
+// Post reply (placeholder - will implement nested replies later)
+async function postReply(parentCommentId, postId) {
+    showToast('Nested replies coming soon!', 'info');
+    cancelReply(parentCommentId);
+}
+
+// ===== END COMMENT SYSTEM =====
+
+// Helper functions (moved here for clarity)
+function formatTimeAgo(timestamp) {
+    const now = new Date();
+    const postTime = new Date(timestamp);
+    const diffInSeconds = Math.floor((now - postTime) / 1000);
+    
+    if (diffInSeconds < 60) return 'just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    
+    return postTime.toLocaleDateString();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Refresh posts periodically (every 30 seconds)

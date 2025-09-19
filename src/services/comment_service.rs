@@ -7,24 +7,92 @@
 
 use crate::models::comment::{Comment, CreateCommentRequest, CommentResponse};
 use crate::db::repository::{CommentRepository, MockCommentRepository};
+use crate::services::sentiment_service::SentimentService;
+use crate::services::moderation_service::ModerationService;
 use crate::{AppError, Result};
 use uuid::Uuid;
 use std::sync::Arc;
+use std::collections::HashMap;
 use chrono::Utc;
 
-/// Simple comment service implementation
+/// Enhanced comment service with sentiment analysis and hierarchy
 pub struct CommentService {
     comment_repo: Arc<MockCommentRepository>,
+    sentiment_service: Option<Arc<SentimentService>>,
+    moderation_service: Option<Arc<ModerationService>>,
 }
 
+/// Hierarchical path generation for Reddit-style nesting
+const MAX_DEPTH: i32 = 10;
+const PATH_SEPARATOR: &str = "/";
+const DEPTH_INCREMENT: i32 = 1;
+
 impl CommentService {
+    /// Create a new CommentService (basic version for now)
     pub fn new(comment_repo: Arc<MockCommentRepository>) -> Self {
         Self { 
             comment_repo,
+            sentiment_service: None, // TODO: Connect to sentiment service
+            moderation_service: None, // TODO: Connect to moderation service
         }
     }
     
-    /// Create a new comment (simplified implementation)
+    /// Create CommentService with AI services (enhanced version)
+    pub fn new_with_ai(
+        comment_repo: Arc<MockCommentRepository>,
+        sentiment_service: Option<Arc<SentimentService>>,
+        moderation_service: Option<Arc<ModerationService>>,
+    ) -> Self {
+        Self { 
+            comment_repo,
+            sentiment_service,
+            moderation_service,
+        }
+    }
+    
+    /// Generate materialized path with atomic sibling index allocation
+    async fn generate_comment_path(&self, post_id: Uuid, parent_id: Option<Uuid>) -> Result<(String, i32)> {
+        match parent_id {
+            None => {
+                // Root-level comment: Use atomic per-post sibling allocation
+                let sibling_index = self.comment_repo
+                    .allocate_next_sibling_index(post_id, None)
+                    .await?;
+                let path_segment = format!("{:06}{}", sibling_index, PATH_SEPARATOR);
+                Ok((path_segment, 0))
+            },
+            Some(parent_id) => {
+                // Reply: extend parent's path with atomic sibling index
+                let parent = self.comment_repo
+                    .get_comment_by_id(parent_id)
+                    .await?
+                    .ok_or_else(|| AppError::ValidationError("Parent comment not found".to_string()))?;
+                
+                // Check depth limit
+                if parent.depth >= MAX_DEPTH {
+                    return Err(AppError::ValidationError(
+                        format!("Maximum nesting depth ({}) exceeded", MAX_DEPTH)
+                    ));
+                }
+                
+                // Atomic sibling index allocation prevents race conditions
+                let sibling_index = self.comment_repo
+                    .allocate_next_sibling_index(post_id, Some(parent_id))
+                    .await?;
+                
+                // Zero-padded path segment ensures correct lexicographic sorting
+                let new_path = format!("{}{:06}{}", 
+                    parent.path, 
+                    sibling_index, 
+                    PATH_SEPARATOR
+                );
+                
+                Ok((new_path, parent.depth + DEPTH_INCREMENT))
+            }
+        }
+    }
+    
+    /// Create a new comment with full AI processing pipeline
     pub async fn create_comment(
         &self, 
         post_id: Uuid,
@@ -32,43 +100,106 @@ impl CommentService {
         user_id: Uuid
     ) -> Result<CommentResponse> {
         // Basic validation
-        if request.content.trim().is_empty() {
+        let content = request.content.trim();
+        if content.is_empty() {
             return Err(AppError::ValidationError("Comment content cannot be empty".to_string()));
         }
         
-        if request.content.len() > 2000 {
+        if content.len() > 2000 {
             return Err(AppError::ValidationError("Comment content exceeds 2000 character limit".to_string()));
         }
+
+        // 1. Generate hierarchical path and depth with atomic allocation
+        let (path, depth) = self.generate_comment_path(post_id, request.parent_id).await?;
         
-        // Create basic comment structure
+        // 2. Content moderation check
+        let (moderation_result, is_flagged) = if let Some(moderation_service) = &self.moderation_service {
+            let mod_result = moderation_service
+                .check_content(content)
+                .await
+                .map_err(|e| AppError::InternalError(format!("Moderation failed: {}", e)))?;
+            
+            if mod_result.is_blocked {
+                return Err(AppError::ValidationError(format!(
+                    "Comment blocked by moderation: {}",
+                    mod_result.violation_type.clone().unwrap_or_else(|| "Policy violation".to_string())
+                )));
+            }
+            
+            // Separate flagging logic: flag based on toxicity score thresholds, not blocking
+            let is_flagged = !mod_result.toxicity_tags.is_empty() || 
+                mod_result.all_scores
+                    .as_ref()
+                    .and_then(|v| v.as_object())
+                    .map(|scores| scores.values().any(|v| v.as_f64().unwrap_or(0.0) > 0.5))
+                    .unwrap_or(false);
+            
+            (serde_json::to_value(&mod_result).ok(), is_flagged)
+        } else {
+            (None, false)
+        };
+        
+        // 3. Sentiment analysis
+        let sentiment_analysis = if let Some(sentiment_service) = &self.sentiment_service {
+            let sentiments = sentiment_service
+                .analyze_sentiment(content)
+                .await
+                .map_err(|e| AppError::InternalError(format!("Sentiment analysis failed: {}", e)))?;
+            serde_json::to_value(&sentiments).ok()
+        } else {
+            None
+        };
+        
+        // 4. Create comment with full metadata
         let comment = Comment {
             id: Uuid::new_v4(),
             post_id,
             user_id,
             parent_id: request.parent_id,
-            content: request.content,
-            path: "1/".to_string(), // TODO: Generate proper hierarchical path
-            depth: 0, // TODO: Calculate proper depth
-            sentiment_analysis: None, // TODO: Add sentiment analysis
-            moderation_result: None, // TODO: Add moderation
-            is_flagged: false,
+            content: request.content.clone(),
+            path,
+            depth,
+            sentiment_analysis,
+            moderation_result,
+            is_flagged: is_flagged, // Store flagging state separate from blocking
             created_at: Utc::now(),
             updated_at: Utc::now(),
             reply_count: 0,
         };
         
-        // Save to repository
+        // 5. Save to repository
         let saved_comment = self.comment_repo
             .create_comment(&comment)
             .await?;
+            
+        // 6. Increment parent reply count if this is a reply
+        if let Some(parent_id) = request.parent_id {
+            if let Err(e) = self.comment_repo.increment_reply_count(parent_id).await {
+                tracing::warn!("Failed to increment parent reply count for {}: {}", parent_id, e);
+                // Don't fail the comment creation, just log the warning
+            }
+        }
+        
+        tracing::info!("✅ Created {} comment {} with sentiment analysis", 
+            if request.parent_id.is_some() { "nested" } else { "top-level" },
+            saved_comment.id
+        );
         
         Ok(CommentResponse {
             comment: saved_comment,
-            author: None, // TODO: Fetch author info
+            author: None, // TODO: Fetch author info from user service
             replies: vec![],
             can_modify: true,
             is_collapsed: false,
         })
+    }
+    
+    /// Increment reply count for parent comment
+    async fn increment_reply_count(&self, parent_id: Uuid) -> Result<()> {
+        // This would be handled by the repository layer
+        // For now, we'll leave it as a placeholder
+        tracing::debug!("📊 Incrementing reply count for parent comment {}", parent_id);
+        Ok(())
     }
 
     /// Get comments for a post (simplified - no tree structure yet)

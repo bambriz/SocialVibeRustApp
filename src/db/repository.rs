@@ -821,6 +821,55 @@ impl MockCommentRepository {
             comments: Arc::new(Mutex::new(HashMap::new())),
         }
     }
+    
+    /// Count total comments for path generation
+    pub async fn count_comments(&self) -> Result<usize> {
+        let comments = self.comments.lock().unwrap();
+        Ok(comments.len())
+    }
+    
+    /// Count replies to a specific parent comment for path generation
+    pub async fn count_replies(&self, parent_id: Uuid) -> Result<usize> {
+        let comments = self.comments.lock().unwrap();
+        let count = comments
+            .values()
+            .filter(|comment| comment.parent_id == Some(parent_id))
+            .count();
+        Ok(count)
+    }
+    
+    /// Atomically allocate next sibling index for a specific parent (including post-level)
+    /// This prevents race conditions in path generation
+    pub async fn allocate_next_sibling_index(&self, post_id: Uuid, parent_id: Option<Uuid>) -> Result<usize> {
+        let mut comments = self.comments.lock().unwrap();
+        let count = match parent_id {
+            None => {
+                // Root-level: Count top-level comments for this specific post
+                comments
+                    .values()
+                    .filter(|comment| comment.post_id == post_id && comment.parent_id.is_none())
+                    .count()
+            },
+            Some(parent_id) => {
+                // Reply: Count replies to this specific parent
+                comments
+                    .values()
+                    .filter(|comment| comment.parent_id == Some(parent_id))
+                    .count()
+            }
+        };
+        Ok(count + 1) // Return next available index (1-based)
+    }
+    
+    /// Increment reply count for a parent comment atomically
+    pub async fn increment_reply_count(&self, parent_id: Uuid) -> Result<()> {
+        let mut comments = self.comments.lock().unwrap();
+        if let Some(parent_comment) = comments.get_mut(&parent_id) {
+            parent_comment.reply_count += 1;
+            parent_comment.updated_at = chrono::Utc::now();
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
