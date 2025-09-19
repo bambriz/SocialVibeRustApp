@@ -1,5 +1,5 @@
 // Repository trait abstractions for database operations
-use crate::models::{User, Post, Comment};
+use crate::models::{User, Post, Comment, Vote, TagVoteCount, VoteSummary};
 use crate::{AppError, Result};
 use uuid::Uuid;
 use async_trait::async_trait;
@@ -39,6 +39,22 @@ pub trait CommentRepository: Send + Sync {
     async fn get_max_sibling_count(&self, post_id: Uuid, parent_path: Option<&str>) -> Result<u32>;
 }
 
+#[async_trait]
+pub trait VoteRepository: Send + Sync {
+    /// Cast or update a vote on a post/comment tag
+    async fn cast_vote(&self, vote: &Vote) -> Result<Vote>;
+    /// Get user's vote on a specific target and tag
+    async fn get_user_vote(&self, user_id: Uuid, target_id: Uuid, vote_type: &str, tag: &str) -> Result<Option<Vote>>;
+    /// Get vote counts for all tags on a target (post/comment)
+    async fn get_vote_counts(&self, target_id: Uuid, target_type: &str) -> Result<Vec<TagVoteCount>>;
+    /// Get comprehensive vote summary for a target
+    async fn get_vote_summary(&self, target_id: Uuid, target_type: &str) -> Result<VoteSummary>;
+    /// Remove a user's vote
+    async fn remove_vote(&self, user_id: Uuid, target_id: Uuid, vote_type: &str, tag: &str) -> Result<()>;
+    /// Get total engagement score for popularity calculation
+    async fn get_engagement_score(&self, target_id: Uuid, target_type: &str) -> Result<f64>;
+}
+
 // Mock implementations for development (before Cosmos DB integration)
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
@@ -60,6 +76,11 @@ pub struct MockPostRepository {
 
 pub struct MockCommentRepository {
     comments: Arc<Mutex<HashMap<Uuid, Comment>>>, // id -> Comment
+}
+
+// Mock vote repository for development
+pub struct MockVoteRepository {
+    votes: Arc<Mutex<HashMap<String, Vote>>>, // "user_id:target_id:vote_type:tag" -> Vote
 }
 
 // CSV-based user repository for persistent storage
@@ -921,5 +942,91 @@ impl CommentRepository for MockCommentRepository {
             .filter(|c| c.post_id == post_id && c.parent_id.is_none())
             .count();
         Ok(count as u32)
+    }
+}
+
+// MockVoteRepository implementation
+impl MockVoteRepository {
+    pub fn new() -> Self {
+        Self {
+            votes: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+    
+    fn make_vote_key(&self, user_id: Uuid, target_id: Uuid, vote_type: &str, tag: &str) -> String {
+        format!("{}:{}:{}:{}", user_id, target_id, vote_type, tag)
+    }
+}
+
+#[async_trait]
+impl VoteRepository for MockVoteRepository {
+    async fn cast_vote(&self, vote: &Vote) -> Result<Vote> {
+        let mut votes = self.votes.lock().unwrap();
+        let key = self.make_vote_key(vote.user_id, vote.target_id, &vote.vote_type, &vote.tag);
+        votes.insert(key, vote.clone());
+        Ok(vote.clone())
+    }
+    
+    async fn get_user_vote(&self, user_id: Uuid, target_id: Uuid, vote_type: &str, tag: &str) -> Result<Option<Vote>> {
+        let votes = self.votes.lock().unwrap();
+        let key = self.make_vote_key(user_id, target_id, vote_type, tag);
+        Ok(votes.get(&key).cloned())
+    }
+    
+    async fn get_vote_counts(&self, target_id: Uuid, target_type: &str) -> Result<Vec<TagVoteCount>> {
+        let votes = self.votes.lock().unwrap();
+        let mut tag_counts: HashMap<String, (i64, i64)> = HashMap::new();
+        
+        // Count votes for this target
+        for vote in votes.values() {
+            if vote.target_id == target_id && vote.target_type == target_type {
+                let (upvotes, downvotes) = tag_counts.entry(vote.tag.clone()).or_insert((0, 0));
+                if vote.is_upvote {
+                    *upvotes += 1;
+                } else {
+                    *downvotes += 1;
+                }
+            }
+        }
+        
+        Ok(tag_counts.into_iter()
+            .map(|(tag, (upvotes, downvotes))| TagVoteCount::new(tag, upvotes, downvotes))
+            .collect())
+    }
+    
+    async fn get_vote_summary(&self, target_id: Uuid, target_type: &str) -> Result<VoteSummary> {
+        let all_counts = self.get_vote_counts(target_id, target_type).await?;
+        let (emotion_votes, content_filter_votes): (Vec<_>, Vec<_>) = all_counts.into_iter()
+            .partition(|vote_count| {
+                // Emotion tags: joy, sad, angry, fear, disgust, surprise, confused, neutral, sarcastic, affectionate
+                matches!(vote_count.tag.as_str(), "joy" | "sad" | "angry" | "fear" | "disgust" | "surprise" | "confused" | "neutral" | "sarcastic" | "affectionate")
+            });
+        
+        let total_engagement = emotion_votes.iter().chain(content_filter_votes.iter())
+            .map(|vc| vc.total_votes)
+            .sum();
+            
+        Ok(VoteSummary {
+            target_id,
+            emotion_votes,
+            content_filter_votes,
+            total_engagement,
+        })
+    }
+    
+    async fn remove_vote(&self, user_id: Uuid, target_id: Uuid, vote_type: &str, tag: &str) -> Result<()> {
+        let mut votes = self.votes.lock().unwrap();
+        let key = self.make_vote_key(user_id, target_id, vote_type, tag);
+        votes.remove(&key);
+        Ok(())
+    }
+    
+    async fn get_engagement_score(&self, target_id: Uuid, target_type: &str) -> Result<f64> {
+        let vote_counts = self.get_vote_counts(target_id, target_type).await?;
+        let total_engagement = vote_counts.iter().map(|vc| vc.total_votes).sum::<i64>();
+        
+        // Cap engagement impact at 3.0 as per user requirements
+        let engagement_score = (total_engagement as f64).ln().max(0.0).min(3.0);
+        Ok(engagement_score)
     }
 }

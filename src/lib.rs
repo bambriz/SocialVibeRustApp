@@ -22,6 +22,7 @@ pub struct AppState {
     pub sentiment_service: std::sync::Arc<services::SentimentService>,
     pub moderation_service: std::sync::Arc<services::ModerationService>,
     pub auth_service: std::sync::Arc<auth::AuthService>,
+    pub vote_service: std::sync::Arc<services::VoteService>,
     pub python_manager: Option<std::sync::Arc<services::PythonManager>>,
 }
 
@@ -39,13 +40,16 @@ impl AppState {
         // Create CSV fallback repository
         let csv_fallback_repo = std::sync::Arc::new(db::repository::CsvPostRepository::new(None)); // Uses default "posts_backup.csv"
         
-        let post_service = std::sync::Arc::new(services::PostService::new(
+        let comment_service = std::sync::Arc::new(services::CommentService::new(db.comment_repo.clone()));
+        let vote_service = std::sync::Arc::new(services::VoteService::new(db.vote_repo.clone()));
+        
+        let post_service = std::sync::Arc::new(services::PostService::new_with_vote_service(
             db.post_repo.clone() as std::sync::Arc<dyn db::repository::PostRepository>,
             csv_fallback_repo,
             sentiment_service.clone(),
-            moderation_service.clone()
+            moderation_service.clone(),
+            vote_service.clone()
         ));
-        let comment_service = std::sync::Arc::new(services::CommentService::new(db.comment_repo.clone()));
 
         // Initialize PythonManager based on configuration
         let python_manager = match config.python_server_mode {
@@ -65,6 +69,7 @@ impl AppState {
             sentiment_service,
             moderation_service,
             auth_service,
+            vote_service,
             python_manager,
         })
     }

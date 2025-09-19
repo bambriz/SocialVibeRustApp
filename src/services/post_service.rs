@@ -2,7 +2,7 @@ use crate::models::Post;
 use crate::models::post::{CreatePostRequest, PostResponse};
 use crate::models::sentiment::{Sentiment, SentimentType};
 use crate::db::repository::{PostRepository, MockPostRepository, CsvPostRepository};
-use crate::services::{SentimentService, ModerationService};
+use crate::services::{SentimentService, ModerationService, VoteService};
 use crate::{AppError, Result};
 use crate::error::ContentModerationError;
 use uuid::Uuid;
@@ -14,6 +14,7 @@ pub struct PostService {
     csv_fallback_repo: Arc<CsvPostRepository>,
     sentiment_service: Arc<SentimentService>,
     moderation_service: Arc<ModerationService>,
+    vote_service: Option<Arc<VoteService>>,
 }
 
 impl PostService {
@@ -27,7 +28,25 @@ impl PostService {
             primary_repo,
             csv_fallback_repo,
             sentiment_service,
-            moderation_service 
+            moderation_service,
+            vote_service: None
+        }
+    }
+    
+    /// Create PostService with VoteService integration
+    pub fn new_with_vote_service(
+        primary_repo: Arc<dyn PostRepository>, 
+        csv_fallback_repo: Arc<CsvPostRepository>,
+        sentiment_service: Arc<SentimentService>,
+        moderation_service: Arc<ModerationService>,
+        vote_service: Arc<VoteService>
+    ) -> Self {
+        Self { 
+            primary_repo,
+            csv_fallback_repo,
+            sentiment_service,
+            moderation_service,
+            vote_service: Some(vote_service)
         }
     }
     
@@ -329,7 +348,20 @@ impl PostService {
         let recency_hours = (Utc::now() - post.created_at).num_hours() as f64;
         let recency_decay = 1.0 / (1.0 + recency_hours * 0.01); // Decay over time
         
-        (sentiment_score + comment_boost) * recency_decay
+        let base_score = (sentiment_score + comment_boost) * recency_decay;
+        
+        // Add voting engagement if available, with cap at 3.0
+        if let Some(vote_service) = &self.vote_service {
+            match vote_service.get_engagement_score(post.id, "post").await {
+                Ok(engagement_score) => {
+                    // Cap total popularity at 3.0 as per user requirements
+                    (base_score + engagement_score).min(3.0)
+                },
+                Err(_) => base_score // Fall back to base score if voting fails
+            }
+        } else {
+            base_score
+        }
     }
     
     fn calculate_popularity_score_from_sentiment(&self, sentiments: &[crate::models::sentiment::Sentiment]) -> f64 {

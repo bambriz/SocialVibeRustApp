@@ -3,7 +3,7 @@ pub mod repository;
 
 // Database connection and state management
 use crate::config::AppConfig;
-use repository::{MockUserRepository, MockPostRepository, MockCommentRepository, CsvUserRepository, UserRepository};
+use repository::{MockUserRepository, MockPostRepository, MockCommentRepository, MockVoteRepository, CsvUserRepository, UserRepository, VoteRepository};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -12,6 +12,7 @@ pub struct DatabaseClient {
     pub user_repo: Arc<dyn UserRepository>,
     pub post_repo: Arc<MockPostRepository>, 
     pub comment_repo: Arc<MockCommentRepository>,
+    pub vote_repo: Arc<dyn VoteRepository>,
     // TODO: Add Cosmos DB client when reintroduced
     // pub cosmos_client: CosmosClient,
 }
@@ -22,6 +23,7 @@ impl DatabaseClient {
             user_repo: Arc::new(CsvUserRepository::new(None)), // Uses default "users_backup.csv"
             post_repo: Arc::new(MockPostRepository::new()),
             comment_repo: Arc::new(MockCommentRepository::new()),
+            vote_repo: Arc::new(MockVoteRepository::new()) as Arc<dyn VoteRepository>,
         })
     }
 

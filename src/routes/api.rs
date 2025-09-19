@@ -1,7 +1,7 @@
 use axum::{routing::{get, post, put, delete}, Router, Json, middleware};
 use serde_json::{json, Value};
 use crate::AppState;
-use crate::routes::{users, posts, auth, comments};
+use crate::routes::{users, posts, auth, comments, vote_routes};
 use crate::auth::middleware::auth_middleware;
 
 pub fn routes() -> Router<AppState> {
@@ -21,6 +21,7 @@ pub fn routes() -> Router<AppState> {
     public_routes
         .merge(protected_routes)
         .merge(comments::create_routes()) // Add comment routes
+        .merge(vote_routes::vote_routes()) // Add voting routes
 }
 
 async fn api_health() -> Json<Value> {
