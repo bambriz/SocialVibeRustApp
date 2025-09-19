@@ -37,5 +37,8 @@ reqwest = { version = "0.11", features = ["json"] }
 # CSV file handling for fallback storage
 csv = "1.3"
 
+# Socket configuration for address reuse
+socket2 = "0.5"
+
 # For calling Python scripts (using tokio built-in process support)
 # We'll use tokio::process::Command which is built-in

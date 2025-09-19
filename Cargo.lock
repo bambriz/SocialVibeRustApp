@@ -1416,6 +1416,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "socket2 0.5.10",
  "tokio",
  "tower 0.4.13",
  "tower-http",

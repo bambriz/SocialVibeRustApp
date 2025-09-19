@@ -59,21 +59,21 @@ def check_content_moderation(text):
         return f"blocked:excessive_profanity:{len(profanity_matches)}_words"
         
     # Skip hatesonar to avoid model download delays - rely on fast pattern matching only
-    # try:
-    #     from hatesonar import Sonar
-    #     sonar = Sonar()
-    #     result = sonar.ping(text_lower)
-    #     hate_speech_prob = result['classes']['hate_speech']
-    #     offensive_prob = result['classes']['offensive_language']
-    #     
-    #     # More lenient threshold for backup check
-    #     if hate_speech_prob > 0.8:  # Only block very high confidence hate speech
-    #         return f"blocked:ai_hate_speech_detection:{hate_speech_prob:.2f}_confidence"
-    #     elif offensive_prob > 0.9:  # Very high confidence offensive language
-    #         return f"blocked:ai_offensive_language:{offensive_prob:.2f}_confidence"
-    # except (ImportError, Exception) as e:
-    #     # If hatesonar fails, rely on pattern matching only
-    #     pass
+    try:
+        from hatesonar import Sonar
+        sonar = Sonar()
+        result = sonar.ping(text_lower)
+        hate_speech_prob = result['classes']['hate_speech']
+        offensive_prob = result['classes']['offensive_language']
+        
+        # More lenient threshold for backup check
+        if hate_speech_prob > 0.8:  # Only block very high confidence hate speech
+            return f"blocked:ai_hate_speech_detection:{hate_speech_prob:.2f}_confidence"
+        elif offensive_prob > 0.9:  # Very high confidence offensive language
+            return f"blocked:ai_offensive_language:{offensive_prob:.2f}_confidence"
+    except (ImportError, Exception) as e:
+        # If hatesonar fails, rely on pattern matching only
+        pass
     
     return "allowed"
 

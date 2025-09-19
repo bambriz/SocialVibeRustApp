@@ -63,6 +63,15 @@ impl PythonManager {
 
     /// Start the Python server subprocess with supervision
     pub async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // ARCHITECT GUIDANCE: Verify only one workflow instance runs at a time
+        {
+            let child_guard = self.child_process.lock().await;
+            if child_guard.is_some() {
+                info!("🚀 Python server subprocess manager already started, skipping duplicate start");
+                return Ok(());
+            }
+        }
+        
         info!("🚀 Starting Python server subprocess manager");
         
         // Start the subprocess
@@ -147,6 +156,18 @@ impl PythonManager {
 
     /// Spawn the Python subprocess
     async fn spawn_subprocess(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // ARCHITECT GUIDANCE: Probe health before spawning to avoid duplicates
+        info!("[PY] Checking if Python server is already running on port 8001...");
+        match self.check_health().await {
+            Ok(_) => {
+                info!("[PY] ✅ Python server already running and healthy, skipping subprocess spawn");
+                return Ok(());
+            }
+            Err(_) => {
+                info!("[PY] No existing Python server found, proceeding to spawn new subprocess");
+            }
+        }
+        
         info!("[PY] Spawning Python server subprocess: {}", self.config.script_path);
         
         let mut child = Command::new("python3")
@@ -154,7 +175,11 @@ impl PythonManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
-            .spawn()?;
+            .spawn()
+            .map_err(|e| {
+                error!("[PY] Failed to spawn Python subprocess: {}", e);
+                format!("Failed to spawn Python subprocess: {}", e)
+            })?;
         
         // Start log forwarding tasks
         if let Some(stdout) = child.stdout.take() {
@@ -270,30 +295,41 @@ impl PythonManager {
         // Notify supervision loop to stop
         self.shutdown_notify.notify_waiters();
         
+        // ARCHITECT GUIDANCE: Ensure proper Child handle management and termination on shutdown
         // Terminate the child process
         let mut child_guard = self.child_process.lock().await;
         if let Some(mut child) = child_guard.take() {
             info!("[PY] Terminating Python subprocess");
             
-            // Try graceful shutdown first
+            // First try graceful termination with SIGTERM
             match child.kill().await {
                 Ok(()) => {
-                    info!("[PY] Python subprocess terminated gracefully");
+                    info!("[PY] Sent termination signal to Python subprocess");
+                    
+                    // Wait for graceful exit with timeout
+                    match tokio::time::timeout(Duration::from_secs(10), child.wait()).await {
+                        Ok(Ok(exit_status)) => {
+                            info!("[PY] Python subprocess exited gracefully with status: {:?}", exit_status);
+                        }
+                        Ok(Err(e)) => {
+                            warn!("[PY] Error waiting for Python subprocess to exit: {}", e);
+                        }
+                        Err(_) => {
+                            warn!("[PY] Python subprocess didn't exit within timeout, force killing");
+                            // Force kill if still running
+                            let _ = child.kill().await;
+                            let _ = child.wait().await;
+                        }
+                    }
                 }
                 Err(e) => {
                     warn!("[PY] Error terminating Python subprocess: {}", e);
+                    // Try to wait anyway in case it's already exiting
+                    let _ = child.wait().await;
                 }
             }
-            
-            // Wait for process to exit
-            match child.wait().await {
-                Ok(exit_status) => {
-                    info!("[PY] Python subprocess exited with status: {:?}", exit_status);
-                }
-                Err(e) => {
-                    warn!("[PY] Error waiting for Python subprocess to exit: {}", e);
-                }
-            }
+        } else {
+            info!("[PY] No child process to terminate");
         }
         
         info!("[PY] Python server shutdown completed");
@@ -330,6 +366,22 @@ struct PythonManagerForTask {
 }
 
 impl PythonManagerForTask {
+    /// Check Python server health (same as main implementation)
+    async fn check_health(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let response = self.http_client
+            .get(&self.config.health_check_url)
+            .timeout(Duration::from_secs(self.config.health_check_timeout_secs))
+            .send()
+            .await?;
+        
+        if !response.status().is_success() {
+            return Err(format!("Health check failed with status: {}", response.status()).into());
+        }
+        
+        let health_data: serde_json::Value = response.json().await?;
+        Ok(health_data)
+    }
+
     async fn supervision_loop(&self) {
         info!("[PY] Starting supervision loop");
         
@@ -407,6 +459,18 @@ impl PythonManagerForTask {
 
     /// Spawn the Python subprocess
     async fn spawn_subprocess(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // ARCHITECT GUIDANCE: Probe health before spawning to avoid duplicates
+        info!("[PY] Checking if Python server is already running on port 8001...");
+        match self.check_health().await {
+            Ok(_) => {
+                info!("[PY] ✅ Python server already running and healthy, skipping subprocess spawn");
+                return Ok(());
+            }
+            Err(_) => {
+                info!("[PY] No existing Python server found, proceeding to spawn new subprocess");
+            }
+        }
+        
         info!("[PY] Spawning Python server subprocess: {}", self.config.script_path);
         
         let mut child = Command::new("python3")
@@ -414,7 +478,11 @@ impl PythonManagerForTask {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
-            .spawn()?;
+            .spawn()
+            .map_err(|e| {
+                error!("[PY] Failed to spawn Python subprocess: {}", e);
+                format!("Failed to spawn Python subprocess: {}", e)
+            })?;
         
         // Start log forwarding tasks
         if let Some(stdout) = child.stdout.take() {

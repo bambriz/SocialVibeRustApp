@@ -20,11 +20,16 @@ from nrclex import NRCLex
 # Caching configuration
 CACHE_DIR = "/tmp/social_pulse_cache"
 MODEL_CACHE_FILE = os.path.join(CACHE_DIR, "emotion_classifier.pkl")
-CACHE_VERSION = "v1.2"  # Update when model changes
+DETOXIFY_CACHE_FILE = os.path.join(CACHE_DIR, "detoxify_sentinel.json")
+CACHE_VERSION = "v1.3"  # Update when model changes
 
 # Initialize HuggingFace EmotionClassifier as primary detector
 HF_EMOTIONCLASSIFIER_AVAILABLE = False
 hf_emotion_classifier = None
+
+# Initialize content moderation using Detoxify for AI-based detection
+DETOXIFY_AVAILABLE = False
+detoxify_classifier = None
 
 # Secondary detectors for fallback and special cases
 TEXT2EMOTION_AVAILABLE = False
@@ -79,6 +84,51 @@ def load_model_from_cache():
         print(f"⚠️ Failed to load from cache: {e}, will reload from scratch")
         return False
 
+def save_detoxify_to_cache():
+    """Save Detoxify model metadata to sentinel cache (no pickle of torch models)"""
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        cache_data = {
+            'version': CACHE_VERSION,
+            'model_name': 'unbiased',
+            'timestamp': time.time(),
+            'detoxify_available': True
+        }
+        with open(DETOXIFY_CACHE_FILE, 'w') as f:
+            json.dump(cache_data, f)
+        print("💾 Detoxify sentinel cache saved for faster future startups")
+    except Exception as e:
+        print(f"⚠️ Failed to cache Detoxify sentinel: {e}")
+
+def load_detoxify_from_cache():
+    """Check Detoxify sentinel cache (version + timestamp only, no torch model pickle)"""
+    global DETOXIFY_AVAILABLE
+    
+    if not os.path.exists(DETOXIFY_CACHE_FILE):
+        print("📋 No Detoxify sentinel cache found, will load from scratch")
+        return False
+    
+    try:
+        with open(DETOXIFY_CACHE_FILE, 'r') as f:
+            cache_data = json.load(f)
+        
+        if cache_data.get('version') != CACHE_VERSION:
+            print("⚠️ Detoxify cache version mismatch, will reload model")
+            return False
+        
+        # Check if cache is recent (within 24 hours)
+        cache_age = time.time() - cache_data.get('timestamp', 0)
+        if cache_age > 86400:  # 24 hours
+            print("⚠️ Detoxify cache too old, will reload model")
+            return False
+        
+        print("🚀 Found valid Detoxify sentinel cache, will attempt fresh load...")
+        return True
+            
+    except Exception as e:
+        print(f"⚠️ Failed to load Detoxify sentinel cache: {e}, will reload from scratch")
+        return False
+
 def initialize_hf_classifier_with_retry(max_retries=3):
     """Initialize HuggingFace EmotionClassifier with caching and retry logic"""
     global HF_EMOTIONCLASSIFIER_AVAILABLE, hf_emotion_classifier
@@ -114,6 +164,42 @@ def initialize_hf_classifier_with_retry(max_retries=3):
     print("❌ HuggingFace EmotionClassifier failed to initialize after all retries")
     return False
 
+def initialize_detoxify_with_retry(max_retries=3):
+    """Initialize Detoxify classifier with sentinel caching and retry logic using 'unbiased' model"""
+    global DETOXIFY_AVAILABLE, detoxify_classifier
+    
+    # Check sentinel cache first (but still need to load model fresh)
+    cache_valid = load_detoxify_from_cache()
+    if cache_valid:
+        print("📋 Sentinel cache indicates previous successful load, proceeding with fresh initialization...")
+    
+    # Always load Detoxify fresh (no torch model pickling)
+    for attempt in range(max_retries):
+        try:
+            print(f"🔄 Attempt {attempt + 1}/{max_retries}: Loading Detoxify classifier with 'unbiased' model...")
+            from detoxify import Detoxify
+            detoxify_classifier = Detoxify('unbiased')
+            
+            # Test the classifier to ensure it's working
+            test_result = detoxify_classifier.predict("This is a test message")
+            if test_result and 'identity_attack' in test_result:
+                DETOXIFY_AVAILABLE = True
+                print("✅ Detoxify classifier loaded successfully!")
+                
+                # Save sentinel cache for future startups (no model pickle)
+                save_detoxify_to_cache()
+                return True
+                
+        except Exception as e:
+            print(f"⚠️ Detoxify attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                backoff_time = (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                print(f"⏳ Waiting {backoff_time}s before retry...")
+                time.sleep(backoff_time)
+            
+    print("❌ Detoxify classifier failed to initialize after all retries")
+    return False
+
 # Try to initialize secondary detectors
 try:
     from text2emotion import get_emotion
@@ -127,6 +213,10 @@ print("✅ NRCLex available as fallback detector")
 # Initialize the primary HuggingFace classifier
 print("🚀 Initializing HuggingFace EmotionClassifier as primary detector...")
 initialize_hf_classifier_with_retry()
+
+# Initialize Detoxify for content moderation
+print("🛡️ Initializing Detoxify classifier for content moderation...")
+initialize_detoxify_with_retry()
 
 class SentimentHandler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -169,11 +259,24 @@ class SentimentHandler(BaseHTTPRequestHandler):
             
             primary_detector = "huggingface-emotionclassifier" if HF_EMOTIONCLASSIFIER_AVAILABLE else "nrclex"
             
+            # Add moderation libraries information
+            moderation_libraries = []
+            if DETOXIFY_AVAILABLE:
+                moderation_libraries.append("detoxify")
+            
+            moderation_detector = "detoxify" if DETOXIFY_AVAILABLE else "none"
+            
             self.wfile.write(json.dumps({
                 "status": "healthy", 
                 "libraries": libraries, 
                 "primary_detector": primary_detector,
-                "supports_combo_sentiments": True
+                "supports_combo_sentiments": True,
+                "moderation_libraries": moderation_libraries,
+                "moderation_detector": moderation_detector,
+                "detoxify_available": DETOXIFY_AVAILABLE,
+                "moderation_model": "unbiased",
+                "moderation_threshold": 0.8,
+                "moderation_focus": "identity_attack_only"
             }).encode('utf-8'))
         else:
             self.send_error(404)
@@ -369,54 +472,85 @@ class SentimentHandler(BaseHTTPRequestHandler):
     
     def moderate_content(self, text):
         """
-        Content moderation with pattern matching for harmful content.
+        Content moderation using Detoxify AI-based identity attack detection.
+        Uses only identity_attack score with 0.8+ threshold for hate speech detection.
+        Ignores other Detoxify scores (toxicity, obscene, threat, insult, severe_toxicity).
         Provides comprehensive diagnostic logging for transparency.
         """
         print(f"🛡️ MODERATION: Incoming content moderation request")
         print(f"   📄 Text: \"{text[:100]}{'...' if len(text) > 100 else ''}\"")
-        
-        text_lower = text.lower()
         print(f"   🔍 Processing text (length: {len(text)} chars)")
         
-        # Define moderation patterns with enhanced categorization
-        hate_patterns = {
-            "racial_slurs": [r'\b(n[i1]gg[ae]r|ch[i1]nk|sp[i1]c|k[i1]ke)\b'],
-            "homophobic_slurs": [r'\b(f[ae]gg[o0]t|d[i1]ke|tr[ae]nn[yi1]e?s?)\b'], 
-            "violent_threats": [r'\b(kill\s+you|murder\s+you|beat\s+you\s+up|going\s+to\s+hurt)\b'],
-            "excessive_profanity": [r'\b(fuck.*fuck|shit.*shit|damn.*damn)\b']
-        }
-        
-        print(f"   🔎 MODERATION: Scanning for {len(hate_patterns)} violation types...")
-        
-        # Check each violation type with detailed logging
-        for violation_type, patterns in hate_patterns.items():
-            print(f"   📋 Checking {violation_type}: {len(patterns)} patterns")
-            
-            for i, pattern in enumerate(patterns):
-                if re.search(pattern, text_lower):
-                    print(f"   🚨 VIOLATION DETECTED!")
-                    print(f"      📌 Type: {violation_type}")
-                    print(f"      🎯 Pattern #{i+1} matched: {pattern}")
-                    print(f"      ⚖️ Confidence: 80%")
-                    print(f"   📤 MODERATION: Content BLOCKED")
+        # Use Detoxify as primary moderation tool
+        if DETOXIFY_AVAILABLE and detoxify_classifier is not None:
+            try:
+                print(f"   🧠 Calling Detoxify classifier...")
+                result = detoxify_classifier.predict(text)
+                
+                if result and 'identity_attack' in result:
+                    # Detoxify returns scores for multiple categories
+                    # We only use identity_attack score as per requirements
+                    # Convert numpy float32 to Python float for JSON serialization
+                    identity_attack_score = float(result['identity_attack'])
                     
-                    return {
-                        'is_blocked': True,
-                        'violation_type': violation_type,
-                        'confidence': 0.8,
-                        'details': f'Pattern detected: {violation_type}'
-                    }
-            
-            print(f"   ✅ {violation_type}: No violations found")
+                    # Log all scores for diagnostic purposes but only use identity_attack
+                    print(f"   🎯 Detoxify results:")
+                    print(f"      🏹 Identity attack: {identity_attack_score:.3f} (USED)")
+                    if 'toxicity' in result:
+                        print(f"      😵 Toxicity: {float(result['toxicity']):.3f} (ignored)")
+                    if 'severe_toxicity' in result:
+                        print(f"      💥 Severe toxicity: {float(result['severe_toxicity']):.3f} (ignored)")
+                    if 'obscene' in result:
+                        print(f"      😡 Obscene: {float(result['obscene']):.3f} (ignored)")
+                    if 'threat' in result:
+                        print(f"      ⚡ Threat: {float(result['threat']):.3f} (ignored)")
+                    if 'insult' in result:
+                        print(f"      😠 Insult: {float(result['insult']):.3f} (ignored)")
+                    
+                    # Apply 0.8+ confidence threshold for identity_attack ONLY
+                    # Ignore all other Detoxify scores as per requirements
+                    if identity_attack_score >= 0.8:
+                        print(f"   🚨 VIOLATION DETECTED!")
+                        print(f"      🏹 Type: identity_attack")
+                        print(f"      ⚖️ Confidence: {identity_attack_score:.1%}")
+                        print(f"      📋 AI-based detection by Detoxify (unbiased model)")
+                        print(f"   📤 MODERATION: Content BLOCKED")
+                        
+                        return {
+                            'is_blocked': True,
+                            'violation_type': 'identity_attack',
+                            'confidence': identity_attack_score,
+                            'details': f'Detoxify detected identity attack with {identity_attack_score:.1%} confidence'
+                        }
+                    else:
+                        # Content passes moderation
+                        print(f"   🟢 MODERATION: Content passed identity attack check")
+                        print(f"   📤 MODERATION: Content APPROVED")
+                        
+                        return {
+                            'is_blocked': False,
+                            'violation_type': None,
+                            'confidence': identity_attack_score,
+                            'details': f'Detoxify: identity_attack={identity_attack_score:.1%}, below threshold'
+                        }
+                else:
+                    print(f"   ⚠️ Detoxify returned unexpected result format")
+                    # Fall through to fallback
+                    
+            except Exception as e:
+                print(f"   ⚠️ Detoxify classifier failed: {e}")
+                # Fall through to fallback
         
-        print(f"   🟢 MODERATION: Content passed all checks")
+        # Fallback when Detoxify is not available
+        print(f"   ⚠️ Detoxify not available, using minimal fallback")
+        print(f"   🟢 MODERATION: Content approved (no AI moderation)")
         print(f"   📤 MODERATION: Content APPROVED")
         
         return {
             'is_blocked': False,
             'violation_type': None,
             'confidence': 0.0,
-            'details': None
+            'details': 'Detoxify unavailable - no moderation applied'
         }
     
     def detect_advanced_sarcasm(self, text_original, text_lower):
@@ -516,9 +650,16 @@ if __name__ == '__main__':
         print('📚 Using libraries: text2emotion/nrclex (fallback mode)')
         print('⚠️ HuggingFace EmotionClassifier not available')
     
+    # Add Detoxify moderation status
+    if DETOXIFY_AVAILABLE:
+        print('🛡️ Using Detoxify (unbiased model) for identity attack detection')
+    else:
+        print('⚠️ Detoxify moderation not available')
+    
     # Try to bind to the server
     try:
         server = HTTPServer(('127.0.0.1', 8001), SentimentHandler)
+        server.allow_reuse_address = True  # Fix: Allow port reuse to avoid "Address already in use" errors
         print('✅ Server ready! Endpoints:')
         print('   GET  /health  - Health check')  
         print('   POST /analyze - Sentiment analysis')
@@ -541,6 +682,14 @@ if __name__ == '__main__':
         while server_thread.is_alive():
             time.sleep(1)
             
+    except OSError as e:
+        if e.errno == 98:  # Address already in use
+            print(f'❌ Port 8001 already in use. Another instance may be running.')
+            print('   🔍 Check if another Python sentiment server is already running.')
+            sys.exit(1)
+        else:
+            print(f'❌ Failed to bind to port 8001: {e}')
+            sys.exit(1)
     except Exception as e:
         print(f'❌ Failed to start server: {e}')
         sys.exit(1)

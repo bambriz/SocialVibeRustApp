@@ -7,6 +7,7 @@ use tower_http::cors::CorsLayer;
 use tracing::{info, warn, error, Level};
 use tracing_subscriber;
 use std::net::SocketAddr;
+use socket2::{Domain, Protocol, Socket, Type};
 use uuid::Uuid;
 use reqwest;
 use tokio::time::{sleep, Duration};
@@ -376,10 +377,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(app_state);
 
     // Bind to port 5000 on all interfaces as required by Replit
+    // ARCHITECT GUIDANCE: Set socket address reuse to avoid "Address already in use" errors
     let addr: SocketAddr = config.server_address().parse()?;
-    let listener = TcpListener::bind(&addr).await?;
     
-    info!("Server running on http://{}", config.server_address());
+    let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))?;
+    socket.set_reuse_address(true)?;
+    #[cfg(unix)]
+    socket.set_reuse_port(true)?;
+    socket.bind(&addr.into())?;
+    socket.listen(1024)?;
+    
+    let listener = match TcpListener::from_std(socket.into()) {
+        Ok(listener) => {
+            info!("✅ Server successfully bound to http://{} with address reuse enabled", config.server_address());
+            listener
+        }
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::AddrInUse {
+                error!("❌ STARTUP: Port {} is still in use after enabling address reuse. Another server instance may be running.", config.server_port);
+                error!("   🔍 Check if another Rust server is already bound to this port.");
+                error!("   💡 Ensure only one workflow instance is running at a time.");
+                
+                // ARCHITECT GUIDANCE: Clean error handling with proper exit instead of implicit retries
+                std::process::exit(1);
+            } else {
+                error!("❌ STARTUP: Failed to bind to {}: {}", config.server_address(), e);
+                return Err(e.into());
+            }
+        }
+    };
     
     // Start serving requests with graceful shutdown handling
     let server = axum::serve(listener, app);
