@@ -43,6 +43,17 @@ The application implements a **subprocess-managed content processing system** wi
 - **Persistent Caching**: HuggingFace model caching dramatically reduces startup time on subsequent launches
 - **Real-time Processing**: Content is analyzed before storage to provide immediate feedback
 
+### Emotion Processing Architecture
+The platform implements **sophisticated emotion detection** with a streamlined architecture for categorizing user sentiment.
+
+**Key architectural decisions:**
+- **Standalone Emotion Categories**: Each emotion (joy, sad, angry, fear, disgust, surprise, confused, neutral, sarcastic, affectionate) is treated as an independent category with distinct visual representation
+- **Single-Color Design**: Each emotion has its own dedicated color (#fbbf24 for joy, #7c3aed for sarcastic, #ec4899 for affectionate, etc.) eliminating gradient complexity
+- **Python-Rust Integration**: Python sentiment analysis returns raw emotion data, with Rust backend parsing and normalizing sarcastic+X and affectionate+X patterns into standalone "sarcastic" and "affectionate" categories
+- **Simplified Frontend Processing**: Emotion display logic treats all sentiments uniformly without special combo handling, using single colors and emoji representations
+- **HuggingFace EmotionClassifier**: Primary sentiment detection using pre-trained models with pattern-based detection for sarcasm and affection
+- **Emotion Migration System**: Automatic migration of legacy combo emotions to standalone categories during startup
+
 ### Data Management
 The application is designed with **flexible data storage** in mind, currently structured for SQLite but architectured to support PostgreSQL migration.
 
