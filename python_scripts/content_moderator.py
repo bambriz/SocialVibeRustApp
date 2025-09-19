@@ -92,7 +92,7 @@ class ContentModerator:
                     # Categories for toxicity tagging (threshold ≥ 0.5)
                     toxicity_categories = ['toxicity', 'severe_toxicity', 'obscene', 'threat', 'insult']
                     toxicity_tags = []
-                    toxicity_thresholds = {'toxicity': 0.76, 'severe_toxicity': 0.6, 'obscene': 0.95, 'threat': 0.77, 'insult': 0.78}
+                    toxicity_thresholds = {'toxicity': 0.62, 'severe_toxicity': 0.5, 'obscene': 0.8, 'threat': 0.6, 'insult': 0.5}
                     for category in toxicity_categories:
                         if category in all_scores:
                             score = all_scores[category]
