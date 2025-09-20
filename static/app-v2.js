@@ -589,7 +589,11 @@ async function showUserHome() {
     const previousView = currentView;
     currentView = 'user_home';
     document.getElementById('feedTitle').textContent = `My Posts (${currentUser.username})`;
-    document.getElementById('feedControls').style.display = 'none'; // Hide filters for user posts
+    // Hide vibe check and content filters for user posts
+    const feedControlsContainer = document.querySelector('.feed-controls-container');
+    if (feedControlsContainer) {
+        feedControlsContainer.style.display = 'none';
+    }
     
     // Check if we're switching views and have cached data
     if (previousView !== currentView) {
@@ -617,8 +621,12 @@ async function showUserHome() {
 async function showMainFeed() {
     const previousView = currentView;
     currentView = 'feed';
-    document.getElementById('feedTitle').textContent = 'Vibe Check';
-    document.getElementById('feedControls').style.display = 'block'; // Show filters
+    document.getElementById('feedTitle').textContent = 'Social Pulse Feed';
+    // Show vibe check and content filters for main feed
+    const feedControlsContainer = document.querySelector('.feed-controls-container');
+    if (feedControlsContainer) {
+        feedControlsContainer.style.display = 'block';
+    }
     
     // Check if we're switching views and have cached data
     if (previousView !== currentView) {
