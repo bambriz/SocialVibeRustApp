@@ -84,7 +84,7 @@
             </div>
         </div>
 
-        <!-- Post Creation & Feed Controls Area -->
+        <!-- Post Creation Area -->
         <div class="post-creator collapsed" id="postCreator">
             <div class="creator-toggle" onclick="togglePostCreator()">
                 <h3>💭 Share your thoughts...</h3>
@@ -105,57 +105,62 @@
                         </div>
                     </form>
                 </div>
-                
-                <!-- Vibe Check & Content Filters -->
-                <div class="feed-controls-container">
-                    <div class="vibe-check-section">
-                        <h3>Vibe Check</h3>
-                        <div class="feed-controls" id="feedControls">
-                            <button class="filter-btn active" data-filter="all" onclick="filterFeed('all', this)">All Posts</button>
-                            <button class="filter-btn" data-filter="joy" onclick="filterFeed('joy', this)">😊 Happy</button>
-                            <button class="filter-btn" data-filter="neutral" onclick="filterFeed('neutral', this)">😐 Neutral</button>
-                            <button class="filter-btn" data-filter="affection" onclick="filterFeed('affection', this)">💕 Affectionate</button>
-                            <button class="filter-btn" data-filter="sad" onclick="filterFeed('sad', this)">😢 Sad</button>
-                            <button class="filter-btn" data-filter="angry" onclick="filterFeed('angry', this)">😠 Angry</button>
-                            <button class="filter-btn" data-filter="disgust" onclick="filterFeed('disgust', this)">🤢 Disgust</button>
-                            <button class="filter-btn" data-filter="fear" onclick="filterFeed('fear', this)">😨 Fear</button>
-                            <button class="filter-btn" data-filter="surprise" onclick="filterFeed('surprise', this)">😲 Surprise</button>
-                            <button class="filter-btn" data-filter="confused" onclick="filterFeed('confused', this)">🤔 Confused</button>
-                            <button class="filter-btn" data-filter="sarcastic" onclick="filterFeed('sarcastic', this)">😏 Sarcastic</button>
-                        </div>
+            </div>
+        </div>
+
+        <!-- Vibe Check & Content Filters Area -->
+        <div class="vibe-check-component collapsed" id="vibeCheckComponent">
+            <div class="vibe-toggle" onclick="toggleVibeCheck()">
+                <h3>🌊 Vibe Check & Filters...</h3>
+            </div>
+            <div class="vibe-content" onclick="event.stopPropagation()">
+                <div class="vibe-check-section">
+                    <h3>Vibe Check</h3>
+                    <div class="feed-controls" id="feedControls">
+                        <button class="filter-btn active" data-filter="all" onclick="filterFeed('all', this)">All Posts</button>
+                        <button class="filter-btn" data-filter="joy" onclick="filterFeed('joy', this)">😊 Happy</button>
+                        <button class="filter-btn" data-filter="neutral" onclick="filterFeed('neutral', this)">😐 Neutral</button>
+                        <button class="filter-btn" data-filter="affection" onclick="filterFeed('affection', this)">💕 Affectionate</button>
+                        <button class="filter-btn" data-filter="sad" onclick="filterFeed('sad', this)">😢 Sad</button>
+                        <button class="filter-btn" data-filter="angry" onclick="filterFeed('angry', this)">😠 Angry</button>
+                        <button class="filter-btn" data-filter="disgust" onclick="filterFeed('disgust', this)">🤢 Disgust</button>
+                        <button class="filter-btn" data-filter="fear" onclick="filterFeed('fear', this)">😨 Fear</button>
+                        <button class="filter-btn" data-filter="surprise" onclick="filterFeed('surprise', this)">😲 Surprise</button>
+                        <button class="filter-btn" data-filter="confused" onclick="filterFeed('confused', this)">🤔 Confused</button>
+                        <button class="filter-btn" data-filter="sarcastic" onclick="filterFeed('sarcastic', this)">😏 Sarcastic</button>
                     </div>
-                    
-                    <!-- Content Filter Section -->
-                    <div class="content-filters">
-                        <h3>Content Filters</h3>
-                        <p class="filter-description">Uncheck to hide posts with these content flags:</p>
-                        <div class="toxicity-filters">
-                            <label class="filter-checkbox">
-                                <input type="checkbox" id="filter-toxicity" checked onclick="applyContentFilters()">
-                                <span class="checkmark"></span>
-                                💩 Crude
-                            </label>
-                            <label class="filter-checkbox">
-                                <input type="checkbox" id="filter-severe_toxicity" checked onclick="applyContentFilters()">
-                                <span class="checkmark"></span>
-                                ☣️ Toxic
-                            </label>
-                            <label class="filter-checkbox">
-                                <input type="checkbox" id="filter-obscene" checked onclick="applyContentFilters()">
-                                <span class="checkmark"></span>
-                                🤬 Obscene
-                            </label>
-                            <label class="filter-checkbox">
-                                <input type="checkbox" id="filter-threat" checked onclick="applyContentFilters()">
-                                <span class="checkmark"></span>
-                                ⚡ Threatening
-                            </label>
-                            <label class="filter-checkbox">
-                                <input type="checkbox" id="filter-insult" checked onclick="applyContentFilters()">
-                                <span class="checkmark"></span>
-                                🖕 Insulting
-                            </label>
-                        </div>
+                </div>
+                
+                <!-- Content Filter Section -->
+                <div class="content-filters">
+                    <h3>Content Filters</h3>
+                    <p class="filter-description">Uncheck to hide posts with these content flags:</p>
+                    <div class="toxicity-filters">
+                        <label class="filter-checkbox">
+                            <input type="checkbox" id="filter-toxicity" checked onclick="applyContentFilters()">
+                            <span class="checkmark"></span>
+                            💩 Crude
+                        </label>
+                        <label class="filter-checkbox">
+                            <input type="checkbox" id="filter-severe_toxicity" checked onclick="applyContentFilters()">
+                            <span class="checkmark"></span>
+                            ☣️ Toxic
+                        </label>
+                        <label class="filter-checkbox">
+                            <input type="checkbox" id="filter-obscene" checked onclick="applyContentFilters()">
+                            <span class="checkmark"></span>
+                            🤬 Obscene
+                        </label>
+                        <label class="filter-checkbox">
+                            <input type="checkbox" id="filter-threat" checked onclick="applyContentFilters()">
+                            <span class="checkmark"></span>
+                            ⚡ Threatening
+                        </label>
+                        <label class="filter-checkbox">
+                            <input type="checkbox" id="filter-insult" checked onclick="applyContentFilters()">
+                            <span class="checkmark"></span>
+                            🖕 Insulting
+                        </label>
                     </div>
                 </div>
             </div>
