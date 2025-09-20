@@ -499,6 +499,86 @@ body {
     display: none;
 }
 
+/* === VOTING SYSTEM STYLES === */
+
+/* Make tags clickable */
+.votable-tag {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    position: relative;
+}
+
+.votable-tag:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.votable-tag:active {
+    transform: translateY(0);
+}
+
+/* Voting states */
+.votable-tag.voted {
+    font-weight: 600;
+    border-width: 2px !important;
+}
+
+.votable-tag.upvoted {
+    background: rgba(34, 197, 94, 0.2) !important;
+    border-color: rgb(34, 197, 94) !important;
+    color: rgb(34, 197, 94) !important;
+}
+
+.votable-tag.downvoted {
+    background: rgba(239, 68, 68, 0.2) !important;
+    border-color: rgb(239, 68, 68) !important;
+    color: rgb(239, 68, 68) !important;
+}
+
+/* Emotion badge voting styles */
+.sentiment-badge.votable-tag {
+    transition: all 0.2s ease;
+}
+
+.sentiment-badge.votable-tag:hover {
+    transform: scale(1.05);
+}
+
+/* Content tag voting styles */
+.toxicity-tag.votable-tag {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.toxicity-tag.votable-tag:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.2);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Mobile touch-friendly voting */
+@media (max-width: 768px) {
+    .votable-tag {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+        min-height: 2.5rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .votable-tag:hover {
+        transform: none; /* Disable hover effects on mobile */
+    }
+    
+    .votable-tag:active {
+        transform: scale(0.95);
+        filter: brightness(0.9);
+    }
+}
+
 /* Sentiment Colors */
 .sentiment-joy { background: linear-gradient(135deg, #22d3ee, #67e8f9); }
 .sentiment-sad { background: linear-gradient(135deg, #1e40af, #3b82f6); }

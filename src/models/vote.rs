@@ -23,7 +23,7 @@ pub struct Vote {
 }
 
 /// Request to cast a vote on emotion or content tags
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct CreateVoteRequest {
     pub target_id: Uuid,
     pub target_type: String, // "post" or "comment"

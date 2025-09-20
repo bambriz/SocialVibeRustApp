@@ -357,6 +357,11 @@ async function loadPosts(reset = true) {
                 posts = [...posts, ...newPosts];
             }
             
+            // Load vote data for new posts
+            if (newPosts.length > 0) {
+                await loadVoteDataForPosts(newPosts);
+            }
+            
             // Update pagination state
             paginationState.hasMore = data.has_more !== false && newPosts.length === paginationState.limit;
             paginationState.offset += newPosts.length;
@@ -405,11 +410,12 @@ function renderPosts(postsToRender, replace = true) {
         
         // Get toxicity tags for this post
         const toxicityTags = getToxicityTags(post);
-        const toxicityTagsHTML = renderToxicityTags(toxicityTags);
+        const toxicityTagsHTML = renderToxicityTags(toxicityTags, post.id);
         
-        // Show delete controls only for posts owned by current user
+        // Show delete controls only for posts owned by current user AND only on "My posts" page
         const isOwner = currentUser && post.author_id === currentUser.id;
-        const deleteControlsHTML = isOwner ? `
+        const isMyPostsPage = currentView === 'user_home';
+        const deleteControlsHTML = (isOwner && isMyPostsPage) ? `
             <div class="delete-controls">
                 <input type="checkbox" class="delete-checkbox" data-type="post" data-id="${post.id}" 
                        onchange="toggleDeleteControls()">
@@ -426,7 +432,7 @@ function renderPosts(postsToRender, replace = true) {
                     </div>
                     <div class="post-header-right">
                         <div class="post-badges">
-                            ${sentimentLabel ? `<div class="sentiment-badge ${sentimentClass}">${sentimentLabel}</div>` : ''}
+                            ${sentimentLabel ? renderVotableEmotionTag(post, sentimentClass, sentimentLabel) : ''}
                         </div>
                         ${deleteControlsHTML}
                     </div>
@@ -596,16 +602,14 @@ function getToxicityTags(post) {
     });
 }
 
-// Function to render toxicity tags HTML
-function renderToxicityTags(toxicityTags) {
+// Function to render toxicity tags HTML with voting
+function renderToxicityTags(toxicityTags, postId) {
     if (toxicityTags.length === 0) {
         return '';
     }
     
     const tagsHTML = toxicityTags.map(tag => 
-        `<span class="toxicity-tag" style="background-color: ${tag.color}20; border: 1px solid ${tag.color}60; color: ${tag.color}">
-            ${tag.displayText}
-        </span>`
+        renderVotableContentTag(postId, tag)
     ).join('');
     
     return `<div class="toxicity-tags-container">${tagsHTML}</div>`;
@@ -655,6 +659,242 @@ function getEmojiFromColor(color) {
     };
     
     return colorToEmoji[color] || '😐';
+}
+
+// === VOTING SYSTEM ===
+
+// Store vote data for each post
+const voteData = new Map(); // postId -> { emotionVotes: [], contentVotes: [] }
+const userVotes = new Map(); // postId -> { voteType_tag -> isUpvote }
+
+// Render votable emotion tag (for sentiment badges)
+function renderVotableEmotionTag(post, sentimentClass, sentimentLabel) {
+    // Extract emotion tag from sentiment class
+    const emotionTag = sentimentClass.replace('sentiment-', '');
+    const voteKey = `emotion_${emotionTag}`;
+    const userVote = getUserVote(post.id, voteKey);
+    const voteCount = getVoteCount(post.id, 'emotion', emotionTag);
+    const voteCountDisplay = voteCount > 0 ? ` ${formatVoteCount(voteCount)}` : '';
+    
+    const votedClass = userVote !== null ? 'voted' : '';
+    const upvoteClass = userVote === true ? 'upvoted' : '';
+    const downvoteClass = userVote === false ? 'downvoted' : '';
+    
+    return `
+        <div class="sentiment-badge ${sentimentClass} votable-tag ${votedClass} ${upvoteClass} ${downvoteClass}" 
+             onclick="voteOnTag('${post.id}', 'post', 'emotion', '${emotionTag}', true)"
+             oncontextmenu="voteOnTag('${post.id}', 'post', 'emotion', '${emotionTag}', false); return false;"
+             title="Left click to agree, right click to disagree. Click again to remove vote.">
+            ${sentimentLabel}${voteCountDisplay}
+        </div>
+    `;
+}
+
+// Render votable content tag (for toxicity tags)
+function renderVotableContentTag(postId, tag) {
+    const voteKey = `content_filter_${tag.tag}`;
+    const userVote = getUserVote(postId, voteKey);
+    const voteCount = getVoteCount(postId, 'content_filter', tag.tag);
+    const voteCountDisplay = voteCount > 0 ? ` ${formatVoteCount(voteCount)}` : '';
+    
+    const votedClass = userVote !== null ? 'voted' : '';
+    const upvoteClass = userVote === true ? 'upvoted' : '';
+    const downvoteClass = userVote === false ? 'downvoted' : '';
+    
+    return `
+        <span class="toxicity-tag votable-tag ${votedClass} ${upvoteClass} ${downvoteClass}" 
+              style="background-color: ${tag.color}20; border: 1px solid ${tag.color}60; color: ${tag.color}"
+              onclick="voteOnTag('${postId}', 'post', 'content_filter', '${tag.tag}', true)"
+              oncontextmenu="voteOnTag('${postId}', 'post', 'content_filter', '${tag.tag}', false); return false;"
+              title="Left click to agree, right click to disagree. Click again to remove vote.">
+            ${tag.displayText}${voteCountDisplay}
+        </span>
+    `;
+}
+
+// Vote on a tag (emotion or content)
+async function voteOnTag(targetId, targetType, voteType, tag, isUpvote) {
+    if (!authToken) {
+        showToast('Please log in to vote', 'error');
+        return;
+    }
+    
+    try {
+        const voteKey = `${voteType}_${tag}`;
+        const currentVote = getUserVote(targetId, voteKey);
+        
+        // If clicking the same vote type, remove the vote (toggle off)
+        if (currentVote === isUpvote) {
+            await removeVote(targetId, targetType, voteType, tag);
+            setUserVote(targetId, voteKey, null);
+        } else {
+            // Cast or update vote
+            const response = await fetch('/api/vote', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({
+                    target_id: targetId,
+                    target_type: targetType,
+                    vote_type: voteType,
+                    tag: tag,
+                    is_upvote: isUpvote
+                })
+            });
+            
+            if (response.ok) {
+                const voteSummary = await response.json();
+                setUserVote(targetId, voteKey, isUpvote);
+                updateVoteData(targetId, voteSummary);
+                refreshPostVoting(targetId);
+            } else {
+                throw new Error('Failed to cast vote');
+            }
+        }
+    } catch (error) {
+        console.error('Vote error:', error);
+        showToast('Failed to vote. Please try again.', 'error');
+    }
+}
+
+// Remove a vote
+async function removeVote(targetId, targetType, voteType, tag) {
+    const response = await fetch(`/api/vote/${targetId}/${targetType}/${voteType}/${tag}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${authToken}`
+        }
+    });
+    
+    if (response.ok) {
+        const voteSummary = await response.json();
+        updateVoteData(targetId, voteSummary);
+        refreshPostVoting(targetId);
+    } else {
+        throw new Error('Failed to remove vote');
+    }
+}
+
+// Get user's vote on a specific tag
+function getUserVote(targetId, voteKey) {
+    const postVotes = userVotes.get(targetId) || {};
+    return postVotes[voteKey] !== undefined ? postVotes[voteKey] : null;
+}
+
+// Set user's vote on a specific tag
+function setUserVote(targetId, voteKey, vote) {
+    if (!userVotes.has(targetId)) {
+        userVotes.set(targetId, {});
+    }
+    if (vote === null) {
+        delete userVotes.get(targetId)[voteKey];
+    } else {
+        userVotes.get(targetId)[voteKey] = vote;
+    }
+}
+
+// Get vote count for a tag
+function getVoteCount(targetId, voteType, tag) {
+    const data = voteData.get(targetId);
+    if (!data) return 0;
+    
+    const votes = voteType === 'emotion' ? data.emotion_votes : data.content_filter_votes;
+    const tagVote = votes.find(v => v.tag === tag);
+    return tagVote ? tagVote.total_votes : 0;
+}
+
+// Update vote data from server response
+function updateVoteData(targetId, voteSummary) {
+    voteData.set(targetId, voteSummary);
+}
+
+// Format vote count display
+function formatVoteCount(count) {
+    if (count >= 1000000) {
+        return `${(count / 1000000).toFixed(1)}M`.replace('.0M', 'M');
+    } else if (count >= 1000) {
+        return `${(count / 1000).toFixed(1)}k`.replace('.0k', 'k');
+    }
+    return count.toString();
+}
+
+// Refresh voting display for a post
+function refreshPostVoting(targetId) {
+    // Find and update the post's voting elements
+    const postElement = document.querySelector(`[data-post-id="${targetId}"]`);
+    if (postElement) {
+        // Force re-render of the post to update vote counts
+        loadPosts(true); // Reload posts to refresh vote counts
+    }
+}
+
+// Load vote data for posts when they're displayed
+async function loadVoteDataForPosts(posts) {
+    if (!authToken) return;
+    
+    try {
+        for (const post of posts) {
+            // Load vote summary for each post
+            const response = await fetch(`/api/vote/${post.id}/post`, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+            
+            if (response.ok) {
+                const voteSummary = await response.json();
+                updateVoteData(post.id, voteSummary);
+                
+                // Load user's votes for emotion and content tags
+                await loadUserVotesForPost(post);
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to load vote data:', error);
+    }
+}
+
+// Load user's specific votes for a post
+async function loadUserVotesForPost(post) {
+    try {
+        // Load user votes for emotion tags
+        if (post.sentiment_colors && post.sentiment_colors.length > 0) {
+            const sentimentClass = getSentimentClass(post);
+            const emotionTag = sentimentClass.replace('sentiment-', '');
+            
+            const emotionResponse = await fetch(`/api/vote/user/${post.id}/post/emotion/${emotionTag}`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            
+            if (emotionResponse.ok) {
+                const userVote = await emotionResponse.json();
+                if (userVote) {
+                    setUserVote(post.id, `emotion_${emotionTag}`, userVote.is_upvote);
+                }
+            }
+        }
+        
+        // Load user votes for content tags
+        if (post.toxicity_tags && post.toxicity_tags.length > 0) {
+            for (const tag of post.toxicity_tags) {
+                const normalized = tag.toLowerCase().replace(/\s+/g, '_');
+                const contentResponse = await fetch(`/api/vote/user/${post.id}/post/content_filter/${normalized}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (contentResponse.ok) {
+                    const userVote = await contentResponse.json();
+                    if (userVote) {
+                        setUserVote(post.id, `content_filter_${normalized}`, userVote.is_upvote);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to load user votes for post:', post.id, error);
+    }
 }
 
 // Enhanced preview with both sentiment and toxicity
@@ -1064,9 +1304,10 @@ function renderComments(postId, comments) {
         const sentimentEmoji = getCommentSentimentEmoji(comment);
         const sentimentStyle = getCommentSentimentStyle(comment);
         
-        // Show delete controls only for comments owned by current user
+        // Show delete controls only for comments owned by current user AND only on "My posts" page
         const isOwner = currentUser && comment.user_id === currentUser.id;
-        const deleteControlsHTML = isOwner ? `
+        const isMyPostsPage = currentView === 'user_home';
+        const deleteControlsHTML = (isOwner && isMyPostsPage) ? `
             <div class="delete-controls comment-delete-controls">
                 <input type="checkbox" class="delete-checkbox" data-type="comment" data-id="${comment.id}" 
                        onchange="toggleDeleteControls()">
