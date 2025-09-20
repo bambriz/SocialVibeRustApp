@@ -1059,9 +1059,10 @@ function renderComments(postId, comments) {
         const author = commentData.author;
         const timeAgo = formatTimeAgo(comment.created_at);
         
-        // Get sentiment styling
+        // Get sentiment styling (same as posts)
         const sentimentClass = getCommentSentimentClass(comment);
         const sentimentEmoji = getCommentSentimentEmoji(comment);
+        const sentimentStyle = getCommentSentimentStyle(comment);
         
         // Show delete controls only for comments owned by current user
         const isOwner = currentUser && comment.user_id === currentUser.id;
@@ -1074,7 +1075,7 @@ function renderComments(postId, comments) {
         ` : '';
         
         return `
-            <div class="comment ${sentimentClass}" data-comment-id="${comment.id}">
+            <div class="comment ${sentimentClass}" data-comment-id="${comment.id}" style="${sentimentStyle}">
                 <div class="comment-header">
                     <div class="comment-header-left">
                         <span class="comment-author">${escapeHtml(author?.username || 'Anonymous')}</span>
@@ -1113,48 +1114,44 @@ function renderComments(postId, comments) {
     commentsList.innerHTML = commentsHTML;
 }
 
-// Get comment sentiment class for styling
+// Get comment sentiment class for styling (same as posts)
 function getCommentSentimentClass(comment) {
-    if (!comment.sentiment_analysis) return '';
+    if (!comment.sentiment_type) return '';
     
-    try {
-        const sentiments = JSON.parse(comment.sentiment_analysis);
-        if (Array.isArray(sentiments) && sentiments.length > 0) {
-            const primarySentiment = sentiments[0];
-            return `sentiment-${primarySentiment.toLowerCase()}`;
-        }
-    } catch (e) {
-        console.warn('Failed to parse comment sentiment:', e);
-    }
-    return '';
+    // Use the same sentiment class mapping as posts
+    return `sentiment-${comment.sentiment_type.toLowerCase()}`;
 }
 
-// Get comment sentiment emoji
+// Get comment sentiment emoji (same as posts)
 function getCommentSentimentEmoji(comment) {
-    if (!comment.sentiment_analysis) return '';
+    if (!comment.sentiment_type) return '';
     
-    try {
-        const sentiments = JSON.parse(comment.sentiment_analysis);
-        if (Array.isArray(sentiments) && sentiments.length > 0) {
-            const primarySentiment = sentiments[0];
-            const emojiMap = {
-                'joy': '😊',
-                'sad': '😢', 
-                'angry': '😠',
-                'fear': '😨',
-                'surprise': '😲',
-                'disgust': '🤢',
-                'confused': '😕',
-                'sarcastic': '😏',
-                'affectionate': '🥰',
-                'neutral': '😐'
-            };
-            return emojiMap[primarySentiment.toLowerCase()] || '';
-        }
-    } catch (e) {
-        console.warn('Failed to parse comment sentiment:', e);
+    const emojiMap = {
+        'joy': '😊',
+        'happy': '😊',  // Alternative mapping
+        'sad': '😢', 
+        'angry': '😠',
+        'fear': '😨',
+        'surprise': '😲',
+        'disgust': '🤢',
+        'confused': '😕',
+        'sarcastic': '😏',
+        'affectionate': '🥰',
+        'affection': '🥰',  // Alternative mapping
+        'neutral': '😐'
+    };
+    return emojiMap[comment.sentiment_type.toLowerCase()] || '';
+}
+
+// Get comment sentiment style (same as posts)
+function getCommentSentimentStyle(comment) {
+    if (!comment.sentiment_colors || comment.sentiment_colors.length === 0) {
+        return '';
     }
-    return '';
+    
+    // Use single sentiment color (first color if multiple exist)
+    const color = comment.sentiment_colors[0];
+    return `border-left: 4px solid ${color}; background: ${color}11;`;
 }
 
 // Render emotion voting buttons (placeholder for now)
@@ -1174,9 +1171,10 @@ function renderReplies(replies) {
         const timeAgo = formatTimeAgo(reply.created_at);
         const sentimentClass = getCommentSentimentClass(reply);
         const sentimentEmoji = getCommentSentimentEmoji(reply);
+        const sentimentStyle = getCommentSentimentStyle(reply);
         
         return `
-            <div class="reply ${sentimentClass}" data-comment-id="${reply.id}">
+            <div class="reply ${sentimentClass}" data-comment-id="${reply.id}" style="${sentimentStyle}">
                 <div class="comment-header">
                     <span class="comment-author">${escapeHtml(author?.username || 'Anonymous')}</span>
                     <span class="comment-time">${timeAgo}</span>
