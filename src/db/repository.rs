@@ -38,6 +38,8 @@ pub trait CommentRepository: Send + Sync {
     async fn update_comment(&self, comment: &Comment) -> Result<Comment>;
     async fn delete_comment(&self, id: Uuid) -> Result<()>;
     async fn get_max_sibling_count(&self, post_id: Uuid, parent_path: Option<&str>) -> Result<u32>;
+    async fn allocate_next_sibling_index(&self, post_id: Uuid, parent_id: Option<Uuid>) -> Result<i32>;
+    async fn increment_reply_count(&self, comment_id: Uuid) -> Result<()>;
 }
 
 #[async_trait]
@@ -990,6 +992,36 @@ impl CommentRepository for MockCommentRepository {
             .filter(|c| c.post_id == post_id && c.parent_id.is_none())
             .count();
         Ok(count as u32)
+    }
+
+    async fn allocate_next_sibling_index(&self, post_id: Uuid, parent_id: Option<Uuid>) -> Result<i32> {
+        let comments = self.comments.lock().unwrap();
+        let count = match parent_id {
+            None => {
+                // Root-level: Count top-level comments for this specific post
+                comments
+                    .values()
+                    .filter(|comment| comment.post_id == post_id && comment.parent_id.is_none())
+                    .count()
+            },
+            Some(parent_id) => {
+                // Reply: Count replies to this specific parent
+                comments
+                    .values()
+                    .filter(|comment| comment.parent_id == Some(parent_id))
+                    .count()
+            }
+        };
+        Ok((count + 1) as i32) // Return next available index (1-based)
+    }
+
+    async fn increment_reply_count(&self, parent_id: Uuid) -> Result<()> {
+        let mut comments = self.comments.lock().unwrap();
+        if let Some(parent_comment) = comments.get_mut(&parent_id) {
+            parent_comment.reply_count += 1;
+            parent_comment.updated_at = chrono::Utc::now();
+        }
+        Ok(())
     }
 }
 

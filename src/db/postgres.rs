@@ -438,6 +438,16 @@ impl CommentRepository for PostgresCommentRepository {
     async fn get_max_sibling_count(&self, _post_id: Uuid, _parent_path: Option<&str>) -> Result<u32> {
         Ok(0) // Simplified - will implement later
     }
+
+    async fn allocate_next_sibling_index(&self, _post_id: Uuid, _parent_id: Option<Uuid>) -> Result<i32> {
+        // Simplified - will implement later
+        Ok(1)
+    }
+
+    async fn increment_reply_count(&self, _comment_id: Uuid) -> Result<()> {
+        // Simplified - will implement later
+        Ok(())
+    }
 }
 
 // PostgreSQL Vote Repository - simplified implementation
