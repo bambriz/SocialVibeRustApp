@@ -6,6 +6,7 @@ HTTP server for sentiment analysis and content moderation using modular architec
 import json
 import sys
 import os
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Import our modular components
@@ -66,11 +67,15 @@ def main():
     global sentiment_analyzer, content_moderator
     
     print("🚀 Starting Social Pulse Python AI Server with modular architecture...")
+    start_time = time.time()
     print("📦 Loading sentiment analysis module...")
     sentiment_analyzer = SentimentAnalyzer()
     
     print("📦 Loading content moderation module...")
     content_moderator = ContentModerator()
+    
+    init_time = time.time() - start_time
+    print(f"⚡ Modules loaded in {init_time:.2f} seconds")
     
     # Start HTTP server
     port = int(os.environ.get('PYTHON_SERVER_PORT', 8001))

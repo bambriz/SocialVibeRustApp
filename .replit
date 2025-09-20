@@ -24,7 +24,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PYTHON_SERVER_MODE=disabled cargo run"
+args = "PYTHON_SERVER_MODE=subprocess cargo run"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
@@ -35,16 +35,16 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 33047
-externalPort = 3000
-
-[[ports]]
 localPort = 39847
 externalPort = 5000
 
 [[ports]]
 localPort = 40553
 externalPort = 4200
+
+[[ports]]
+localPort = 41305
+externalPort = 3000
 
 [[ports]]
 localPort = 43987

@@ -19,25 +19,28 @@ class SentimentAnalyzer:
         
         # Try to initialize secondary detectors with robust error handling
         try:
-            # Pre-download NLTK data to prevent text2emotion from failing
+            # Quick check if NLTK data exists, download only if missing
             import nltk
             import os
             nltk_data_dir = os.path.expanduser('~/nltk_data')
             os.makedirs(nltk_data_dir, exist_ok=True)
             
-            # Download required data with error handling
-            for package in ['stopwords', 'punkt', 'wordnet']:
+            # Only download missing packages to speed up startup
+            required_packages = ['stopwords', 'punkt', 'wordnet']
+            for package in required_packages:
                 try:
+                    # Quick check if package exists
+                    nltk.data.find(f'{package}')
+                except LookupError:
+                    print(f"📦 Downloading missing NLTK package: {package}")
                     nltk.download(package, quiet=True, force=False)
-                except Exception as pkg_error:
-                    print(f"⚠️ NLTK package {package} download failed: {pkg_error}")
             
             from text2emotion import get_emotion
             self.get_emotion = get_emotion
             self.text2emotion_available = True
             print("✅ text2emotion available as secondary detector")
         except Exception as e:
-            print(f"⚠️ text2emotion not available: {e}")
+            print(f"⚠️ text2emotion not available, using fallback: {e}")
             # Create fallback function for text2emotion
             self.get_emotion = self._fallback_emotion_detection
             self.text2emotion_available = False
@@ -48,7 +51,7 @@ class SentimentAnalyzer:
         print("🚀 Initializing HuggingFace EmotionClassifier as primary detector...")
         self.initialize_hf_classifier_with_retry()
     
-    def initialize_hf_classifier_with_retry(self, max_retries=3):
+    def initialize_hf_classifier_with_retry(self, max_retries=2):
         """Initialize HuggingFace EmotionClassifier with caching and retry logic"""
         
         # Try to load from cache first

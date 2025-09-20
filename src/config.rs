@@ -23,8 +23,8 @@ impl AppConfig {
         
         let python_server_mode = match python_mode.as_str() {
             "external" => PythonServerMode::External,
-            "subprocess" => PythonServerMode::Subprocess,
-            "disabled" | _ => PythonServerMode::Disabled, // Default to disabled mode
+            "disabled" => PythonServerMode::Disabled,
+            "subprocess" | _ => PythonServerMode::Subprocess, // Default to subprocess mode
         };
         
         Self {
