@@ -229,6 +229,7 @@ function logout() {
     currentUser = null;
     localStorage.removeItem('authToken');
     currentView = 'feed'; // Reset to main feed
+    clearOptimisticVoteState(); // Clear optimistic voting state on logout
     showGuestInterface();
     showToast('Logged out successfully', 'info');
 }
@@ -328,6 +329,7 @@ async function loadPosts(reset = true) {
         paginationState.offset = 0;
         paginationState.hasMore = true;
         posts = [];
+        clearOptimisticVoteState(); // Clear optimistic state when resetting posts
         // Show skeleton loading for initial load
         showSkeletonLoading(true);
     } else {
@@ -910,19 +912,85 @@ function getEmojiFromColor(color) {
 const voteData = new Map(); // postId -> { emotionVotes: [], contentVotes: [] }
 const userVotes = new Map(); // postId -> { voteType_tag -> isUpvote }
 
+// Optimistic voting state management
+const optimisticVoteState = new Map(); // postId -> { votes: { voteType: { tag: { count, agreed, baseline: { count, agreed }, pending, opSeq, abortController } } } }
+
+// Global operation sequence counter for handling rapid clicks
+let globalOpSeq = 0;
+
+// Clear optimistic voting state (call on logout, post refresh)
+function clearOptimisticVoteState() {
+    optimisticVoteState.clear();
+    globalOpSeq = 0;
+}
+
+// Clear optimistic state for a specific post (call when fresh vote data arrives)
+function clearOptimisticVoteStateForPost(postId) {
+    optimisticVoteState.delete(postId);
+}
+
+// Initialize optimistic state for a post
+function initOptimisticVoteState(postId) {
+    if (!optimisticVoteState.has(postId)) {
+        optimisticVoteState.set(postId, { votes: {} });
+    }
+}
+
+// Get optimistic vote state for a specific tag
+function getOptimisticState(postId, voteType, tag) {
+    const postState = optimisticVoteState.get(postId);
+    if (!postState || !postState.votes[voteType] || !postState.votes[voteType][tag]) {
+        return null;
+    }
+    return postState.votes[voteType][tag];
+}
+
+// Set optimistic vote state for a specific tag
+function setOptimisticState(postId, voteType, tag, state) {
+    initOptimisticVoteState(postId);
+    const postState = optimisticVoteState.get(postId);
+    
+    if (!postState.votes[voteType]) {
+        postState.votes[voteType] = {};
+    }
+    
+    postState.votes[voteType][tag] = state;
+}
+
+// Get current vote count (optimistic if available, otherwise baseline)
+function getCurrentVoteCount(postId, voteType, tag) {
+    const optimistic = getOptimisticState(postId, voteType, tag);
+    if (optimistic) {
+        return optimistic.count;
+    }
+    return getVoteCount(postId, voteType, tag);
+}
+
+// Get current user agreement state (optimistic if available, otherwise baseline)
+function getCurrentUserAgreement(postId, voteType, tag) {
+    const optimistic = getOptimisticState(postId, voteType, tag);
+    if (optimistic) {
+        return optimistic.agreed;
+    }
+    const voteKey = `${voteType}_${tag}`;
+    return getUserVote(postId, voteKey);
+}
+
 // Render votable emotion tag (for sentiment badges)
 function renderVotableEmotionTag(post, sentimentClass, sentimentLabel) {
     // Extract emotion tag from sentiment class
     const emotionTag = sentimentClass.replace('sentiment-', '');
-    const voteKey = `emotion_${emotionTag}`;
-    const userVote = getUserVote(post.id, voteKey);
-    const voteCount = getVoteCount(post.id, 'emotion', emotionTag);
+    const userVote = getCurrentUserAgreement(post.id, 'emotion', emotionTag);
+    const voteCount = getCurrentVoteCount(post.id, 'emotion', emotionTag);
     const voteCountDisplay = voteCount > 0 ? ` ${formatVoteCount(voteCount)}` : '';
     
+    // Check if there's a pending operation
+    const optimistic = getOptimisticState(post.id, 'emotion', emotionTag);
+    const pendingClass = optimistic && optimistic.pending ? 'pending' : '';
     const votedClass = userVote ? 'voted agreed' : '';
     
     return `
-        <div class="sentiment-badge ${sentimentClass} votable-tag ${votedClass}" 
+        <div class="sentiment-badge ${sentimentClass} votable-tag ${votedClass} ${pendingClass}" 
              onclick="voteOnTag('${post.id}', 'post', 'emotion', '${emotionTag}')"
              title="Click to agree this emotion matches the content. Click again to remove your agreement.">
             ${sentimentLabel}${voteCountDisplay}
@@ -932,15 +1000,17 @@ function renderVotableEmotionTag(post, sentimentClass, sentimentLabel) {
 
 // Render votable content tag (for toxicity tags)
 function renderVotableContentTag(postId, tag) {
-    const voteKey = `content_filter_${tag.tag}`;
-    const userVote = getUserVote(postId, voteKey);
-    const voteCount = getVoteCount(postId, 'content_filter', tag.tag);
+    const userVote = getCurrentUserAgreement(postId, 'content_filter', tag.tag);
+    const voteCount = getCurrentVoteCount(postId, 'content_filter', tag.tag);
     const voteCountDisplay = voteCount > 0 ? ` ${formatVoteCount(voteCount)}` : '';
     
+    // Check if there's a pending operation
+    const optimistic = getOptimisticState(postId, 'content_filter', tag.tag);
+    const pendingClass = optimistic && optimistic.pending ? 'pending' : '';
     const votedClass = userVote ? 'voted agreed' : '';
     
     return `
-        <span class="toxicity-tag votable-tag ${votedClass}" 
+        <span class="toxicity-tag votable-tag ${votedClass} ${pendingClass}" 
               style="background-color: ${tag.color}20; border: 1px solid ${tag.color}60; color: ${tag.color}"
               onclick="voteOnTag('${postId}', 'post', 'content_filter', '${tag.tag}')"
               title="Click to agree this content tag matches. Click again to remove your agreement.">
@@ -949,24 +1019,76 @@ function renderVotableContentTag(postId, tag) {
     `;
 }
 
-// Vote on a tag (emotion or content) - Simple agree/disagree toggle
+// Vote on a tag (emotion or content) - Optimistic UI with background sync
 async function voteOnTag(targetId, targetType, voteType, tag) {
     if (!authToken) {
         showToast('Please log in to vote', 'error');
         return;
     }
     
+    // Get current state
+    const currentAgreed = getCurrentUserAgreement(targetId, voteType, tag);
+    const currentCount = getCurrentVoteCount(targetId, voteType, tag);
+    const desiredAgreed = !currentAgreed;
+    
+    // Generate new operation sequence
+    const opSeq = ++globalOpSeq;
+    
+    // Get baseline state for network decision
+    const voteKey = `${voteType}_${tag}`;
+    const baselineAgreed = getUserVote(targetId, voteKey);
+    const baselineCount = getVoteCount(targetId, voteType, tag);
+    
+    // Apply optimistic update immediately with proper clamping
+    const newCount = Math.max(0, currentCount + (desiredAgreed ? 1 : -1));
+    
+    // Cancel any existing request for this tag
+    const existingState = getOptimisticState(targetId, voteType, tag);
+    if (existingState && existingState.abortController) {
+        existingState.abortController.abort();
+    }
+    
+    // Create new abort controller
+    const abortController = new AbortController();
+    
+    // Set optimistic state
+    setOptimisticState(targetId, voteType, tag, {
+        count: newCount,
+        agreed: desiredAgreed,
+        baseline: {
+            count: baselineCount,
+            agreed: baselineAgreed
+        },
+        pending: true,
+        opSeq: opSeq,
+        abortController: abortController
+    });
+    
+    // Update UI immediately
+    refreshPostVotingOptimistic(targetId);
+    
+    // Decide network action based on baseline vs desired
+    let networkAction = null;
+    if (baselineAgreed !== desiredAgreed) {
+        networkAction = desiredAgreed ? 'add' : 'remove';
+    }
+    
+    // If no network action needed, just mark as complete
+    if (!networkAction) {
+        const state = getOptimisticState(targetId, voteType, tag);
+        if (state && state.opSeq === opSeq) {
+            state.pending = false;
+            refreshPostVotingOptimistic(targetId);
+        }
+        return;
+    }
+    
+    // Execute network request in background
     try {
-        const voteKey = `${voteType}_${tag}`;
-        const currentVote = getUserVote(targetId, voteKey);
+        let response;
         
-        // If user already agreed, remove the vote (toggle off)
-        if (currentVote) {
-            await removeVote(targetId, targetType, voteType, tag);
-            setUserVote(targetId, voteKey, null);
-        } else {
-            // Cast agreement vote
-            const response = await fetch('/api/vote', {
+        if (networkAction === 'add') {
+            response = await fetch('/api/vote', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -977,41 +1099,112 @@ async function voteOnTag(targetId, targetType, voteType, tag) {
                     target_type: targetType,
                     vote_type: voteType,
                     tag: tag,
-                    is_upvote: true  // Always true since we only support agreement
-                })
+                    is_upvote: true
+                }),
+                signal: abortController.signal
             });
+        } else {
+            response = await fetch(`/api/vote/${targetId}/${targetType}/${voteType}/${tag}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                },
+                signal: abortController.signal
+            });
+        }
+        
+        if (response.ok) {
+            const voteSummary = await response.json();
             
-            if (response.ok) {
-                const voteSummary = await response.json();
-                setUserVote(targetId, voteKey, true);
+            // Check if this response is still relevant (not superseded by newer clicks)
+            const currentState = getOptimisticState(targetId, voteType, tag);
+            if (currentState && currentState.opSeq === opSeq) {
+                // Update baseline with server truth
+                setUserVote(targetId, voteKey, desiredAgreed);
                 updateVoteData(targetId, voteSummary);
-                refreshPostVoting(targetId);
-            } else {
-                throw new Error('Failed to cast vote');
+                
+                // Update optimistic state with server data
+                currentState.baseline.count = getVoteCount(targetId, voteType, tag);
+                currentState.baseline.agreed = desiredAgreed;
+                currentState.pending = false;
+                
+                refreshPostVotingOptimistic(targetId);
             }
+        } else {
+            throw new Error(`Failed to ${networkAction} vote`);
         }
     } catch (error) {
-        console.error('Vote error:', error);
-        showToast('Failed to vote. Please try again.', 'error');
+        // Check if request was aborted (superseded by newer click)
+        if (error.name === 'AbortError' || error.message.includes('abort')) {
+            return; // Ignore aborted requests, don't rollback
+        }
+        
+        // Check if this error is still relevant (not superseded by newer operation)
+        const currentState = getOptimisticState(targetId, voteType, tag);
+        if (currentState && currentState.opSeq === opSeq) {
+            // Rollback to baseline on network failure
+            currentState.count = Math.max(0, currentState.baseline.count); // Ensure count clamping
+            currentState.agreed = currentState.baseline.agreed;
+            currentState.pending = false;
+            
+            refreshPostVotingOptimistic(targetId);
+            showToast('Failed to save vote. Please try again.', 'error');
+            console.warn('Vote network error:', error);
+        }
     }
 }
 
-// Remove a vote
-async function removeVote(targetId, targetType, voteType, tag) {
-    const response = await fetch(`/api/vote/${targetId}/${targetType}/${voteType}/${tag}`, {
-        method: 'DELETE',
-        headers: {
-            'Authorization': `Bearer ${authToken}`
+// Optimistic UI refresh - updates voting display immediately without full reload
+function refreshPostVotingOptimistic(targetId) {
+    // Find the post element
+    const postElement = document.querySelector(`[data-post-id="${targetId}"]`);
+    if (!postElement) return;
+    
+    // Find and update sentiment badges
+    const sentimentBadges = postElement.querySelectorAll('.sentiment-badge.votable-tag');
+    sentimentBadges.forEach(badge => {
+        const onClick = badge.getAttribute('onclick');
+        if (onClick) {
+            // Extract tag from onclick attribute
+            const match = onClick.match(/voteOnTag\('[^']*',\s*'[^']*',\s*'emotion',\s*'([^']*)'\)/);
+            if (match) {
+                const emotionTag = match[1];
+                updateVotableElementOptimistic(badge, targetId, 'emotion', emotionTag);
+            }
         }
     });
     
-    if (response.ok) {
-        const voteSummary = await response.json();
-        updateVoteData(targetId, voteSummary);
-        refreshPostVoting(targetId);
-    } else {
-        throw new Error('Failed to remove vote');
-    }
+    // Find and update toxicity tags
+    const toxicityTags = postElement.querySelectorAll('.toxicity-tag.votable-tag');
+    toxicityTags.forEach(tag => {
+        const onClick = tag.getAttribute('onclick');
+        if (onClick) {
+            // Extract tag from onclick attribute
+            const match = onClick.match(/voteOnTag\('[^']*',\s*'[^']*',\s*'content_filter',\s*'([^']*)'\)/);
+            if (match) {
+                const contentTag = match[1];
+                updateVotableElementOptimistic(tag, targetId, 'content_filter', contentTag);
+            }
+        }
+    });
+}
+
+// Update a specific votable element with optimistic state
+function updateVotableElementOptimistic(element, targetId, voteType, tag) {
+    const userVote = getCurrentUserAgreement(targetId, voteType, tag);
+    const voteCount = Math.max(0, getCurrentVoteCount(targetId, voteType, tag)); // Ensure count clamping
+    const optimistic = getOptimisticState(targetId, voteType, tag);
+    
+    // Update classes
+    element.classList.toggle('voted', !!userVote);
+    element.classList.toggle('agreed', !!userVote);
+    element.classList.toggle('pending', optimistic && optimistic.pending);
+    
+    // Update vote count in text content
+    const currentText = element.textContent;
+    const baseText = currentText.replace(/\s+\d+[kM]?$/, ''); // Remove existing count
+    const voteCountDisplay = voteCount > 0 ? ` ${formatVoteCount(voteCount)}` : '';
+    element.textContent = baseText + voteCountDisplay;
 }
 
 // Get user's vote on a specific tag (simplified for agreement-only)
