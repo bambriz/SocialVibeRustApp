@@ -1399,6 +1399,7 @@ async function loadPosts(reset = true) {
             // ENHANCED: Load comments for each post to enable full caching
             console.log(`📦 POST_COMMENT_INTEGRATION: Loading comments for ${newPosts.length} posts`);
             await loadCommentsForPosts(newPosts);
+            console.log(`📦 POST_COMMENT_INTEGRATION: Comments attached to ${newPosts.filter(p => p._comments).length}/${newPosts.length} posts`);
             
             // Update pagination state from server truth
             paginationState.hasMore = serverHasMore;
@@ -2975,15 +2976,18 @@ function toggleComments(postId) {
     if (isHidden) {
         commentsSection.classList.remove('hidden');
         
-        // Try to get comments from the cached post object first
+        // UNIFIED CACHING: Use cached comments from post object first
         const cachedPost = posts.find(p => p.id === postId);
-        if (cachedPost && cachedPost._comments) {
-            console.log(`📦 ENHANCED_COMMENTS: Using cached comments from post object for ${postId}`);
+        if (cachedPost && cachedPost._comments !== undefined) {
+            console.log(`📦 ENHANCED_COMMENTS: Using cached comments from post object for ${postId} (${cachedPost._comments.length} comments)`);
             renderComments(postId, cachedPost._comments);
             loadedComments.add(postId);
+            
+            // Sync with separate comments cache to maintain consistency
+            commentsCache.set(postId, cachedPost._comments);
         } else if (!loadedComments.has(postId)) {
-            // Fall back to separate comment loading if not cached with post
-            console.log(`📦 ENHANCED_COMMENTS: Loading comments separately for ${postId}`);
+            // Fall back to separate comment loading only if absolutely needed
+            console.log(`📦 ENHANCED_COMMENTS: Loading comments separately for ${postId} - no cached comments on post`);
             loadComments(postId);
         }
     } else {
