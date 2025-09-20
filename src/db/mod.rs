@@ -1,4 +1,3 @@
-pub mod cosmos;
 pub mod repository;
 pub mod postgres;
 
@@ -16,8 +15,6 @@ pub struct DatabaseClient {
     pub post_repo: Arc<dyn PostRepository>, 
     pub comment_repo: Arc<dyn CommentRepository>,
     pub vote_repo: Arc<dyn VoteRepository>,
-    // TODO: Add Cosmos DB client when reintroduced
-    // pub cosmos_client: CosmosClient,
 }
 
 impl DatabaseClient {
@@ -39,7 +36,8 @@ impl DatabaseClient {
     }
 
     pub async fn health_check(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: Implement real health check when Cosmos is integrated
+        // Simple health check - confirms database client is initialized
+        // Note: Does not verify active connection - implement actual DB ping if needed
         Ok(())
     }
 }

@@ -59,7 +59,7 @@ pub trait VoteRepository: Send + Sync {
     async fn get_engagement_score(&self, target_id: Uuid, target_type: &str) -> Result<f64>;
 }
 
-// Mock implementations for development (before Cosmos DB integration)
+// In-memory mock implementations for development/testing
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
