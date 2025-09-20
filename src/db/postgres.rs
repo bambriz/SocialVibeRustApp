@@ -184,6 +184,38 @@ pub struct PostgresPostRepository {
 }
 
 #[async_trait]
+impl PostgresPostRepository {
+    // Helper function to parse sentiment_analysis JSON into Post fields
+    fn parse_sentiment_json(value: &Option<serde_json::Value>) -> (Option<f64>, Vec<String>, Option<String>) {
+        if let Some(json) = value {
+            let sentiment_score = json.get("sentiment_score").and_then(|v| v.as_f64());
+            let sentiment_colors = json.get("sentiment_colors")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            let sentiment_type = json.get("sentiment_type").and_then(|v| v.as_str().map(String::from));
+            (sentiment_score, sentiment_colors, sentiment_type)
+        } else {
+            (None, vec![], None)
+        }
+    }
+
+    // Helper function to parse moderation_result JSON into Post fields
+    fn parse_moderation_json(value: &Option<serde_json::Value>) -> (Vec<String>, Option<serde_json::Value>) {
+        if let Some(json) = value {
+            let toxicity_tags = json.get("toxicity_tags")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            let toxicity_scores = json.get("toxicity_scores").cloned();
+            (toxicity_tags, toxicity_scores)
+        } else {
+            (vec![], None)
+        }
+    }
+}
+
+#[async_trait]
 impl PostRepository for PostgresPostRepository {
     async fn create_post(&self, post: &Post) -> Result<Post> {
         let row = sqlx::query!(
@@ -197,8 +229,16 @@ impl PostRepository for PostgresPostRepository {
             post.author_id,
             post.content,
             post.title,
-            serde_json::to_value(&post).ok(),
-            serde_json::to_value(&post).ok(),
+            serde_json::to_value(serde_json::json!({
+                "sentiment_score": post.sentiment_score,
+                "sentiment_colors": post.sentiment_colors,
+                "sentiment_type": post.sentiment_type
+            })).ok(),
+            serde_json::to_value(serde_json::json!({
+                "toxicity_tags": post.toxicity_tags,
+                "toxicity_scores": post.toxicity_scores,
+                "is_blocked": post.is_blocked
+            })).ok(),
             post.is_blocked,
             0i32
         )
@@ -240,22 +280,27 @@ impl PostRepository for PostgresPostRepository {
         .await
         .map_err(|e| AppError::DatabaseError(format!("Failed to get post: {}", e)))?;
         
-        Ok(row.map(|r| Post {
-            id: r.id,
-            title: r.title.unwrap_or_default(),
-            content: r.content,
-            author_id: r.user_id,
-            author_username: r.username,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-            comment_count: 0, // Will be calculated separately
-            sentiment_score: None,
-            sentiment_colors: vec![],
-            sentiment_type: None,
-            popularity_score: 1.0,
-            is_blocked: r.is_flagged.unwrap_or(false),
-            toxicity_tags: vec![],
-            toxicity_scores: None,
+        Ok(row.map(|r| {
+            let (sentiment_score, sentiment_colors, sentiment_type) = Self::parse_sentiment_json(&r.sentiment_analysis);
+            let (toxicity_tags, toxicity_scores) = Self::parse_moderation_json(&r.moderation_result);
+            
+            Post {
+                id: r.id,
+                title: r.title.unwrap_or_default(),
+                content: r.content,
+                author_id: r.user_id,
+                author_username: r.username,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+                comment_count: 0, // Will be calculated separately
+                sentiment_score,
+                sentiment_colors,
+                sentiment_type,
+                popularity_score: 1.0,
+                is_blocked: r.is_flagged.unwrap_or(false),
+                toxicity_tags,
+                toxicity_scores,
+            }
         }))
     }
     
@@ -276,22 +321,27 @@ impl PostRepository for PostgresPostRepository {
         .await
         .map_err(|e| AppError::DatabaseError(format!("Failed to get posts: {}", e)))?;
         
-        Ok(rows.into_iter().map(|r| Post {
-            id: r.id,
-            title: r.title.unwrap_or_default(),
-            content: r.content,
-            author_id: r.user_id,
-            author_username: r.username,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-            comment_count: 0,
-            sentiment_score: None,
-            sentiment_colors: vec![],
-            sentiment_type: None,
-            popularity_score: 1.0,
-            is_blocked: r.is_flagged.unwrap_or(false),
-            toxicity_tags: vec![],
-            toxicity_scores: None,
+        Ok(rows.into_iter().map(|r| {
+            let (sentiment_score, sentiment_colors, sentiment_type) = Self::parse_sentiment_json(&r.sentiment_analysis);
+            let (toxicity_tags, toxicity_scores) = Self::parse_moderation_json(&r.moderation_result);
+            
+            Post {
+                id: r.id,
+                title: r.title.unwrap_or_default(),
+                content: r.content,
+                author_id: r.user_id,
+                author_username: r.username,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+                comment_count: 0,
+                sentiment_score,
+                sentiment_colors,
+                sentiment_type,
+                popularity_score: 1.0,
+                is_blocked: r.is_flagged.unwrap_or(false),
+                toxicity_tags,
+                toxicity_scores,
+            }
         }).collect())
     }
     
@@ -319,22 +369,27 @@ impl PostRepository for PostgresPostRepository {
         .await
         .map_err(|e| AppError::DatabaseError(format!("Failed to get user posts: {}", e)))?;
         
-        Ok(rows.into_iter().map(|r| Post {
-            id: r.id,
-            title: r.title.unwrap_or_default(),
-            content: r.content,
-            author_id: r.user_id,
-            author_username: r.username,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-            comment_count: 0,
-            sentiment_score: None,
-            sentiment_colors: vec![],
-            sentiment_type: None,
-            popularity_score: 1.0,
-            is_blocked: r.is_flagged.unwrap_or(false),
-            toxicity_tags: vec![],
-            toxicity_scores: None,
+        Ok(rows.into_iter().map(|r| {
+            let (sentiment_score, sentiment_colors, sentiment_type) = Self::parse_sentiment_json(&r.sentiment_analysis);
+            let (toxicity_tags, toxicity_scores) = Self::parse_moderation_json(&r.moderation_result);
+            
+            Post {
+                id: r.id,
+                title: r.title.unwrap_or_default(),
+                content: r.content,
+                author_id: r.user_id,
+                author_username: r.username,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+                comment_count: 0,
+                sentiment_score,
+                sentiment_colors,
+                sentiment_type,
+                popularity_score: 1.0,
+                is_blocked: r.is_flagged.unwrap_or(false),
+                toxicity_tags,
+                toxicity_scores,
+            }
         }).collect())
     }
     
