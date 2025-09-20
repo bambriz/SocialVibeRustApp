@@ -510,7 +510,7 @@ impl CommentRepository for PostgresCommentRepository {
                 )
                 .fetch_one(&mut *tx)
                 .await
-                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to lock parent and get metadata: {}", e)))?
+                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to lock parent and get metadata: {}", e)))?;
                 
                 // Use MAX to find highest sibling index under this parent
                 let result = sqlx::query!(

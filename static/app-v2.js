@@ -407,6 +407,16 @@ function renderPosts(postsToRender, replace = true) {
         const toxicityTags = getToxicityTags(post);
         const toxicityTagsHTML = renderToxicityTags(toxicityTags);
         
+        // Show delete controls only for posts owned by current user
+        const isOwner = currentUser && post.author_id === currentUser.id;
+        const deleteControlsHTML = isOwner ? `
+            <div class="delete-controls">
+                <input type="checkbox" class="delete-checkbox" data-type="post" data-id="${post.id}" 
+                       onchange="toggleDeleteControls()">
+                <button class="delete-icon" onclick="deletePost('${post.id}')" title="Delete Post">🗑️</button>
+            </div>
+        ` : '';
+        
         return `
             <article class="post-card" style="${backgroundStyle}">
                 <div class="post-header">
@@ -414,8 +424,11 @@ function renderPosts(postsToRender, replace = true) {
                         <div class="post-author">${escapeHtml(post.author_username)}</div>
                         <div class="post-time">${timeAgo}</div>
                     </div>
-                    <div class="post-badges">
-                        ${sentimentLabel ? `<div class="sentiment-badge ${sentimentClass}">${sentimentLabel}</div>` : ''}
+                    <div class="post-header-right">
+                        <div class="post-badges">
+                            ${sentimentLabel ? `<div class="sentiment-badge ${sentimentClass}">${sentimentLabel}</div>` : ''}
+                        </div>
+                        ${deleteControlsHTML}
                     </div>
                 </div>
                 <h3 class="post-title">${escapeHtml(post.title)}</h3>
@@ -1050,12 +1063,25 @@ function renderComments(postId, comments) {
         const sentimentClass = getCommentSentimentClass(comment);
         const sentimentEmoji = getCommentSentimentEmoji(comment);
         
+        // Show delete controls only for comments owned by current user
+        const isOwner = currentUser && comment.user_id === currentUser.id;
+        const deleteControlsHTML = isOwner ? `
+            <div class="delete-controls comment-delete-controls">
+                <input type="checkbox" class="delete-checkbox" data-type="comment" data-id="${comment.id}" 
+                       onchange="toggleDeleteControls()">
+                <button class="delete-icon" onclick="deleteComment('${comment.id}')" title="Delete Comment">🗑️</button>
+            </div>
+        ` : '';
+        
         return `
             <div class="comment ${sentimentClass}" data-comment-id="${comment.id}">
                 <div class="comment-header">
-                    <span class="comment-author">${escapeHtml(author?.username || 'Anonymous')}</span>
-                    <span class="comment-time">${timeAgo}</span>
-                    ${sentimentEmoji ? `<span class="comment-emotion">${sentimentEmoji}</span>` : ''}
+                    <div class="comment-header-left">
+                        <span class="comment-author">${escapeHtml(author?.username || 'Anonymous')}</span>
+                        <span class="comment-time">${timeAgo}</span>
+                        ${sentimentEmoji ? `<span class="comment-emotion">${sentimentEmoji}</span>` : ''}
+                    </div>
+                    ${deleteControlsHTML}
                 </div>
                 <div class="comment-content">${escapeHtml(comment.content)}</div>
                 <div class="comment-actions">
@@ -1236,3 +1262,194 @@ setInterval(() => {
         loadPosts();
     }
 }, 30000);
+
+// ===== DELETE FUNCTIONALITY =====
+
+// Delete functionality
+function toggleDeleteControls() {
+    const selectedItems = document.querySelectorAll('.delete-checkbox:checked');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    
+    if (selectedItems.length > 0) {
+        showBulkDeleteButton();
+    } else {
+        hideBulkDeleteButton();
+    }
+}
+
+function showBulkDeleteButton() {
+    let bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    if (!bulkDeleteBtn) {
+        bulkDeleteBtn = document.createElement('div');
+        bulkDeleteBtn.id = 'bulkDeleteBtn';
+        bulkDeleteBtn.className = 'bulk-delete-container';
+        bulkDeleteBtn.innerHTML = `
+            <div class="bulk-delete-info">
+                <span id="selectedCount">0</span> items selected
+            </div>
+            <button class="bulk-delete-btn" onclick="confirmBulkDelete()">
+                🗑️ Delete Selected
+            </button>
+            <button class="bulk-cancel-btn" onclick="clearAllSelections()">
+                Cancel
+            </button>
+        `;
+        document.body.appendChild(bulkDeleteBtn);
+    }
+    
+    const selectedCount = document.querySelectorAll('.delete-checkbox:checked').length;
+    document.getElementById('selectedCount').textContent = selectedCount;
+    bulkDeleteBtn.style.display = 'flex';
+}
+
+function hideBulkDeleteButton() {
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    if (bulkDeleteBtn) {
+        bulkDeleteBtn.style.display = 'none';
+    }
+}
+
+function clearAllSelections() {
+    document.querySelectorAll('.delete-checkbox:checked').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    hideBulkDeleteButton();
+}
+
+async function deletePost(postId) {
+    if (!confirm('Are you sure you want to delete this post?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/posts/${postId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            showToast('Post deleted successfully', 'success');
+            // Remove post from UI
+            const postElement = document.querySelector(`[data-post-id="${postId}"]`);
+            if (postElement) {
+                postElement.remove();
+            }
+            // Reload posts to refresh the view
+            loadPosts(true);
+        } else {
+            const data = await response.json();
+            showToast(data.message || 'Failed to delete post', 'error');
+        }
+    } catch (error) {
+        console.error('Delete post error:', error);
+        showToast('Failed to delete post. Please try again.', 'error');
+    }
+}
+
+async function deleteComment(commentId) {
+    if (!confirm('Are you sure you want to delete this comment?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/comments/${commentId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            showToast('Comment deleted successfully', 'success');
+            // Remove comment from UI
+            const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`);
+            if (commentElement) {
+                commentElement.remove();
+            }
+        } else {
+            const data = await response.json();
+            showToast(data.message || 'Failed to delete comment', 'error');
+        }
+    } catch (error) {
+        console.error('Delete comment error:', error);
+        showToast('Failed to delete comment. Please try again.', 'error');
+    }
+}
+
+function confirmBulkDelete() {
+    const selectedItems = document.querySelectorAll('.delete-checkbox:checked');
+    const postCount = Array.from(selectedItems).filter(item => item.dataset.type === 'post').length;
+    const commentCount = Array.from(selectedItems).filter(item => item.dataset.type === 'comment').length;
+    
+    let confirmMessage = 'Are you sure you want to delete ';
+    if (postCount > 0 && commentCount > 0) {
+        confirmMessage += `${postCount} post(s) and ${commentCount} comment(s)?`;
+    } else if (postCount > 0) {
+        confirmMessage += `${postCount} post(s)?`;
+    } else {
+        confirmMessage += `${commentCount} comment(s)?`;
+    }
+    
+    if (confirm(confirmMessage)) {
+        bulkDelete();
+    }
+}
+
+async function bulkDelete() {
+    const selectedItems = document.querySelectorAll('.delete-checkbox:checked');
+    const deletePromises = [];
+    
+    selectedItems.forEach(item => {
+        const type = item.dataset.type;
+        const id = item.dataset.id;
+        
+        if (type === 'post') {
+            deletePromises.push(deletePostSilent(id));
+        } else if (type === 'comment') {
+            deletePromises.push(deleteCommentSilent(id));
+        }
+    });
+    
+    try {
+        await Promise.all(deletePromises);
+        showToast(`Successfully deleted ${selectedItems.length} item(s)`, 'success');
+        clearAllSelections();
+        loadPosts(true); // Refresh the view
+    } catch (error) {
+        console.error('Bulk delete error:', error);
+        showToast('Some items could not be deleted. Please try again.', 'error');
+    }
+}
+
+// Silent delete functions for bulk operations (no individual confirmations)
+async function deletePostSilent(postId) {
+    const response = await fetch(`${API_BASE}/posts/${postId}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Failed to delete post ${postId}`);
+    }
+}
+
+async function deleteCommentSilent(commentId) {
+    const response = await fetch(`${API_BASE}/comments/${commentId}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Failed to delete comment ${commentId}`);
+    }
+}
