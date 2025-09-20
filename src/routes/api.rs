@@ -1,6 +1,7 @@
 use axum::{
     routing::{get, post, put, delete}, 
     Router, Json, middleware,
+    extract::State,
 };
 use serde_json::{json, Value};
 use crate::AppState;
@@ -15,7 +16,7 @@ pub fn protected_routes_with_auth() -> Router<AppState> {
         .route("/posts/:post_id", delete(posts::delete_post))
         .merge(comments::protected_routes())
         .merge(vote_routes::protected_vote_routes())
-        .layer(middleware::from_fn(auth_middleware))
+        .layer(middleware::from_fn(auth_middleware_stateful))
 }
 
 pub fn routes() -> Router<AppState> {
@@ -34,7 +35,94 @@ pub fn routes() -> Router<AppState> {
         .merge(vote_routes::public_vote_routes())
 }
 
-// Remove the wrapper function - using auth_middleware directly with from_fn_with_state
+// Updated auth middleware that works with .with_state()
+async fn auth_middleware_stateful(
+    mut request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    // Extract AppState from request extensions (provided by the router .with_state())
+    let app_state = match request.extensions().get::<AppState>() {
+        Some(state) => state.clone(),
+        None => {
+            return axum::response::Response::builder()
+                .status(500)
+                .header("content-type", "application/json")
+                .body(r#"{"error": "Internal server error"}"#.into())
+                .unwrap_or_else(|_| axum::response::Response::default());
+        }
+    };
+    let headers = request.headers().clone();
+    
+    // Extract Authorization header
+    let auth_header = match headers.get(axum::http::header::AUTHORIZATION) {
+        Some(header) => header,
+        None => {
+            return axum::response::Response::builder()
+                .status(401)
+                .header("content-type", "application/json")
+                .body(r#"{"error": "Missing authorization header"}"#.into())
+                .unwrap_or_else(|_| axum::response::Response::default());
+        }
+    };
+    
+    // Parse Bearer token
+    let auth_str = match auth_header.to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            return axum::response::Response::builder()
+                .status(401)
+                .header("content-type", "application/json")
+                .body(r#"{"error": "Invalid authorization header format"}"#.into())
+                .unwrap_or_else(|_| axum::response::Response::default());
+        }
+    };
+    
+    if !auth_str.starts_with("Bearer ") {
+        return axum::response::Response::builder()
+            .status(401)
+            .header("content-type", "application/json")
+            .body(r#"{"error": "Authorization header must start with 'Bearer '"}"#.into())
+            .unwrap_or_else(|_| axum::response::Response::default());
+    }
+    
+    let token = &auth_str[7..]; // Remove "Bearer " prefix
+    
+    // Validate JWT token
+    let claims = match app_state.auth_service.verify_token(token) {
+        Ok(claims) => claims,
+        Err(_) => {
+            return axum::response::Response::builder()
+                .status(401)
+                .header("content-type", "application/json")
+                .body(r#"{"error": "Invalid or expired token"}"#.into())
+                .unwrap_or_else(|_| axum::response::Response::default());
+        }
+    };
+    
+    // Parse user_id from string to UUID
+    let user_id = match uuid::Uuid::parse_str(&claims.user_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return axum::response::Response::builder()
+                .status(401)
+                .header("content-type", "application/json")
+                .body(r#"{"error": "Invalid user ID in token"}"#.into())
+                .unwrap_or_else(|_| axum::response::Response::default());
+        }
+    };
+    
+    // Add both user context and claims to request extensions
+    let user_context = crate::auth::middleware::UserContext {
+        user_id,
+        username: claims.username.clone(),
+    };
+    
+    request.extensions_mut().insert(user_context);
+    request.extensions_mut().insert(claims); // Insert Claims for handlers
+    
+    let response = next.run(request).await;
+    response
+}
 
 async fn api_health() -> Json<Value> {
     Json(json!({
