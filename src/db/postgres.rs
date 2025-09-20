@@ -631,8 +631,13 @@ impl CommentRepository for PostgresCommentRepository {
         Ok(comment.clone()) // Simplified - will implement later
     }
     
-    async fn delete_comment(&self, _id: Uuid) -> Result<()> {
-        Ok(()) // Simplified - will implement later
+    async fn delete_comment(&self, id: Uuid) -> Result<()> {
+        sqlx::query!("DELETE FROM comments WHERE id = $1", id)
+            .execute(&*self.pool)
+            .await
+            .map_err(|e| AppError::DatabaseError(format!("Failed to delete comment: {}", e)))?;
+        
+        Ok(())
     }
     
     async fn get_max_sibling_count(&self, post_id: Uuid, parent_path: Option<&str>) -> Result<u32> {
