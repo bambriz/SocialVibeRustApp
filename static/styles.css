@@ -1273,6 +1273,24 @@ button, .btn, .filter-btn, .comment-toggle, .votable-tag {
 
 /* ===== COMMENT SYSTEM STYLES ===== */
 
+/* Pending comment styling */
+.comment-pending {
+    opacity: 0.7;
+    border-left: 3px solid #fbbf24;
+}
+
+.pending-indicator {
+    color: #f59e0b;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* Pending post styling */
+.post-pending {
+    opacity: 0.7;
+    border-left: 3px solid #fbbf24;
+}
+
 /* Comment toggle button */
 .comment-toggle {
     background: none;

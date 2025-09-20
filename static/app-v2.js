@@ -764,6 +764,41 @@ async function handleCreatePost(e) {
         return;
     }
     
+    // Create optimistic post
+    const optimisticPost = {
+        id: `temp_${Date.now()}`,
+        title: title,
+        content: content,
+        author_username: currentUser.username,
+        author_id: currentUser.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        sentiment_analysis: { sentiment_type: null },
+        moderation_result: { is_blocked: false, toxicity_tags: [] },
+        popularity_score: 1.0,
+        comment_count: 0,
+        isPending: true
+    };
+    
+    // Clear form and collapse creator
+    document.getElementById('postForm').reset();
+    document.getElementById('sentimentPreview').textContent = '';
+    
+    const postCreator = document.getElementById('postCreator');
+    if (postCreator.classList.contains('expanded')) {
+        postCreator.classList.add('collapsing');
+        postCreator.classList.remove('expanded');
+        
+        setTimeout(() => {
+            postCreator.classList.remove('collapsing');
+            postCreator.classList.add('collapsed');
+            updateStickyPositions();
+        }, 300);
+    }
+    
+    // Add optimistic post to UI immediately
+    addOptimisticPost(optimisticPost);
+    
     try {
         const response = await fetch(`${API_BASE}/posts`, {
             method: 'POST',
@@ -777,44 +812,116 @@ async function handleCreatePost(e) {
         const data = await response.json();
         
         if (response.ok) {
-            document.getElementById('postForm').reset();
-            document.getElementById('sentimentPreview').textContent = '';
+            // Replace optimistic post with real one
+            replaceOptimisticPost(optimisticPost.id, data.post);
             showToast('Post created successfully!', 'success');
             
-            // Collapse the post creator after successful post with smooth animation
-            const postCreator = document.getElementById('postCreator');
-            if (postCreator.classList.contains('expanded')) {
-                postCreator.classList.add('collapsing');
-                postCreator.classList.remove('expanded');
-                
-                setTimeout(() => {
-                    postCreator.classList.remove('collapsing');
-                    postCreator.classList.add('collapsed');
-                    updateStickyPositions();
-                }, 300);
-            }
-            
-            loadPosts(); // Refresh posts
+            // Update cache with real post
+            const cache = postsCache.getViewCache(currentView, currentView === 'user_home' ? currentUser.id : null);
+            cache.addPost(data.post);
         } else {
             console.log('Error details:', data);
             
+            // Remove failed optimistic post
+            removeOptimisticPost(optimisticPost.id);
+            
+            // Restore form content
+            document.getElementById('postTitle').value = title;
+            document.getElementById('postContent').value = content;
+            
             // Check if this is a content moderation error
             if (data.error_type === 'content_moderation') {
-                // Show specific violation reason for content moderation errors
                 showToast(data.error || 'Post blocked due to content violation', 'error');
             } else {
-                // Show generic message for other errors
                 showToast('Failed to create post. Please try again.', 'error');
             }
         }
     } catch (error) {
         console.error('Create post error:', error);
-        console.error('Error details:', error.message);
-        console.error('Auth token present:', !!authToken);
         
-        // For network errors or other exceptions, show generic message
+        // Remove failed optimistic post and restore form
+        removeOptimisticPost(optimisticPost.id);
+        document.getElementById('postTitle').value = title;
+        document.getElementById('postContent').value = content;
+        
         showToast('Failed to create post. Please check your connection and try again.', 'error');
     }
+}
+
+// Optimistic post helper functions
+function addOptimisticPost(post) {
+    const container = document.getElementById('postsList');
+    if (!container) return;
+    
+    // Create post HTML with pending styling
+    const postHTML = createOptimisticPostHTML(post);
+    
+    // Add to top of posts list
+    container.insertAdjacentHTML('afterbegin', postHTML);
+    
+    // Add to posts array
+    posts.unshift(post);
+}
+
+function replaceOptimisticPost(tempId, realPost) {
+    const tempElement = document.querySelector(`[data-post-id="${tempId}"]`);
+    if (tempElement && realPost) {
+        // Find and update in posts array
+        const postIndex = posts.findIndex(p => p.id === tempId);
+        if (postIndex !== -1) {
+            posts[postIndex] = realPost;
+        }
+        
+        // Replace in DOM
+        const realHTML = createPostHTML(realPost);
+        tempElement.outerHTML = realHTML;
+    }
+}
+
+function removeOptimisticPost(tempId) {
+    const tempElement = document.querySelector(`[data-post-id="${tempId}"]`);
+    if (tempElement) {
+        tempElement.remove();
+        
+        // Remove from posts array
+        const postIndex = posts.findIndex(p => p.id === tempId);
+        if (postIndex !== -1) {
+            posts.splice(postIndex, 1);
+        }
+    }
+}
+
+function createOptimisticPostHTML(post) {
+    const timeAgo = formatTimeAgo(post.created_at);
+    
+    return `
+        <article class="post-card post-pending" data-post-id="${post.id}">
+            <div class="post-header">
+                <div class="post-author-section">
+                    <div class="post-author">${escapeHtml(post.author_username)}</div>
+                    <div class="post-time">${timeAgo}</div>
+                </div>
+                <div class="post-header-right">
+                    <span class="pending-indicator">⏳ Posting...</span>
+                </div>
+            </div>
+            <h3 class="post-title">${escapeHtml(post.title)}</h3>
+            <p class="post-content">${escapeHtml(post.content)}</p>
+            <div class="post-footer">
+                <div>Popularity: ${(post.popularity_score || 1.0).toFixed(1)}</div>
+                <button class="comment-toggle" onclick="toggleComments('${post.id}')">
+                    💬 0 comments
+                </button>
+            </div>
+            
+            <!-- Comments Section -->
+            <div id="comments-${post.id}" class="comments-section hidden">
+                <div class="comments-list">
+                    <div class="no-comments">No comments yet. Be the first to comment!</div>
+                </div>
+            </div>
+        </article>
+    `;
 }
 
 // Cache-aware posts loading with smart caching and filtering
@@ -2587,7 +2694,7 @@ async function loadComments(postId) {
     }
 }
 
-// Post a new comment
+// Post a new comment with optimistic UI
 async function postComment(postId) {
     if (!authToken) {
         showToast('Please log in to comment', 'error');
@@ -2607,6 +2714,39 @@ async function postComment(postId) {
         return;
     }
     
+    // Create optimistic comment
+    const optimisticComment = {
+        comment: {
+            id: `temp_${Date.now()}`,
+            post_id: postId,
+            user_id: currentUser.id,
+            content: content,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            parent_id: null,
+            path: '001',
+            depth: 0,
+            sentiment_analysis: { sentiment_type: null },
+            moderation_result: { is_blocked: false, toxicity_tags: [] },
+            is_flagged: false,
+            reply_count: 0,
+            popularity_score: 1.0
+        },
+        author: currentUser.username,
+        can_modify: true,
+        is_collapsed: false,
+        replies: [],
+        isPending: true // Mark as pending for UI
+    };
+    
+    // Clear input and update UI optimistically
+    textarea.value = '';
+    updateCommentCounter({ target: textarea });
+    
+    // Add optimistic comment to UI immediately
+    addOptimisticComment(postId, optimisticComment);
+    updatePostCommentCount(postId);
+    
     try {
         const response = await fetch(`${API_BASE}/posts/${postId}/comments`, {
             method: 'POST',
@@ -2624,29 +2764,106 @@ async function postComment(postId) {
         const data = await response.json();
         
         if (response.ok) {
-            textarea.value = '';
-            updateCommentCounter({ target: textarea });
+            // Replace optimistic comment with real one
+            replaceOptimisticComment(postId, optimisticComment.comment.id, data.comment);
             showToast('💬 Comment posted!', 'success');
             
-            // Add optimistic update to cache
-            if (data.comment) {
-                commentsCache.addComment(postId, data);
-            }
-            
-            // Clear cache and reload comments to show the new one with fresh data
-            commentsCache.clear(postId);
-            loadComments(postId);
-            
-            // Update comment count in post
-            updatePostCommentCount(postId);
+            // Update cache with real comment
+            commentsCache.addComment(postId, data.comment);
         } else {
+            // Remove failed optimistic comment
+            removeOptimisticComment(postId, optimisticComment.comment.id);
+            
+            // Show error and restore content
+            textarea.value = content;
             showToast(data.message || 'Failed to post comment', 'error');
         }
     } catch (error) {
         console.error('Post comment error:', error);
+        
+        // Remove failed optimistic comment and restore content
+        removeOptimisticComment(postId, optimisticComment.comment.id);
+        textarea.value = content;
         showToast('Failed to post comment', 'error');
     }
 }
+
+// Add optimistic comment to UI immediately
+function addOptimisticComment(postId, commentData) {
+    const commentsList = document.getElementById(`comments-list-${postId}`);
+    if (!commentsList) return;
+    
+    // Create comment HTML with pending styling
+    const commentHTML = createCommentHTML(commentData, true);
+    
+    // Add to top of comments list
+    if (commentsList.innerHTML.includes('no-comments')) {
+        commentsList.innerHTML = commentHTML;
+    } else {
+        commentsList.insertAdjacentHTML('afterbegin', commentHTML);
+    }
+}
+
+// Replace optimistic comment with real one
+function replaceOptimisticComment(postId, tempId, realComment) {
+    const tempElement = document.querySelector(`[data-comment-id="${tempId}"]`);
+    if (tempElement && realComment) {
+        // Create real comment data structure
+        const realCommentData = {
+            comment: realComment,
+            author: currentUser.username,
+            can_modify: true,
+            is_collapsed: false,
+            replies: [],
+            isPending: false
+        };
+        
+        const realHTML = createCommentHTML(realCommentData, false);
+        tempElement.outerHTML = realHTML;
+    }
+}
+
+// Remove failed optimistic comment
+function removeOptimisticComment(postId, tempId) {
+    const tempElement = document.querySelector(`[data-comment-id="${tempId}"]`);
+    if (tempElement) {
+        tempElement.remove();
+        
+        // Check if no comments left
+        const commentsList = document.getElementById(`comments-list-${postId}`);
+        if (commentsList && commentsList.children.length === 0) {
+            commentsList.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
+        }
+    }
+}
+
+// Create comment HTML
+function createCommentHTML(commentData, isPending = false) {
+    const comment = commentData.comment;
+    const author = commentData.author || 'Unknown';
+    const timeAgo = formatTimeAgo(comment.created_at);
+    
+    // Get sentiment styling
+    const sentimentClass = getCommentSentimentClass(comment);
+    const sentimentEmoji = getCommentSentimentEmoji(comment);
+    const sentimentStyle = getCommentSentimentStyle(comment);
+    
+    const pendingClass = isPending ? 'comment-pending' : '';
+    const pendingIndicator = isPending ? '<span class="pending-indicator">⏳ Posting...</span>' : '';
+    
+    return `
+        <div class="comment ${pendingClass}" data-comment-id="${comment.id}" style="${sentimentStyle}">
+            <div class="comment-header">
+                <div class="comment-author">${escapeHtml(author)}</div>
+                <div class="comment-time">${timeAgo}</div>
+                ${pendingIndicator}
+                ${sentimentEmoji ? `<span class="comment-sentiment">${sentimentEmoji}</span>` : ''}
+            </div>
+            <div class="comment-content">${escapeHtml(comment.content)}</div>
+        </div>
+    `;
+}
+
 
 // Render comments with nesting and emotion colors
 function renderComments(postId, comments) {
