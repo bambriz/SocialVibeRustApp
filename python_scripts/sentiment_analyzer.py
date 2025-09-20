@@ -253,12 +253,36 @@ class SentimentAnalyzer:
             r'(?:^|\W)(moldy|rotten|stinks|putrid|foul|reeks)(?:\W|$)'
         ]
         
-        # Angry - frustration, rage (sometimes HuggingFace maps to sadness)
+        # Angry - frustration, rage (sometimes HuggingFace maps to sadness, need comprehensive patterns)
         angry_patterns = [
-            r'(?:^|\W)(idiots|incompetent.*drivers|these.*idiots|stupid.*people)(?:\W|$)',
-            r'(?:^|\W)(furious|livid|enraged|outraged|pissed.*off)(?:\W|$)',
-            r'(?:^|\W)(so.*angry|absolutely.*furious|makes.*me.*mad)(?:\W|$)',
-            r'(?:^|\W)(can\'?t.*drive|traffic.*nightmare|stuck.*mess)(?:\W|$)'
+            # Direct anger expressions
+            r'(?:^|\W)(furious|livid|enraged|outraged|pissed.*off|mad|angry)(?:\W|$)',
+            r'(?:^|\W)(so.*angry|absolutely.*furious|makes.*me.*mad|driving.*me.*insane)(?:\W|$)',
+            
+            # Insulting/derogatory language (strong anger indicators)
+            r'(?:^|\W)(idiots|morons|assh[o0]les?|jackasses?|bastards?|scumbags?)(?:\W|$)',
+            r'(?:^|\W)(stupid.*people|worthless.*trash|piece.*of.*sh[i1]t|pathetic.*losers)(?:\W|$)',
+            r'(?:^|\W)(braindead|incompetent|worthless|pathetic.*c[u\*]nts?)(?:\W|$)',
+            
+            # Profanity with hostility (anger context)
+            r'(?:^|\W)(f[u\*]ck.*all|what.*the.*f[u\*]ck|sh[i1]tty.*world|goddamn.*bastards?)(?:\W|$)',
+            r'(?:^|\W)(these.*b[i1]tches|sick.*f[u\*]cks|disgusting.*perverts)(?:\W|$)',
+            
+            # Expressions of wanting to harm/violence (anger)
+            r'(?:^|\W)(want.*to.*beat|punch.*in.*the.*face|want.*to.*kill|beat.*the.*sh[i1]t)(?:\W|$)',
+            r'(?:^|\W)(until.*they.*bleed|could.*kill.*them|rot.*in.*hell)(?:\W|$)',
+            
+            # Frustration and complaint patterns
+            r'(?:^|\W)(fed.*up|sick.*of|tired.*of.*dealing|absolutely.*terrible)(?:\W|$)',
+            r'(?:^|\W)(makes.*me.*furious|driving.*me.*crazy|screwing.*everything.*up)(?:\W|$)',
+            r'(?:^|\W)(bullsh[i1]t|this.*garbage|absolute.*trash|completely.*incompetent)(?:\W|$)',
+            
+            # Hostile dismissive language
+            r'(?:^|\W)(should.*disappear|need.*to.*get.*their.*sh[i1]t.*together|bunch.*of.*creepy)(?:\W|$)',
+            r'(?:^|\W)(deserve.*to.*rot|nobody.*respects.*them|complete.*jackass)(?:\W|$)',
+            
+            # Traffic/driving anger (original patterns)
+            r'(?:^|\W)(can\'?t.*drive|traffic.*nightmare|stuck.*mess|incompetent.*drivers)(?:\W|$)'
         ]
         
         # Check patterns in order of specificity
