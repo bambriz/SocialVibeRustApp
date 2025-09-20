@@ -9,6 +9,7 @@ use crate::models::comment::{Comment, CreateCommentRequest, CommentResponse};
 use crate::db::repository::CommentRepository;
 use crate::services::sentiment_service::SentimentService;
 use crate::services::moderation_service::ModerationService;
+use crate::services::vote_service::VoteService;
 use crate::{AppError, Result};
 use uuid::Uuid;
 use std::sync::Arc;
@@ -19,6 +20,7 @@ pub struct CommentService {
     comment_repo: Arc<dyn CommentRepository>,
     sentiment_service: Option<Arc<SentimentService>>,
     moderation_service: Option<Arc<ModerationService>>,
+    vote_service: Option<Arc<VoteService>>,
 }
 
 /// Hierarchical path generation for Reddit-style nesting
@@ -33,6 +35,7 @@ impl CommentService {
             comment_repo,
             sentiment_service: None, // TODO: Connect to sentiment service
             moderation_service: None, // TODO: Connect to moderation service
+            vote_service: None, // TODO: Connect to vote service
         }
     }
     
@@ -41,11 +44,13 @@ impl CommentService {
         comment_repo: Arc<dyn CommentRepository>,
         sentiment_service: Option<Arc<SentimentService>>,
         moderation_service: Option<Arc<ModerationService>>,
+        vote_service: Option<Arc<VoteService>>,
     ) -> Self {
         Self { 
             comment_repo,
             sentiment_service,
             moderation_service,
+            vote_service,
         }
     }
     
@@ -201,11 +206,16 @@ impl CommentService {
         Ok(())
     }
 
-    /// Get comments for a post (simplified - no tree structure yet)
-    pub async fn get_comments_for_post(&self, post_id: Uuid) -> Result<Vec<CommentResponse>> {
-        let comments = self.comment_repo
+    /// Get comments for a post with sorting option
+    pub async fn get_comments_for_post(&self, post_id: Uuid, sort_by: Option<&str>) -> Result<Vec<CommentResponse>> {
+        let mut comments = self.comment_repo
             .get_comments_by_post_id(post_id)
             .await?;
+
+        // Sort comments by popularity while preserving hierarchy if requested
+        if let Some("popular") = sort_by {
+            comments = self.sort_comments_by_popularity(comments).await;
+        }
             
         let responses = comments
             .into_iter()
@@ -219,6 +229,86 @@ impl CommentService {
             .collect();
             
         Ok(responses)
+    }
+    
+    /// Sort comments by popularity while preserving hierarchical structure
+    /// Root comments are sorted by popularity, and replies within each parent are also sorted by popularity
+    async fn sort_comments_by_popularity(&self, mut comments: Vec<Comment>) -> Vec<Comment> {
+        use std::collections::HashMap;
+        
+        // Calculate current popularity scores for all comments including votes
+        let mut comment_scores = HashMap::new();
+        for comment in &comments {
+            // Calculate popularity including current votes
+            let score = if let Some(vote_service) = &self.vote_service {
+                self.calculate_popularity_score(comment, Some(vote_service.as_ref())).await
+            } else {
+                self.calculate_popularity_score(comment, None).await
+            };
+            comment_scores.insert(comment.id, score);
+        }
+        
+        // Group comments by depth and parent for hierarchical sorting
+        let mut root_comments = Vec::new();
+        let mut replies_by_parent: HashMap<String, Vec<Comment>> = HashMap::new();
+        
+        for comment in comments {
+            if comment.depth == 0 {
+                root_comments.push(comment);
+            } else {
+                // Extract parent path from current path to group replies
+                let parent_path = self.extract_parent_path(&comment.path);
+                replies_by_parent.entry(parent_path).or_insert_with(Vec::new).push(comment);
+            }
+        }
+        
+        // Sort root comments by popularity
+        root_comments.sort_by(|a, b| {
+            let score_a = comment_scores.get(&a.id).unwrap_or(&1.0);
+            let score_b = comment_scores.get(&b.id).unwrap_or(&1.0);
+            score_b.partial_cmp(score_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        
+        // Sort replies within each parent group by popularity
+        for replies in replies_by_parent.values_mut() {
+            replies.sort_by(|a, b| {
+                let score_a = comment_scores.get(&a.id).unwrap_or(&1.0);
+                let score_b = comment_scores.get(&b.id).unwrap_or(&1.0);
+                score_b.partial_cmp(score_a).unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+        
+        // Reconstruct the comment list maintaining hierarchy but with popularity sorting
+        let mut sorted_comments = Vec::new();
+        
+        // Add root comments and their sorted replies recursively
+        for root_comment in root_comments {
+            sorted_comments.push(root_comment.clone());
+            self.add_sorted_replies(&root_comment.path, &replies_by_parent, &mut sorted_comments);
+        }
+        
+        sorted_comments
+    }
+    
+    /// Extract parent path from a comment path (e.g., "000001/000002/" -> "000001/")
+    fn extract_parent_path(&self, path: &str) -> String {
+        let parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
+        if parts.len() > 1 {
+            format!("{}/", parts[..parts.len()-1].join("/"))
+        } else {
+            String::new()
+        }
+    }
+    
+    /// Recursively add sorted replies to the result list
+    fn add_sorted_replies(&self, parent_path: &str, replies_by_parent: &HashMap<String, Vec<Comment>>, result: &mut Vec<Comment>) {
+        if let Some(replies) = replies_by_parent.get(parent_path) {
+            for reply in replies {
+                result.push(reply.clone());
+                // Recursively add replies to this reply
+                self.add_sorted_replies(&reply.path, replies_by_parent, result);
+            }
+        }
     }
     
     /// Calculate popularity score from sentiment data (similar to posts)
@@ -278,6 +368,23 @@ impl CommentService {
         } else {
             base_score
         }
+    }
+    
+    /// Recalculate and update popularity score after voting (for triggering recalculation)
+    pub async fn update_popularity_after_vote(&self, comment_id: Uuid, vote_service: Option<&crate::services::vote_service::VoteService>) -> Result<()> {
+        // Get the current comment
+        let comment = self.comment_repo
+            .get_comment_by_id(comment_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Comment not found".to_string()))?;
+        
+        // Calculate new popularity score including voting engagement
+        let new_popularity_score = self.calculate_popularity_score(&comment, vote_service).await;
+        
+        // For now, PostgreSQL calculates popularity on demand, so no update needed
+        // This method is here for consistency and future implementations
+        tracing::debug!("📊 Calculated new popularity score for comment {} to {}", comment_id, new_popularity_score);
+        Ok(())
     }
 
     /// Get a specific comment thread (placeholder)

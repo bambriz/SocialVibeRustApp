@@ -40,8 +40,14 @@ impl AppState {
         // Create CSV fallback repository
         let csv_fallback_repo = std::sync::Arc::new(db::repository::CsvPostRepository::new(None)); // Uses default "posts_backup.csv"
         
-        let comment_service = std::sync::Arc::new(services::CommentService::new(db.comment_repo.clone()));
         let vote_service = std::sync::Arc::new(services::VoteService::new(db.vote_repo.clone()));
+        
+        let comment_service = std::sync::Arc::new(services::CommentService::new_with_ai(
+            db.comment_repo.clone(),
+            Some(sentiment_service.clone()),
+            Some(moderation_service.clone()),
+            Some(vote_service.clone())
+        ));
         
         let post_service = std::sync::Arc::new(services::PostService::new_with_vote_service(
             db.post_repo.clone() as std::sync::Arc<dyn db::repository::PostRepository>,

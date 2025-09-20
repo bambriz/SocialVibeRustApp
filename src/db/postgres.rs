@@ -652,8 +652,50 @@ impl CommentRepository for PostgresCommentRepository {
         Ok(None) // Simplified - will implement later
     }
     
-    async fn get_comments_by_post_id(&self, _post_id: Uuid) -> Result<Vec<Comment>> {
-        Ok(vec![]) // Simplified - will implement later
+    async fn get_comments_by_post_id(&self, post_id: Uuid) -> Result<Vec<Comment>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT id, post_id, user_id, parent_id, content, path, depth, 
+                   sentiment_analysis, moderation_result, is_flagged, 
+                   created_at, updated_at, reply_count, popularity_score
+            FROM comments 
+            WHERE post_id = $1 
+            ORDER BY path ASC
+            "#,
+            post_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| crate::AppError::DatabaseError(format!("Failed to get comments for post: {}", e)))?;
+
+        let mut comments = Vec::new();
+        for row in rows {
+            // Parse sentiment and moderation JSON to individual fields (same as create_comment_atomic)
+            let (sentiment_score, sentiment_colors, sentiment_type) = Self::parse_sentiment_json(&row.sentiment_analysis);
+            let (toxicity_tags, toxicity_scores) = Self::parse_moderation_json(&row.moderation_result);
+            
+            comments.push(Comment {
+                id: row.id,
+                post_id: row.post_id,
+                user_id: row.user_id,
+                parent_id: row.parent_id,
+                content: row.content,
+                path: row.path,
+                depth: row.depth,
+                sentiment_score,
+                sentiment_colors,
+                sentiment_type,
+                is_blocked: row.is_flagged.unwrap_or(false),
+                toxicity_tags,
+                toxicity_scores,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+                reply_count: row.reply_count.unwrap_or(0),
+                popularity_score: row.popularity_score.unwrap_or(1.0),
+            });
+        }
+
+        Ok(comments)
     }
     
     async fn get_comments_by_parent_id(&self, _parent_id: Uuid) -> Result<Vec<Comment>> {

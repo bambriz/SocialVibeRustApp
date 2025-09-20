@@ -93,17 +93,17 @@ pub fn create_routes() -> Router<crate::AppState> {
 /// Query params: limit, offset, max_depth, sort
 async fn get_post_comments(
     Path(post_id): Path<Uuid>,
-    Query(_query): Query<CommentQuery>,
+    Query(query): Query<CommentQuery>,
     State(app_state): State<crate::AppState>,
 ) -> Result<Json<Vec<CommentResponse>>> {
-    tracing::debug!("📝 Getting comments for post: {}", post_id);
+    tracing::debug!("📝 Getting comments for post: {} with sort: {:?}", post_id, query.sort);
     
     let comments = app_state.comment_service
-        .get_comments_for_post(post_id)
+        .get_comments_for_post(post_id, query.sort.as_deref())
         .await?;
     
-    // TODO: Apply query filters (limit, offset, max_depth, sort)
-    // For now, return all comments
+    // TODO: Apply query filters (limit, offset, max_depth) 
+    // Sort is now implemented - "popular" sorting preserves hierarchy
     
     tracing::debug!("✅ Retrieved {} comments for post {}", comments.len(), post_id);
     Ok(Json(comments))

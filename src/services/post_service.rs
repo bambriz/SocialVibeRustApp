@@ -339,6 +339,26 @@ impl PostService {
         Ok(posts.into_iter().map(PostResponse::from).collect())
     }
 
+    /// Recalculate and update popularity score after voting (for triggering recalculation)
+    pub async fn update_popularity_after_vote(&self, post_id: Uuid) -> Result<()> {
+        // Get the current post
+        let post = self.get_post_by_id(post_id).await?
+            .ok_or_else(|| AppError::NotFound("Post not found".to_string()))?;
+        
+        // Calculate new popularity score including voting engagement
+        let new_popularity_score = self.calculate_popularity_score(&post).await;
+        
+        // Update the popularity score (this will trigger repository update if needed)
+        let _ = self.write_to_both_repositories(
+            "update_popularity_score",
+            || self.primary_repo.update_popularity_score(post.id, new_popularity_score),
+            || self.csv_fallback_repo.update_popularity_score(post.id, new_popularity_score)
+        ).await;
+        
+        tracing::debug!("📊 Updated popularity score for post {} to {}", post_id, new_popularity_score);
+        Ok(())
+    }
+
     pub async fn calculate_popularity_score(&self, post: &Post) -> f64 {
         // Base score from sentiment analysis
         let sentiment_score = post.popularity_score;

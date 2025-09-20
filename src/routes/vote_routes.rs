@@ -53,6 +53,21 @@ async fn cast_vote(
         Err(e) => return Err(e),
     }
 
+    // Trigger popularity recalculation after voting
+    match request.target_type.as_str() {
+        "post" => {
+            if let Err(e) = state.post_service.update_popularity_after_vote(request.target_id).await {
+                tracing::warn!("Failed to update post popularity after vote: {}", e);
+            }
+        },
+        "comment" => {
+            if let Err(e) = state.comment_service.update_popularity_after_vote(request.target_id, Some(&*state.vote_service)).await {
+                tracing::warn!("Failed to update comment popularity after vote: {}", e);
+            }
+        },
+        _ => {} // Ignore unknown target types
+    }
+
     // Return updated vote summary
     let summary = state.vote_service.get_vote_summary(request.target_id, &request.target_type).await?;
     Ok(Json(summary))
@@ -103,6 +118,21 @@ async fn remove_vote(
     state.vote_service
         .remove_vote(user_id, target_id, &vote_type, &tag)
         .await?;
+
+    // Trigger popularity recalculation after vote removal
+    match target_type.as_str() {
+        "post" => {
+            if let Err(e) = state.post_service.update_popularity_after_vote(target_id).await {
+                tracing::warn!("Failed to update post popularity after vote removal: {}", e);
+            }
+        },
+        "comment" => {
+            if let Err(e) = state.comment_service.update_popularity_after_vote(target_id, Some(&*state.vote_service)).await {
+                tracing::warn!("Failed to update comment popularity after vote removal: {}", e);
+            }
+        },
+        _ => {} // Ignore unknown target types
+    }
 
     // Return updated vote summary
     let summary = state.vote_service.get_vote_summary(target_id, &target_type).await?;
