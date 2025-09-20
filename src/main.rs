@@ -1,6 +1,7 @@
 use social_media_app::{AppState, AppConfig, PythonServerMode};
 use social_media_app::routes::create_routes;
 use social_media_app::models::post::CreatePostRequest;
+use social_media_app::models::User;
 // Removed unused import
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
@@ -66,17 +67,55 @@ async fn populate_sample_posts(app_state: &AppState) {
         }
     }
     
-    // Sample users for post authors
+    // Create sample users in the database first
     let sample_users = vec![
-        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap(), "alex_martinez"),
-        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440002").unwrap(), "sarah_chen"),
-        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440003").unwrap(), "mike_johnson"),
-        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440004").unwrap(), "emma_davis"),
-        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440005").unwrap(), "raj_patel"),
-        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440006").unwrap(), "zoe_williams"),
-        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440007").unwrap(), "carlos_rivera"),
-        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440008").unwrap(), "nina_brooks"),
+        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap(), "alex_martinez", "alex@example.com"),
+        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440002").unwrap(), "sarah_chen", "sarah@example.com"),
+        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440003").unwrap(), "mike_johnson", "mike@example.com"),
+        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440004").unwrap(), "emma_davis", "emma@example.com"),
+        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440005").unwrap(), "raj_patel", "raj@example.com"),
+        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440006").unwrap(), "zoe_williams", "zoe@example.com"),
+        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440007").unwrap(), "carlos_rivera", "carlos@example.com"),
+        (Uuid::parse_str("550e8400-e29b-41d4-a716-446655440008").unwrap(), "nina_brooks", "nina@example.com"),
     ];
+    
+    // Ensure users exist in database before creating posts
+    info!("🔧 STARTUP: Creating sample users in database...");
+    for (user_id, username, email) in &sample_users {
+        // Check if user already exists
+        match app_state.db.user_repo.get_user_by_id(*user_id).await {
+            Ok(Some(_)) => {
+                info!("✅ STARTUP: User {} already exists", username);
+            }
+            Ok(None) => {
+                // User doesn't exist, create them
+                let user = User {
+                    id: *user_id,
+                    username: username.to_string(),
+                    email: email.to_string(),
+                    password_hash: "sample_hash_123".to_string(), // Sample password hash
+                    display_name: None,
+                    bio: None,
+                    avatar_url: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                    is_active: true,
+                };
+                
+                match app_state.db.user_repo.create_user(&user).await {
+                    Ok(_) => {
+                        info!("✅ STARTUP: Created sample user: {}", username);
+                    }
+                    Err(e) => {
+                        warn!("⚠️ STARTUP: Failed to create sample user {}: {}", username, e);
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("⚠️ STARTUP: Error checking user {}: {}", username, e);
+            }
+        }
+    }
     
     // Sample posts designed to trigger different sentiment analysis results
     let sample_posts = vec![
@@ -220,7 +259,7 @@ async fn populate_sample_posts(app_state: &AppState) {
     
     for (i, post_request) in sample_posts.into_iter().enumerate() {
         let user_index = i % sample_users.len();
-        let (author_id, author_username) = sample_users[user_index];
+        let (author_id, author_username, _) = sample_users[user_index];
         
         match app_state.post_service.create_post(
             post_request, 

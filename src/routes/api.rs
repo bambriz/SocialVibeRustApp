@@ -17,11 +17,14 @@ pub fn routes() -> Router<AppState> {
     let protected_routes = Router::new()
         .route("/posts", post(posts::create_post))
         .route("/posts/:post_id", put(posts::update_post))
-        .route("/posts/:post_id", delete(posts::delete_post));
+        .route("/posts/:post_id", delete(posts::delete_post))
+        .merge(comments::protected_routes()) // Add protected comment routes
+        // TODO: Apply auth middleware at app level in main.rs
+        ;
 
     public_routes
         .merge(protected_routes)
-        .merge(comments::create_routes()) // Add comment routes
+        .merge(comments::public_routes()) // Add public comment routes  
         .merge(vote_routes::vote_routes()) // Add voting routes
 }
 
