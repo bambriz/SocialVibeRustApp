@@ -342,7 +342,7 @@ impl PostService {
     /// Recalculate and update popularity score after voting (for triggering recalculation)
     pub async fn update_popularity_after_vote(&self, post_id: Uuid) -> Result<()> {
         // Get the current post
-        let post = self.get_post_by_id(post_id).await?
+        let post = self.primary_repo.get_post_by_id(post_id).await?
             .ok_or_else(|| AppError::NotFound("Post not found".to_string()))?;
         
         // Calculate new popularity score including voting engagement

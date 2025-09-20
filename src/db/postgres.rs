@@ -664,7 +664,7 @@ impl CommentRepository for PostgresCommentRepository {
             "#,
             post_id
         )
-        .fetch_all(&self.pool)
+        .fetch_all(&*self.pool)
         .await
         .map_err(|e| crate::AppError::DatabaseError(format!("Failed to get comments for post: {}", e)))?;
 
