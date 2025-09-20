@@ -2434,7 +2434,12 @@ async function loadComments(postId) {
     }
     
     const commentsList = document.getElementById(`comments-list-${postId}`);
-    commentsList.innerHTML = '<div class="loading-comments">💬 Loading comments...</div>';
+    commentsList.innerHTML = `
+        <div class="loading-comments">
+            <div class="loading-spinner"></div>
+            <span>💬 Loading comments...</span>
+        </div>
+    `;
     
     commentsCache.setLoading(postId, true);
     
@@ -2452,11 +2457,21 @@ async function loadComments(postId) {
             console.log(`📦 Comments: Loaded and cached ${comments.length} comments for post ${postId}`);
             renderComments(postId, comments);
         } else {
-            commentsList.innerHTML = '<div class="error-message">❌ Failed to load comments</div>';
+            commentsList.innerHTML = `
+                <div class="error-message">
+                    <span>❌ Failed to load comments</span>
+                    <button onclick="loadComments('${postId}')" class="retry-btn">🔄 Retry</button>
+                </div>
+            `;
         }
     } catch (error) {
         console.error('Load comments error:', error);
-        commentsList.innerHTML = '<div class="error-message">❌ Network error loading comments</div>';
+        commentsList.innerHTML = `
+            <div class="error-message">
+                <span>❌ Network error loading comments</span>
+                <button onclick="loadComments('${postId}')" class="retry-btn">🔄 Retry</button>
+            </div>
+        `;
     } finally {
         commentsCache.setLoading(postId, false);
     }
