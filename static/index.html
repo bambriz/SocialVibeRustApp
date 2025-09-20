@@ -91,7 +91,10 @@
             </div>
             <div class="creator-content" onclick="event.stopPropagation()">
                 <div class="creator-container">
-                    <h3>Share Your Thoughts</h3>
+                    <div class="section-header">
+                        <h3>Share Your Thoughts</h3>
+                        <button class="minimize-btn" onclick="togglePostCreator()" title="Minimize">✕</button>
+                    </div>
                     <form id="postForm">
                         <div class="form-group">
                             <input type="text" id="postTitle" placeholder="What's on your mind?" required>
@@ -115,7 +118,10 @@
             </div>
             <div class="vibe-content" onclick="event.stopPropagation()">
                 <div class="vibe-check-section">
-                    <h3>Vibe Check</h3>
+                    <div class="section-header">
+                        <h3>Vibe Check</h3>
+                        <button class="minimize-btn" onclick="toggleVibeCheck()" title="Minimize">✕</button>
+                    </div>
                     <div class="feed-controls" id="feedControls">
                         <button class="filter-btn active" data-filter="all" onclick="filterFeed('all', this)">All Posts</button>
                         <button class="filter-btn" data-filter="joy" onclick="filterFeed('joy', this)">😊 Happy</button>
