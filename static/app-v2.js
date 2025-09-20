@@ -328,7 +328,10 @@ async function loadCommentsForPosts(posts) {
             const data = await response.json();
             
             if (response.ok) {
-                const comments = data.comments || [];
+                // Fix: API returns array directly, not wrapped in { comments: [] }
+                const comments = Array.isArray(data) ? data : data.comments || [];
+                
+                console.log(`🔍 COMMENT_DEBUG: Post ${post.id} - API returned ${comments.length} comments`);
                 
                 // Cache the comments
                 commentsCache.set(post.id, comments);
@@ -3029,7 +3032,9 @@ async function loadComments(postId) {
         const data = await response.json();
         
         if (response.ok) {
-            const comments = data.comments || [];
+            // Fix: API returns array directly, not wrapped in { comments: [] }
+            const comments = Array.isArray(data) ? data : data.comments || [];
+            console.log(`🔍 COMMENT_LOAD_DEBUG: Post ${postId} - API returned ${comments.length} comments`);
             
             // Cache the comments
             commentsCache.set(postId, comments);
@@ -3517,8 +3522,17 @@ async function postReply(parentCommentId, postId) {
             cancelReply(parentCommentId);
             showToast('💬 Reply posted!', 'success');
             
-            // Clear cache and reload comments to show the new reply
+            // ENHANCED: Invalidate both comment cache AND post cache for this post
             commentsCache.clear(postId);
+            
+            // Also clear post from posts cache to reload fresh data including comment count
+            const currentPost = posts.find(p => p.id === postId);
+            if (currentPost) {
+                // Clear cached comments on post object
+                delete currentPost._comments;
+            }
+            
+            // Reload comments to show the new reply
             loadComments(postId);
             
             // Update comment count in post
