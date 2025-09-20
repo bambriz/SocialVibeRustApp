@@ -29,7 +29,13 @@ pub struct CreateVoteRequest {
     pub target_type: String, // "post" or "comment"
     pub vote_type: String,   // "emotion" or "content_filter"
     pub tag: String,         // specific tag like "joy", "insult"
-    pub is_upvote: bool,     // true = agree with tag, false = disagree
+    #[serde(default = "default_is_upvote")]
+    pub is_upvote: bool,     // true = agree with tag (defaults to true for agreement-only system)
+}
+
+/// Default value for is_upvote field (always true for agreement-only system)
+fn default_is_upvote() -> bool {
+    true
 }
 
 /// Aggregated vote counts for a specific tag

@@ -16,7 +16,7 @@ impl VoteService {
         Self { vote_repo }
     }
 
-    /// Cast or update a vote on emotion/content tags
+    /// Cast or update a vote on emotion/content tags - Simple agreement toggle
     pub async fn cast_vote(&self, user_id: Uuid, request: CreateVoteRequest) -> Result<Vote> {
         // Validate vote request
         self.validate_vote_request(&request)?;
@@ -29,7 +29,13 @@ impl VoteService {
             &request.tag
         ).await?;
 
-        // Create new vote
+        // If user already has a vote (agreement), remove it (toggle off)
+        if existing_vote.is_some() {
+            self.vote_repo.remove_vote(user_id, request.target_id, &request.vote_type, &request.tag).await?;
+            return Err(AppError::ValidationError("Vote removed".to_string()));
+        }
+
+        // Create new agreement vote (always true since we only support agreement)
         let vote = Vote {
             id: Uuid::new_v4(),
             user_id,
@@ -37,20 +43,12 @@ impl VoteService {
             target_type: request.target_type,
             vote_type: request.vote_type,
             tag: request.tag,
-            is_upvote: request.is_upvote,
+            is_upvote: true, // Always true for agreement-only system
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
 
-        // If existing vote is the same, remove it (toggle behavior)
-        if let Some(existing) = existing_vote {
-            if existing.is_upvote == vote.is_upvote {
-                self.vote_repo.remove_vote(user_id, vote.target_id, &vote.vote_type, &vote.tag).await?;
-                return Err(AppError::ValidationError("Vote removed".to_string()));
-            }
-        }
-
-        // Cast the vote
+        // Cast the agreement vote
         self.vote_repo.cast_vote(&vote).await
     }
 

@@ -919,15 +919,12 @@ function renderVotableEmotionTag(post, sentimentClass, sentimentLabel) {
     const voteCount = getVoteCount(post.id, 'emotion', emotionTag);
     const voteCountDisplay = voteCount > 0 ? ` ${formatVoteCount(voteCount)}` : '';
     
-    const votedClass = userVote !== null ? 'voted' : '';
-    const upvoteClass = userVote === true ? 'upvoted' : '';
-    const downvoteClass = userVote === false ? 'downvoted' : '';
+    const votedClass = userVote ? 'voted agreed' : '';
     
     return `
-        <div class="sentiment-badge ${sentimentClass} votable-tag ${votedClass} ${upvoteClass} ${downvoteClass}" 
-             onclick="voteOnTag('${post.id}', 'post', 'emotion', '${emotionTag}', true)"
-             oncontextmenu="voteOnTag('${post.id}', 'post', 'emotion', '${emotionTag}', false); return false;"
-             title="Left click to agree, right click to disagree. Click again to remove vote.">
+        <div class="sentiment-badge ${sentimentClass} votable-tag ${votedClass}" 
+             onclick="voteOnTag('${post.id}', 'post', 'emotion', '${emotionTag}')"
+             title="Click to agree this emotion matches the content. Click again to remove your agreement.">
             ${sentimentLabel}${voteCountDisplay}
         </div>
     `;
@@ -940,23 +937,20 @@ function renderVotableContentTag(postId, tag) {
     const voteCount = getVoteCount(postId, 'content_filter', tag.tag);
     const voteCountDisplay = voteCount > 0 ? ` ${formatVoteCount(voteCount)}` : '';
     
-    const votedClass = userVote !== null ? 'voted' : '';
-    const upvoteClass = userVote === true ? 'upvoted' : '';
-    const downvoteClass = userVote === false ? 'downvoted' : '';
+    const votedClass = userVote ? 'voted agreed' : '';
     
     return `
-        <span class="toxicity-tag votable-tag ${votedClass} ${upvoteClass} ${downvoteClass}" 
+        <span class="toxicity-tag votable-tag ${votedClass}" 
               style="background-color: ${tag.color}20; border: 1px solid ${tag.color}60; color: ${tag.color}"
-              onclick="voteOnTag('${postId}', 'post', 'content_filter', '${tag.tag}', true)"
-              oncontextmenu="voteOnTag('${postId}', 'post', 'content_filter', '${tag.tag}', false); return false;"
-              title="Left click to agree, right click to disagree. Click again to remove vote.">
+              onclick="voteOnTag('${postId}', 'post', 'content_filter', '${tag.tag}')"
+              title="Click to agree this content tag matches. Click again to remove your agreement.">
             ${tag.displayText}${voteCountDisplay}
         </span>
     `;
 }
 
-// Vote on a tag (emotion or content)
-async function voteOnTag(targetId, targetType, voteType, tag, isUpvote) {
+// Vote on a tag (emotion or content) - Simple agree/disagree toggle
+async function voteOnTag(targetId, targetType, voteType, tag) {
     if (!authToken) {
         showToast('Please log in to vote', 'error');
         return;
@@ -966,12 +960,12 @@ async function voteOnTag(targetId, targetType, voteType, tag, isUpvote) {
         const voteKey = `${voteType}_${tag}`;
         const currentVote = getUserVote(targetId, voteKey);
         
-        // If clicking the same vote type, remove the vote (toggle off)
-        if (currentVote === isUpvote) {
+        // If user already agreed, remove the vote (toggle off)
+        if (currentVote) {
             await removeVote(targetId, targetType, voteType, tag);
             setUserVote(targetId, voteKey, null);
         } else {
-            // Cast or update vote
+            // Cast agreement vote
             const response = await fetch('/api/vote', {
                 method: 'POST',
                 headers: {
@@ -983,13 +977,13 @@ async function voteOnTag(targetId, targetType, voteType, tag, isUpvote) {
                     target_type: targetType,
                     vote_type: voteType,
                     tag: tag,
-                    is_upvote: isUpvote
+                    is_upvote: true  // Always true since we only support agreement
                 })
             });
             
             if (response.ok) {
                 const voteSummary = await response.json();
-                setUserVote(targetId, voteKey, isUpvote);
+                setUserVote(targetId, voteKey, true);
                 updateVoteData(targetId, voteSummary);
                 refreshPostVoting(targetId);
             } else {
@@ -1020,32 +1014,34 @@ async function removeVote(targetId, targetType, voteType, tag) {
     }
 }
 
-// Get user's vote on a specific tag
+// Get user's vote on a specific tag (simplified for agreement-only)
 function getUserVote(targetId, voteKey) {
     const postVotes = userVotes.get(targetId) || {};
-    return postVotes[voteKey] !== undefined ? postVotes[voteKey] : null;
+    // Return true if user has agreed, null if no vote
+    return postVotes[voteKey] === true ? true : null;
 }
 
-// Set user's vote on a specific tag
+// Set user's vote on a specific tag (simplified for agreement-only)
 function setUserVote(targetId, voteKey, vote) {
     if (!userVotes.has(targetId)) {
         userVotes.set(targetId, {});
     }
-    if (vote === null) {
+    if (vote === null || vote === false) {
         delete userVotes.get(targetId)[voteKey];
     } else {
-        userVotes.get(targetId)[voteKey] = vote;
+        userVotes.get(targetId)[voteKey] = true; // Only store agreements
     }
 }
 
-// Get vote count for a tag
+// Get vote count for a tag (agreement count only)
 function getVoteCount(targetId, voteType, tag) {
     const data = voteData.get(targetId);
     if (!data) return 0;
     
     const votes = voteType === 'emotion' ? data.emotion_votes : data.content_filter_votes;
     const tagVote = votes.find(v => v.tag === tag);
-    return tagVote ? tagVote.total_votes : 0;
+    // Since we only support agreements, show upvotes count as total agreement count
+    return tagVote ? tagVote.upvotes : 0;
 }
 
 // Update vote data from server response
