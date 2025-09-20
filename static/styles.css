@@ -21,6 +21,19 @@
     to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes pullBounce {
+    0%, 20%, 53%, 80%, 100% { transform: translateY(0); }
+    40%, 43% { transform: translateY(-10px); }
+    70% { transform: translateY(-5px); }
+    90% { transform: translateY(-2px); }
+}
+
+@keyframes swipeSlide {
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+    100% { transform: translateY(0); }
+}
+
 .infinite-scroll-loader {
     transition: opacity 0.3s ease;
 }
@@ -28,6 +41,78 @@
 .infinite-scroll-loader.hidden {
     opacity: 0;
     pointer-events: none;
+}
+
+/* Pull-to-refresh indicator */
+.pull-to-refresh-indicator {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 1rem 2rem;
+    border-radius: 0 0 1rem 1rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    opacity: 0;
+    transform: translateX(-50%) translateY(-100%);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pull-to-refresh-indicator.active {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.pull-refresh-arrow {
+    font-size: 1.5rem;
+    color: #3b82f6;
+    animation: pullBounce 1s infinite;
+}
+
+.pull-refresh-text {
+    color: #374151;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+/* Swipe-to-load indicator */
+.swipe-to-load-indicator {
+    position: relative;
+    width: 100%;
+    text-align: center;
+    padding: 1rem;
+    margin: 1rem 0;
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: 0.5rem;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.swipe-to-load-indicator.active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.swipe-load-arrow {
+    font-size: 1.5rem;
+    color: #3b82f6;
+    animation: swipeSlide 1s infinite;
+}
+
+.swipe-load-text {
+    color: #3b82f6;
+    font-weight: 500;
+    font-size: 0.9rem;
 }
 
 /* Skeleton Loading States */

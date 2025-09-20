@@ -273,6 +273,17 @@ class ViewCache {
         this.hasMore = serverHasMore;
     }
 
+    // Clear all posts from this view cache
+    clear() {
+        this.posts.clear();
+        this.postOrder = [];
+        this.paginationRanges.clear();
+        this.lastAccess = Date.now();
+        this.lastFetch = 0;
+        this.hasMore = true;
+        console.log(`🗑️ Cache: Cleared view cache for ${this.viewKey}`);
+    }
+
     // Get cache statistics
     getStats() {
         const postCount = this.posts.size;
@@ -448,6 +459,11 @@ function setupEventListeners() {
     
     // Infinite scroll detection
     window.addEventListener('scroll', optimizedHandleScroll);
+    
+    // Touch gesture detection for mobile swipe interactions
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
 }
 
 // Authentication functions
@@ -1177,6 +1193,87 @@ function hideInfiniteScrollLoader() {
     }
 }
 
+// Pull-to-refresh visual indicators
+function showPullToRefreshIndicator() {
+    let indicator = document.getElementById('pullToRefreshIndicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'pullToRefreshIndicator';
+        indicator.className = 'pull-to-refresh-indicator';
+        indicator.innerHTML = `
+            <div class="pull-refresh-arrow">↓</div>
+            <div class="pull-refresh-text">Release to refresh</div>
+        `;
+        document.body.insertBefore(indicator, document.body.firstChild);
+    }
+    indicator.classList.remove('hidden');
+    indicator.classList.add('active');
+}
+
+function hidePullToRefreshIndicator() {
+    const indicator = document.getElementById('pullToRefreshIndicator');
+    if (indicator) {
+        indicator.classList.remove('active');
+        indicator.classList.add('hidden');
+    }
+}
+
+// Swipe-to-load visual indicators
+function showSwipeToLoadIndicator() {
+    let indicator = document.getElementById('swipeToLoadIndicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'swipeToLoadIndicator';
+        indicator.className = 'swipe-to-load-indicator';
+        indicator.innerHTML = `
+            <div class="swipe-load-arrow">↑</div>
+            <div class="swipe-load-text">Loading more...</div>
+        `;
+        const postsList = document.getElementById('postsList');
+        if (postsList) {
+            postsList.appendChild(indicator);
+        } else {
+            console.warn('Posts list container not found for swipe indicator');
+            return;
+        }
+    }
+    indicator.classList.remove('hidden');
+    indicator.classList.add('active');
+}
+
+function hideSwipeToLoadIndicator() {
+    const indicator = document.getElementById('swipeToLoadIndicator');
+    if (indicator) {
+        indicator.classList.remove('active');
+        setTimeout(() => {
+            if (indicator && indicator.classList.contains('hidden') === false) {
+                indicator.classList.add('hidden');
+            }
+        }, 1000); // Keep visible for 1 second after swipe
+    }
+}
+
+// Refresh feed function for pull-to-refresh
+async function refreshFeed() {
+    console.log('🔄 Refreshing feed via pull-to-refresh');
+    
+    // Clear current view cache to ensure fresh data
+    const cache = postsCache.getViewCache(currentView, currentUser?.id);
+    cache.clear();
+    
+    // Reset pagination and reload posts
+    paginationState.offset = 0;
+    paginationState.hasMore = true;
+    
+    // Show refreshing indicator
+    showToast('Refreshing feed...', 'info');
+    
+    // Load fresh posts
+    await loadPosts(true);
+    
+    showToast('Feed refreshed!', 'success');
+}
+
 function handleScroll() {
     // Check if we're near the bottom of the page
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
@@ -1201,6 +1298,77 @@ function optimizedHandleScroll() {
     scrollTimeout = setTimeout(() => {
         handleScroll();
     }, 100); // Throttle scroll events to every 100ms
+}
+
+// Touch/Swipe gesture handling for mobile-friendly feed navigation
+let touchStartY = null;
+let touchStartX = null;
+let touchStartTime = null;
+let isPullToRefreshActive = false;
+let isSwipeToLoadActive = false;
+let pullToRefreshThreshold = 80; // Minimum distance for pull-to-refresh
+let swipeToLoadThreshold = 60; // Minimum distance for swipe-to-load
+
+function handleTouchStart(e) {
+    const touch = e.touches[0];
+    touchStartY = touch.clientY;
+    touchStartX = touch.clientX;
+    touchStartTime = Date.now();
+}
+
+function handleTouchMove(e) {
+    if (!touchStartY || !touchStartX) return;
+
+    const touch = e.touches[0];
+    const deltaY = touch.clientY - touchStartY;
+    const deltaX = touch.clientX - touchStartX;
+    const absDeltaY = Math.abs(deltaY);
+    const absDeltaX = Math.abs(deltaX);
+
+    // Only process vertical swipes (ignore horizontal swipes)
+    if (absDeltaX > absDeltaY) return;
+
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const windowHeight = window.innerHeight;
+    const documentHeight = document.documentElement.scrollHeight;
+
+    // Pull-to-refresh at the top (swipe down)
+    if (deltaY > pullToRefreshThreshold && scrollTop <= 10 && !isPullToRefreshActive && !paginationState.isLoading) {
+        isPullToRefreshActive = true;
+        showPullToRefreshIndicator();
+        // Only prevent default when we're actively handling the gesture
+        e.preventDefault();
+        console.log('🔄 Pull-to-refresh activated via swipe');
+    }
+
+    // Swipe-to-load at the bottom (swipe up) 
+    if (deltaY < -swipeToLoadThreshold && scrollTop + windowHeight >= documentHeight - 150 && !isSwipeToLoadActive && paginationState.hasMore && !paginationState.isLoading) {
+        isSwipeToLoadActive = true;
+        showSwipeToLoadIndicator();
+        // Trigger load more posts
+        console.log('📱 Swipe-to-load activated');
+        loadPosts(false);
+    }
+}
+
+function handleTouchEnd(e) {
+    if (isPullToRefreshActive) {
+        isPullToRefreshActive = false;
+        hidePullToRefreshIndicator();
+        // Trigger refresh
+        console.log('🔄 Executing pull-to-refresh');
+        refreshFeed();
+    }
+
+    if (isSwipeToLoadActive) {
+        isSwipeToLoadActive = false;
+        hideSwipeToLoadIndicator();
+    }
+
+    // Reset touch tracking
+    touchStartY = null;
+    touchStartX = null;
+    touchStartTime = null;
 }
 
 function getSentimentClass(post) {
