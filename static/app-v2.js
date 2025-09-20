@@ -725,14 +725,17 @@ function toggleVibeCheck() {
 function updateStickyPositions() {
     const navbar = document.querySelector('.navbar');
     const postCreator = document.getElementById('postCreator');
+    const vibeCheckComponent = document.getElementById('vibeCheckComponent');
     
     if (navbar && postCreator) {
         const navbarHeight = navbar.offsetHeight;
         const postCreatorHeight = postCreator.offsetHeight;
+        const vibeCheckHeight = vibeCheckComponent ? vibeCheckComponent.offsetHeight : 0;
         
         // Update CSS variables for responsive sticky positioning
         document.documentElement.style.setProperty('--post-creator-top', `${navbarHeight}px`);
-        document.documentElement.style.setProperty('--feed-header-top', `${navbarHeight + postCreatorHeight + 20}px`);
+        document.documentElement.style.setProperty('--vibe-check-top', `${navbarHeight + postCreatorHeight + 10}px`);
+        document.documentElement.style.setProperty('--feed-header-top', `${navbarHeight + postCreatorHeight + vibeCheckHeight + 30}px`);
     }
 }
 
