@@ -2,7 +2,7 @@
 
 ## Overview
 
-Social Pulse is a modern social media application that combines traditional social networking features with sentiment analysis and content moderation capabilities. The platform allows users to create posts, interact with content, and provides real-time sentiment analysis of user-generated content. Built with a Rust backend using Axum framework and a vanilla JavaScript frontend, the application focuses on creating a safe and emotionally-aware social environment with Instagram/Facebook/Reddit-style infinite scroll functionality.
+Social Pulse is a modern social media application that combines traditional social networking features with sentiment analysis and content moderation capabilities. The platform allows users to create posts, interact with content, and provides real-time sentiment analysis of user-generated content. Built with a Rust backend using Axum framework and a vanilla JavaScript frontend, the application focuses on creating a safe and emotionally-aware social environment with Instagram/Facebook/Reddit-style infinite scroll functionality, hierarchical comment threading, and comprehensive optimistic UI for immediate user feedback.
 
 ## User Preferences
 
@@ -11,7 +11,7 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Backend Architecture
-The application uses a **Rust-based microservices architecture** with Axum as the primary web framework. This choice provides memory safety, high performance, and excellent concurrency handling for a social media platform that needs to process multiple user requests simultaneously.
+The application uses a **modular monolith architecture** with Axum as the primary web framework and a supervised Python subprocess for content processing. This choice provides memory safety, high performance, and excellent concurrency handling for a social media platform that needs to process multiple user requests simultaneously.
 
 **Key architectural decisions:**
 - **Axum Framework**: Selected for its modern async/await support, type-safe routing, and middleware system
@@ -31,6 +31,21 @@ The frontend uses **vanilla JavaScript with a Single Page Application (SPA) appr
 - **Modal-based Interactions**: Uses overlay modals for forms and detailed views
 - **Real-time Sentiment Preview**: Provides immediate feedback on content sentiment as users type
 - **Infinite Scroll Feed**: Implements continuous scrolling pagination with loading indicators for smooth Instagram/Facebook/Reddit-style user experience
+- **Optimistic UI**: Comprehensive optimistic UI for both posts and comments with immediate visual feedback and graceful error handling
+- **Mobile-First Design**: Touch-friendly interactions with pull-to-refresh and swipe-to-load gestures for enhanced mobile experience
+
+### Comment System Architecture
+The application implements a **sophisticated hierarchical comment system** following Reddit-style threading patterns with optimistic UI for immediate user feedback.
+
+**Key architectural decisions:**
+- **Materialized Path Structure**: Uses path-based hierarchy (e.g., "1/", "1/001/", "1/002/") stored in `path` TEXT column with atomic sibling index allocation for consistent threading
+- **Database Constraints**: Enforces path validation via `comments_path_valid` constraint, depth limits (0-10) via `comments_depth_limit` constraint, and foreign key integrity via `comments_post_id_fkey` and `comments_parent_id_fkey`
+- **Transactional Comment Creation**: Single-transaction insert implemented in `src/services/comment_service.rs` with automatic path generation and reply count updates for data integrity
+- **Depth-Limited Threading**: Maximum comment depth (10 levels) enforced at database level and service level (CommentService::create_comment_atomic)
+- **Optimistic Comment Posting**: Immediate UI updates with temporary IDs, replaced by server responses or rolled back on failure (implemented in static/app-v2.js)
+- **Sentiment-Aware Comments**: Each comment includes sentiment analysis with visual emotion indicators and popularity scoring
+- **Collapsible Comment Threads**: Expandable/collapsible comment sections with smooth animations for better content organization
+- **Touch-Friendly Mobile UX**: Optimized comment interactions for mobile devices with proper touch targets and responsive design
 
 ### Content Processing Architecture
 The application implements a **subprocess-managed content processing system** with tight integration between Rust and Python for advanced text analysis.
@@ -57,12 +72,16 @@ The platform implements **sophisticated emotion detection** with a streamlined a
 - **Emotion Migration System**: Automatic migration of legacy combo emotions to standalone categories during startup
 
 ### Data Management
-The application is designed with **flexible data storage** in mind, currently structured for SQLite but architectured to support PostgreSQL migration.
+The application uses **PostgreSQL as the primary database** with a sophisticated schema design optimized for social media interactions and hierarchical content.
 
 **Key architectural decisions:**
-- **User-centric Data Model**: Organizes data around user entities with posts, authentication, and profile information
+- **PostgreSQL Production Database**: Uses Replit's managed PostgreSQL service with rollback capabilities and production-grade reliability
+- **User-centric Data Model**: Organizes data around user entities with posts, comments, authentication, and profile information
+- **Hierarchical Comment Storage**: Implements materialized path pattern for efficient comment threading with path validation constraints
 - **Timestamp Tracking**: Includes created_at/updated_at fields for audit trails and chronological ordering
-- **Sentiment Metadata Storage**: Stores sentiment analysis results alongside posts for quick retrieval and filtering
+- **Sentiment Metadata Storage**: Stores sentiment analysis results alongside posts and comments for quick retrieval and filtering
+- **Atomic Transaction Support**: Uses database transactions for complex operations like comment creation with path generation
+- **Database-Only Persistence**: Eliminated CSV backup dependency for improved performance and data consistency
 
 ### Security Architecture
 The platform implements **defense-in-depth security** with multiple layers of protection.
@@ -92,10 +111,80 @@ The platform implements **defense-in-depth security** with multiple layers of pr
 - **Python 3**: Required for sentiment analysis and content moderation scripts
 - **Python Standard Library**: Uses built-in regex and JSON modules for text processing
 
+## Setup & Configuration
+
+### Environment Variables
+Required environment variables for local development:
+- **DATABASE_URL**: PostgreSQL connection string (automatically provided in Replit environment)
+- **JWT_SECRET**: Secret key for JWT token signing (automatically provided)
+- **PYTHON_SERVER_MODE**: Controls sentiment analysis mode - "disabled" uses internal subprocess (default), "external" connects to standalone Python server
+- **RUST_LOG**: Set to "info" or "debug" for application logging
+
+### Database Setup
+- The application uses Replit's managed PostgreSQL database (production-ready)
+- Database schema is automatically initialized on first startup
+- No manual database setup required in Replit environment
+
+### Running the Application
+```bash
+# Start the application (in Replit, this runs automatically via the configured workflow)
+cargo run
+
+# The application will:
+# 1. Start Rust server on port 5000
+# 2. Initialize PostgreSQL connection
+# 3. Start Python sentiment analysis subprocess (if enabled)
+# 4. Serve static files and API endpoints
+```
+
+### Sample Data
+The application includes rich sample data with:
+- Multiple user accounts with various post types
+- Hierarchical comment threads demonstrating nested conversations
+- Diverse sentiment examples across different emotion categories
+- Test account available: email `frontend@test.com`, password `test123`
+
+## API Reference
+
+### Authentication Endpoints
+- **POST /api/register**: User registration
+- **POST /api/login**: User authentication  
+- **POST /api/logout**: User logout
+
+### Posts Endpoints
+- **GET /api/posts**: Retrieve posts with pagination (limit: 1-50, offset: ≤10000)
+- **POST /api/posts**: Create new post (requires authentication)
+- **GET /api/posts/{id}**: Get specific post
+- **PUT /api/posts/{id}**: Update post (requires ownership)
+- **DELETE /api/posts/{id}**: Delete post (requires ownership)
+
+### Comments Endpoints
+- **GET /api/posts/{post_id}/comments**: Get hierarchical comments for a post
+- **POST /api/posts/{post_id}/comments**: Create new comment (requires authentication)
+- **PUT /api/comments/{id}**: Update comment (requires ownership)
+- **DELETE /api/comments/{id}**: Delete comment (requires ownership)
+
+## Recent Enhancements (September 2025)
+
+### Completed Features
+- **✅ Hierarchical Comment System**: Full Reddit-style threaded comments with materialized path storage and optimistic UI
+- **✅ PostgreSQL Migration**: Complete migration from SQLite to managed PostgreSQL with enhanced data integrity
+- **✅ Optimistic UI Framework**: Comprehensive immediate feedback system for posts and comments with graceful error handling
+- **✅ Mobile-Responsive Design**: Touch-friendly interface with pull-to-refresh and swipe-to-load gestures
+- **✅ Enhanced Sample Data**: Rich test data with nested comments and diverse sentiment examples
+- **✅ Collapsible UI Components**: Independent Share Your Thoughts and Vibe Check sections with smooth animations
+
+### Technical Improvements
+- **Database-First Architecture**: Eliminated CSV backup dependency for improved performance
+- **Touch Gesture System**: Full mobile gesture support with threshold-based swipe detection
+- **Visual Feedback Enhancements**: Pending state animations and mobile-optimized sticky positioning
+- **Cache Optimization**: Improved caching system with proper invalidation and consistency management
+
 ### Potential Future Integrations
 The architecture is designed to accommodate:
-- **PostgreSQL Database**: For production-scale data storage
 - **Machine Learning APIs**: For advanced sentiment analysis and content moderation
 - **CDN Services**: For static asset delivery and improved performance
 - **Email Services**: For user notifications and verification
 - **Real-time Communication**: WebSocket support for live updates and messaging
+- **Push Notifications**: Mobile push notification support for engagement
+- **Advanced Moderation**: AI-powered content moderation with custom rule engines
