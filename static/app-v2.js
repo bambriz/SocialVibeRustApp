@@ -652,9 +652,16 @@ async function showMainFeed() {
 }
 
 function showUserInterface() {
+    // Desktop navigation
     document.getElementById('navActions').classList.add('hidden');
     document.getElementById('navUser').classList.remove('hidden');
     document.getElementById('navUsername').textContent = `Hello, ${currentUser.username}!`;
+    
+    // Mobile navigation - sync with desktop
+    document.getElementById('mobileNavActions').classList.add('hidden');
+    document.getElementById('mobileNavUser').classList.remove('hidden');
+    document.getElementById('mobileNavUsername').textContent = `Hello, ${currentUser.username}!`;
+    
     document.getElementById('postCreator').classList.remove('hidden');
     
     // Update sticky positions after UI change that could affect navbar height
@@ -744,8 +751,14 @@ window.addEventListener('load', updateStickyPositions);
 window.addEventListener('resize', updateStickyPositions);
 
 function showGuestInterface() {
+    // Desktop navigation
     document.getElementById('navActions').classList.remove('hidden');
     document.getElementById('navUser').classList.add('hidden');
+    
+    // Mobile navigation - sync with desktop
+    document.getElementById('mobileNavActions').classList.remove('hidden');
+    document.getElementById('mobileNavUser').classList.add('hidden');
+    
     document.getElementById('postCreator').classList.add('hidden');
     
     // Update sticky positions after UI change that could affect navbar height
@@ -3321,5 +3334,49 @@ async function deleteCommentSilent(commentId) {
     
     if (!response.ok) {
         throw new Error(`Failed to delete comment ${commentId}`);
+    }
+}
+
+// === MOBILE NAVIGATION FUNCTIONS ===
+
+function toggleMobileMenu() {
+    const mobileNav = document.getElementById('mobileNav');
+    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+    
+    if (mobileNav.classList.contains('show')) {
+        // Closing menu
+        mobileNav.classList.remove('show');
+        mobileNav.classList.add('hidden');
+        mobileMenuToggle.classList.remove('active');
+        document.removeEventListener('click', handleClickOutside);
+    } else {
+        // Opening menu
+        mobileNav.classList.remove('hidden');
+        mobileNav.classList.add('show');
+        mobileMenuToggle.classList.add('active');
+        // Add click outside listener
+        setTimeout(() => {
+            document.addEventListener('click', handleClickOutside);
+        }, 0);
+    }
+}
+
+function closeMobileMenu() {
+    const mobileNav = document.getElementById('mobileNav');
+    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+    
+    mobileNav.classList.remove('show');
+    mobileNav.classList.add('hidden');
+    mobileMenuToggle.classList.remove('active');
+    document.removeEventListener('click', handleClickOutside);
+}
+
+function handleClickOutside(event) {
+    const mobileNav = document.getElementById('mobileNav');
+    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+    
+    // Check if click is outside the mobile nav and toggle button
+    if (!mobileNav.contains(event.target) && !mobileMenuToggle.contains(event.target)) {
+        closeMobileMenu();
     }
 }

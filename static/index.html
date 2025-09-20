@@ -17,15 +17,47 @@
                 <h1>Social Pulse</h1>
                 <span class="tagline">Feel the Vibe</span>
             </div>
-            <div class="nav-actions" id="navActions">
+            
+            <!-- Mobile Menu Toggle Button -->
+            <button class="mobile-menu-toggle hidden" id="mobileMenuToggle" onclick="toggleMobileMenu()">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </button>
+            
+            <!-- Desktop Navigation Actions (Guest) -->
+            <div class="nav-actions desktop-nav" id="navActions">
                 <button class="btn btn-primary" onclick="showLogin()">Login</button>
                 <button class="btn btn-outline" onclick="showRegister()">Sign Up</button>
             </div>
-            <div class="nav-user hidden" id="navUser">
+            
+            <!-- Desktop Navigation User (Logged In) -->
+            <div class="nav-user desktop-nav hidden" id="navUser">
                 <button class="btn btn-primary" onclick="showUserHome()">My Posts</button>
                 <button class="btn btn-outline" onclick="showMainFeed()">Feed</button>
                 <span class="username" id="navUsername">Welcome!</span>
                 <button class="btn btn-outline" onclick="logout()">Logout</button>
+            </div>
+            
+            <!-- Mobile Navigation Menu -->
+            <div class="mobile-nav hidden" id="mobileNav">
+                <div class="mobile-nav-content">
+                    <!-- Mobile Guest Actions -->
+                    <div class="mobile-nav-actions" id="mobileNavActions">
+                        <button class="mobile-nav-btn btn-primary" onclick="showLogin(); closeMobileMenu()">Login</button>
+                        <button class="mobile-nav-btn btn-outline" onclick="showRegister(); closeMobileMenu()">Sign Up</button>
+                    </div>
+                    
+                    <!-- Mobile User Actions -->
+                    <div class="mobile-nav-user hidden" id="mobileNavUser">
+                        <div class="mobile-user-info">
+                            <span class="mobile-username" id="mobileNavUsername">Welcome!</span>
+                        </div>
+                        <button class="mobile-nav-btn btn-primary" onclick="showUserHome(); closeMobileMenu()">My Posts</button>
+                        <button class="mobile-nav-btn btn-outline" onclick="showMainFeed(); closeMobileMenu()">Feed</button>
+                        <button class="mobile-nav-btn btn-outline logout-btn" onclick="logout(); closeMobileMenu()">Logout</button>
+                    </div>
+                </div>
             </div>
         </div>
     </nav>
