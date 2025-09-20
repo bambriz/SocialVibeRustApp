@@ -648,12 +648,71 @@ function showUserInterface() {
     document.getElementById('navUser').classList.remove('hidden');
     document.getElementById('navUsername').textContent = `Hello, ${currentUser.username}!`;
     document.getElementById('postCreator').classList.remove('hidden');
+    
+    // Update sticky positions after UI change that could affect navbar height
+    setTimeout(updateStickyPositions, 100);
 }
+
+// Toggle post creator between collapsed and expanded states
+function togglePostCreator() {
+    const postCreator = document.getElementById('postCreator');
+    const isCollapsed = postCreator.classList.contains('collapsed');
+    
+    if (isCollapsed) {
+        // Expanding
+        postCreator.classList.remove('collapsed');
+        postCreator.classList.add('expanded');
+        // Focus on the title input when expanded
+        setTimeout(() => {
+            document.getElementById('postTitle').focus();
+        }, 300);
+        
+        // Update sticky positioning dynamically based on actual element heights
+        updateStickyPositions();
+    } else {
+        // Collapsing with smooth animation
+        postCreator.classList.add('collapsing');
+        postCreator.classList.remove('expanded');
+        
+        // Clear form when collapsing
+        document.getElementById('postForm').reset();
+        document.getElementById('sentimentPreview').textContent = '';
+        
+        // Wait for animation to complete, then apply collapsed state
+        setTimeout(() => {
+            postCreator.classList.remove('collapsing');
+            postCreator.classList.add('collapsed');
+            updateStickyPositions();
+        }, 300);
+    }
+}
+
+// Dynamically update sticky positioning based on actual element heights
+function updateStickyPositions() {
+    const navbar = document.querySelector('.navbar');
+    const postCreator = document.getElementById('postCreator');
+    
+    if (navbar && postCreator) {
+        const navbarHeight = navbar.offsetHeight;
+        const postCreatorHeight = postCreator.offsetHeight;
+        
+        // Update CSS variables for responsive sticky positioning
+        document.documentElement.style.setProperty('--post-creator-top', `${navbarHeight}px`);
+        document.documentElement.style.setProperty('--feed-header-top', `${navbarHeight + postCreatorHeight + 20}px`);
+    }
+}
+
+// Initialize sticky positions on page load and window resize
+window.addEventListener('load', updateStickyPositions);
+window.addEventListener('resize', updateStickyPositions);
 
 function showGuestInterface() {
     document.getElementById('navActions').classList.remove('hidden');
     document.getElementById('navUser').classList.add('hidden');
     document.getElementById('postCreator').classList.add('hidden');
+    
+    // Update sticky positions after UI change that could affect navbar height
+    setTimeout(updateStickyPositions, 100);
 }
 
 // Post functions
@@ -684,6 +743,20 @@ async function handleCreatePost(e) {
             document.getElementById('postForm').reset();
             document.getElementById('sentimentPreview').textContent = '';
             showToast('Post created successfully!', 'success');
+            
+            // Collapse the post creator after successful post with smooth animation
+            const postCreator = document.getElementById('postCreator');
+            if (postCreator.classList.contains('expanded')) {
+                postCreator.classList.add('collapsing');
+                postCreator.classList.remove('expanded');
+                
+                setTimeout(() => {
+                    postCreator.classList.remove('collapsing');
+                    postCreator.classList.add('collapsed');
+                    updateStickyPositions();
+                }, 300);
+            }
+            
             loadPosts(); // Refresh posts
         } else {
             console.log('Error details:', data);
