@@ -1,8 +1,9 @@
 // PostgreSQL repository implementations using sqlx
 use async_trait::async_trait;
-use sqlx::PgPool;
+use sqlx::postgres::{PgPool, PgPoolOptions};
 use uuid::Uuid;
 use std::sync::Arc;
+use std::time::Duration;
 use crate::{Result, AppError};
 use crate::models::{User, Post, Comment, Vote, TagVoteCount, VoteSummary};
 use crate::db::repository::{UserRepository, PostRepository, CommentRepository, VoteRepository};
@@ -14,9 +15,24 @@ pub struct PostgresDatabase {
 
 impl PostgresDatabase {
     pub async fn new(database_url: &str) -> Result<Self> {
-        let pool = PgPool::connect(database_url)
+        tracing::info!("🔗 DATABASE_RESILIENCE: Configuring connection pool");
+        tracing::info!("   📊 Max connections: 20");
+        tracing::info!("   ⏰ Connection timeout: 30s");
+        tracing::info!("   ⏳ Idle timeout: 10m");
+        
+        let pool = PgPoolOptions::new()
+            .max_connections(20)  // Configure maximum concurrent connections
+            .idle_timeout(Duration::from_secs(600)) // 10 minutes idle timeout  
+            .max_lifetime(Duration::from_secs(3600)) // 1 hour max connection lifetime
+            .acquire_timeout(Duration::from_secs(30))
+            .connect(database_url)
             .await
-            .map_err(|e| AppError::DatabaseError(format!("Failed to connect to PostgreSQL: {}", e)))?;
+            .map_err(|e| {
+                tracing::error!("❌ DATABASE_RESILIENCE: Failed to create connection pool: {}", e);
+                AppError::DatabaseError(format!("Failed to connect to PostgreSQL: {}", e))
+            })?;
+        
+        tracing::info!("✅ DATABASE_RESILIENCE: Connection pool configured successfully");
         
         Ok(Self {
             pool: Arc::new(pool),
