@@ -1,15 +1,18 @@
 use axum::{
     extract::{State, Path},
+    Extension,
     http::StatusCode,
     response::Json,
-    routing::{get, post},
+    routing::{get, post, delete},
     Router,
     middleware,
 };
 use uuid::Uuid;
+use chrono::Utc;
 
-use crate::{AppState, Result};
+use crate::{AppState, Result, AppError};
 use crate::models::{CreateVoteRequest, TagVoteCount, VoteSummary};
+use crate::models::vote::Vote;
 use crate::auth::Claims;
 
 /// Vote-related API routes
@@ -17,12 +20,35 @@ pub fn vote_routes() -> Router<AppState> {
     Router::new()
         .route("/vote/:target_id/:target_type", get(get_vote_summary))
         .route("/vote/counts/:target_id/:target_type", get(get_vote_counts))
-        // Protected routes will be added back after fixing handler signatures
+        .route("/vote/user/:target_id/:target_type/:vote_type/:tag", get(get_user_vote))
+        .route("/vote", post(cast_vote))
+        .route("/vote/:target_id/:target_type/:vote_type/:tag", delete(remove_vote))
 }
 
 /// Cast or update a vote on emotion/content tags
-// Voting handlers temporarily disabled - will be restored after PostgreSQL setup
-// async fn cast_vote() { ... }
+async fn cast_vote(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(request): Json<CreateVoteRequest>,
+) -> Result<Json<VoteSummary>> {
+    let user_id = Uuid::parse_str(&claims.user_id)
+        .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;
+
+    // VoteService handles the toggle logic internally
+    match state.vote_service.cast_vote(user_id, request.clone()).await {
+        Ok(_) => {
+            // Vote was cast or updated successfully
+        },
+        Err(AppError::ValidationError(msg)) if msg == "Vote removed" => {
+            // Vote was toggled off (removed)
+        },
+        Err(e) => return Err(e),
+    }
+
+    // Return updated vote summary
+    let summary = state.vote_service.get_vote_summary(request.target_id, &request.target_type).await?;
+    Ok(Json(summary))
+}
 
 /// Get comprehensive vote summary for a target (post or comment)
 async fn get_vote_summary(
@@ -42,5 +68,35 @@ async fn get_vote_counts(
     Ok(Json(counts))
 }
 
-// User vote handler temporarily disabled - will be restored after PostgreSQL setup
-// async fn get_user_vote() { ... }
+/// Get user's specific vote on a target and tag
+async fn get_user_vote(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((target_id, target_type, vote_type, tag)): Path<(Uuid, String, String, String)>,
+) -> Result<Json<Option<Vote>>> {
+    let user_id = Uuid::parse_str(&claims.user_id)
+        .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;
+
+    let vote = state.vote_service
+        .get_user_vote(user_id, target_id, &vote_type, &tag)
+        .await?;
+    Ok(Json(vote))
+}
+
+/// Remove a user's vote
+async fn remove_vote(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((target_id, target_type, vote_type, tag)): Path<(Uuid, String, String, String)>,
+) -> Result<Json<VoteSummary>> {
+    let user_id = Uuid::parse_str(&claims.user_id)
+        .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;
+
+    state.vote_service
+        .remove_vote(user_id, target_id, &vote_type, &tag)
+        .await?;
+
+    // Return updated vote summary
+    let summary = state.vote_service.get_vote_summary(target_id, &target_type).await?;
+    Ok(Json(summary))
+}
