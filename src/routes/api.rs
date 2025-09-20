@@ -6,7 +6,6 @@ use axum::{
 use serde_json::{json, Value};
 use crate::AppState;
 use crate::routes::{users, posts, auth, comments, vote_routes};
-use crate::auth::middleware::auth_middleware;
 
 // Function to create protected routes without middleware (middleware applied at top level)
 pub fn protected_routes_with_auth() -> Router<AppState> {
@@ -18,7 +17,7 @@ pub fn protected_routes_with_auth() -> Router<AppState> {
         .merge(vote_routes::protected_vote_routes())
 }
 
-pub fn routes() -> Router<AppState> {
+pub fn routes(app_state: &AppState) -> Router<AppState> {
     let public_routes = Router::new()
         .route("/health", get(api_health))
         .route("/auth/register", post(auth::register))
@@ -28,17 +27,13 @@ pub fn routes() -> Router<AppState> {
         .route("/posts/:post_id", get(posts::get_post))
         .route("/posts/user/:user_id", get(posts::get_user_posts));
 
-    let protected_routes = protected_routes_with_auth();
+    let protected_routes = protected_routes_with_auth()
+        .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware_with_state));
 
     public_routes
         .merge(protected_routes)
         .merge(comments::public_routes()) 
         .merge(vote_routes::public_vote_routes())
-}
-
-// Function to apply auth middleware with state - called from main.rs
-pub fn apply_auth_middleware(router: Router<AppState>, app_state: &AppState) -> Router<AppState> {
-    router.layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware_with_state))
 }
 
 // Auth middleware that receives AppState directly as parameter

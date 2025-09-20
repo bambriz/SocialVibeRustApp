@@ -9,8 +9,8 @@ pub mod vote_routes;
 use axum::Router;
 use crate::AppState;
 
-pub fn create_routes() -> Router<AppState> {
+pub fn create_routes(app_state: &AppState) -> Router<AppState> {
     Router::new()
         .merge(web::routes())
-        .nest("/api", api::routes())
+        .nest("/api", api::routes(app_state))
 }
