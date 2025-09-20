@@ -771,39 +771,210 @@ impl CommentRepository for PostgresCommentRepository {
     }
 }
 
-// PostgreSQL Vote Repository - simplified implementation
+// PostgreSQL Vote Repository - full implementation
 pub struct PostgresVoteRepository {
     pool: Arc<PgPool>,
 }
 
+impl PostgresVoteRepository {
+    pub fn new(pool: Arc<PgPool>) -> Self {
+        Self { pool }
+    }
+}
+
 #[async_trait]
 impl VoteRepository for PostgresVoteRepository {
-    async fn cast_vote(&self, _vote: &Vote) -> Result<Vote> {
-        Err(AppError::InternalError("Vote system temporarily disabled".to_string()))
-    }
-    
-    async fn get_user_vote(&self, _user_id: Uuid, _target_id: Uuid, _vote_type: &str, _tag: &str) -> Result<Option<Vote>> {
-        Ok(None)
-    }
-    
-    async fn get_vote_counts(&self, _target_id: Uuid, _target_type: &str) -> Result<Vec<TagVoteCount>> {
-        Ok(vec![])
-    }
-    
-    async fn get_vote_summary(&self, _target_id: Uuid, _target_type: &str) -> Result<VoteSummary> {
-        Ok(VoteSummary {
-            target_id: _target_id,
-            emotion_votes: vec![],
-            content_filter_votes: vec![],
-            total_engagement: 0,
+    async fn cast_vote(&self, vote: &Vote) -> Result<Vote> {
+        let result = sqlx::query!(
+            r#"
+            INSERT INTO votes (id, user_id, target_id, target_type, vote_type, tag, is_upvote, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (user_id, target_id, vote_type, tag) 
+            DO UPDATE SET 
+                is_upvote = EXCLUDED.is_upvote,
+                updated_at = EXCLUDED.updated_at
+            RETURNING id, user_id, target_id, target_type, vote_type, tag, is_upvote, created_at, updated_at
+            "#,
+            vote.id,
+            vote.user_id,
+            vote.target_id,
+            vote.target_type,
+            vote.vote_type,
+            vote.tag,
+            vote.is_upvote,
+            vote.created_at,
+            vote.updated_at
+        )
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| AppError::DatabaseError(format!("Failed to cast vote: {}", e)))?;
+
+        Ok(Vote {
+            id: result.id,
+            user_id: result.user_id,
+            target_id: result.target_id,
+            target_type: result.target_type,
+            vote_type: result.vote_type,
+            tag: result.tag,
+            is_upvote: result.is_upvote,
+            created_at: result.created_at,
+            updated_at: result.updated_at,
         })
     }
     
-    async fn remove_vote(&self, _user_id: Uuid, _target_id: Uuid, _vote_type: &str, _tag: &str) -> Result<()> {
+    async fn get_user_vote(&self, user_id: Uuid, target_id: Uuid, vote_type: &str, tag: &str) -> Result<Option<Vote>> {
+        let result = sqlx::query!(
+            "SELECT id, user_id, target_id, target_type, vote_type, tag, is_upvote, created_at, updated_at 
+             FROM votes 
+             WHERE user_id = $1 AND target_id = $2 AND vote_type = $3 AND tag = $4",
+            user_id, target_id, vote_type, tag
+        )
+        .fetch_optional(&*self.pool)
+        .await
+        .map_err(|e| AppError::DatabaseError(format!("Failed to get user vote: {}", e)))?;
+
+        Ok(result.map(|row| Vote {
+            id: row.id,
+            user_id: row.user_id,
+            target_id: row.target_id,
+            target_type: row.target_type,
+            vote_type: row.vote_type,
+            tag: row.tag,
+            is_upvote: row.is_upvote,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        }))
+    }
+    
+    async fn get_vote_counts(&self, target_id: Uuid, target_type: &str) -> Result<Vec<TagVoteCount>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT 
+                vote_type,
+                tag,
+                SUM(CASE WHEN is_upvote THEN 1 ELSE 0 END) as upvotes,
+                SUM(CASE WHEN NOT is_upvote THEN 1 ELSE 0 END) as downvotes,
+                COUNT(*) as total_votes
+            FROM votes 
+            WHERE target_id = $1 AND target_type = $2 
+            GROUP BY vote_type, tag
+            "#,
+            target_id, target_type
+        )
+        .fetch_all(&*self.pool)
+        .await
+        .map_err(|e| AppError::DatabaseError(format!("Failed to get vote counts: {}", e)))?;
+
+        Ok(results.into_iter().map(|row| TagVoteCount {
+            tag: row.tag,
+            upvotes: row.upvotes.unwrap_or(0) as i64,
+            downvotes: row.downvotes.unwrap_or(0) as i64,
+            total_votes: row.total_votes.unwrap_or(0) as i64,
+            agreement_ratio: if row.total_votes.unwrap_or(0) > 0 {
+                row.upvotes.unwrap_or(0) as f64 / row.total_votes.unwrap_or(1) as f64
+            } else {
+                0.0
+            },
+            display_count: format!("{}", row.total_votes.unwrap_or(0)),
+        }).collect())
+    }
+    
+    async fn get_vote_summary(&self, target_id: Uuid, target_type: &str) -> Result<VoteSummary> {
+        // Get vote counts separated by vote type
+        let emotion_results = sqlx::query!(
+            r#"
+            SELECT 
+                tag,
+                SUM(CASE WHEN is_upvote THEN 1 ELSE 0 END) as upvotes,
+                SUM(CASE WHEN NOT is_upvote THEN 1 ELSE 0 END) as downvotes,
+                COUNT(*) as total_votes
+            FROM votes 
+            WHERE target_id = $1 AND target_type = $2 AND vote_type = 'emotion'
+            GROUP BY tag
+            "#,
+            target_id, target_type
+        )
+        .fetch_all(&*self.pool)
+        .await
+        .map_err(|e| AppError::DatabaseError(format!("Failed to get emotion vote counts: {}", e)))?;
+
+        let content_filter_results = sqlx::query!(
+            r#"
+            SELECT 
+                tag,
+                SUM(CASE WHEN is_upvote THEN 1 ELSE 0 END) as upvotes,
+                SUM(CASE WHEN NOT is_upvote THEN 1 ELSE 0 END) as downvotes,
+                COUNT(*) as total_votes
+            FROM votes 
+            WHERE target_id = $1 AND target_type = $2 AND vote_type = 'content_filter'
+            GROUP BY tag
+            "#,
+            target_id, target_type
+        )
+        .fetch_all(&*self.pool)
+        .await
+        .map_err(|e| AppError::DatabaseError(format!("Failed to get content filter vote counts: {}", e)))?;
+
+        let emotion_votes: Vec<TagVoteCount> = emotion_results.into_iter().map(|row| TagVoteCount {
+            tag: row.tag,
+            upvotes: row.upvotes.unwrap_or(0) as i64,
+            downvotes: row.downvotes.unwrap_or(0) as i64,
+            total_votes: row.total_votes.unwrap_or(0) as i64,
+            agreement_ratio: if row.total_votes.unwrap_or(0) > 0 {
+                row.upvotes.unwrap_or(0) as f64 / row.total_votes.unwrap_or(1) as f64
+            } else {
+                0.0
+            },
+            display_count: format!("{}", row.total_votes.unwrap_or(0)),
+        }).collect();
+
+        let content_filter_votes: Vec<TagVoteCount> = content_filter_results.into_iter().map(|row| TagVoteCount {
+            tag: row.tag,
+            upvotes: row.upvotes.unwrap_or(0) as i64,
+            downvotes: row.downvotes.unwrap_or(0) as i64,
+            total_votes: row.total_votes.unwrap_or(0) as i64,
+            agreement_ratio: if row.total_votes.unwrap_or(0) > 0 {
+                row.upvotes.unwrap_or(0) as f64 / row.total_votes.unwrap_or(1) as f64
+            } else {
+                0.0
+            },
+            display_count: format!("{}", row.total_votes.unwrap_or(0)),
+        }).collect();
+
+        let total_engagement = emotion_votes.iter().map(|v| v.total_votes).sum::<i64>() + 
+                              content_filter_votes.iter().map(|v| v.total_votes).sum::<i64>();
+        
+        Ok(VoteSummary {
+            target_id,
+            emotion_votes,
+            content_filter_votes,
+            total_engagement: total_engagement,
+        })
+    }
+    
+    async fn remove_vote(&self, user_id: Uuid, target_id: Uuid, vote_type: &str, tag: &str) -> Result<()> {
+        sqlx::query!(
+            "DELETE FROM votes WHERE user_id = $1 AND target_id = $2 AND vote_type = $3 AND tag = $4",
+            user_id, target_id, vote_type, tag
+        )
+        .execute(&*self.pool)
+        .await
+        .map_err(|e| AppError::DatabaseError(format!("Failed to remove vote: {}", e)))?;
+
         Ok(())
     }
     
-    async fn get_engagement_score(&self, _target_id: Uuid, _target_type: &str) -> Result<f64> {
-        Ok(1.0)
+    async fn get_engagement_score(&self, target_id: Uuid, target_type: &str) -> Result<f64> {
+        let result = sqlx::query!(
+            "SELECT COUNT(*) as vote_count FROM votes WHERE target_id = $1 AND target_type = $2",
+            target_id, target_type
+        )
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| AppError::DatabaseError(format!("Failed to get engagement score: {}", e)))?;
+
+        // Simple engagement calculation: 0.1 points per vote, capped at 2.0
+        let engagement = (result.vote_count.unwrap_or(0) as f64 * 0.1).min(2.0);
+        Ok(engagement)
     }
 }

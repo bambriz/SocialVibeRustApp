@@ -18,6 +18,7 @@ pub fn protected_routes_with_auth() -> Router<AppState> {
         .route("/posts/:post_id", put(posts::update_post))
         .route("/posts/:post_id", delete(posts::delete_post))
         .merge(comments::protected_routes())
+        .merge(vote_routes::protected_vote_routes())
         .layer(middleware::from_fn(auth_middleware))
 }
 
@@ -34,7 +35,7 @@ pub fn routes() -> Router<AppState> {
     public_routes
         .merge(protected_routes_with_auth())
         .merge(comments::public_routes()) 
-        .merge(vote_routes::vote_routes())
+        .merge(vote_routes::public_vote_routes())
 }
 
 // Remove the wrapper function - using auth_middleware directly with from_fn_with_state

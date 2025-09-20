@@ -16,13 +16,24 @@ use crate::models::vote::Vote;
 use crate::auth::Claims;
 
 /// Vote-related API routes
-pub fn vote_routes() -> Router<AppState> {
+// Public voting routes (no auth required)
+pub fn public_vote_routes() -> Router<AppState> {
     Router::new()
         .route("/vote/:target_id/:target_type", get(get_vote_summary))
         .route("/vote/counts/:target_id/:target_type", get(get_vote_counts))
+}
+
+// Protected voting routes (auth required)
+pub fn protected_vote_routes() -> Router<AppState> {
+    Router::new()
         .route("/vote/user/:target_id/:target_type/:vote_type/:tag", get(get_user_vote))
         .route("/vote", post(cast_vote))
         .route("/vote/:target_id/:target_type/:vote_type/:tag", delete(remove_vote))
+}
+
+// Legacy function for backward compatibility
+pub fn vote_routes() -> Router<AppState> {
+    public_vote_routes()
 }
 
 /// Cast or update a vote on emotion/content tags
