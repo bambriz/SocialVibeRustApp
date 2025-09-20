@@ -435,17 +435,72 @@ impl CommentRepository for PostgresCommentRepository {
         Ok(()) // Simplified - will implement later
     }
     
-    async fn get_max_sibling_count(&self, _post_id: Uuid, _parent_path: Option<&str>) -> Result<u32> {
-        Ok(0) // Simplified - will implement later
+    async fn get_max_sibling_count(&self, post_id: Uuid, parent_path: Option<&str>) -> Result<u32> {
+        let count = if parent_path.is_none() {
+            // Root-level: Count top-level comments for this post
+            sqlx::query!(
+                "SELECT COUNT(*) as count FROM comments WHERE post_id = $1 AND parent_id IS NULL",
+                post_id
+            )
+            .fetch_one(&*self.pool)
+            .await
+            .map_err(|e| crate::AppError::DatabaseError(format!("Failed to get max sibling count: {}", e)))?
+            .count
+        } else {
+            // For now, simplified - could implement path-based counting later
+            sqlx::query!(
+                "SELECT COUNT(*) as count FROM comments WHERE post_id = $1",
+                post_id
+            )
+            .fetch_one(&*self.pool)
+            .await
+            .map_err(|e| crate::AppError::DatabaseError(format!("Failed to get max sibling count: {}", e)))?
+            .count
+        };
+        
+        Ok(count.unwrap_or(0) as u32)
     }
 
-    async fn allocate_next_sibling_index(&self, _post_id: Uuid, _parent_id: Option<Uuid>) -> Result<i32> {
-        // Simplified - will implement later
-        Ok(1)
+    async fn allocate_next_sibling_index(&self, post_id: Uuid, parent_id: Option<Uuid>) -> Result<i32> {
+        let next_index = match parent_id {
+            None => {
+                // Root-level comment: Count top-level comments for this post and add 1
+                let result = sqlx::query!(
+                    "SELECT COUNT(*) as count FROM comments WHERE post_id = $1 AND parent_id IS NULL",
+                    post_id
+                )
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to allocate root sibling index: {}", e)))?;
+                
+                (result.count.unwrap_or(0) + 1) as i32
+            },
+            Some(parent_id) => {
+                // Reply: Count replies to this specific parent and add 1
+                let result = sqlx::query!(
+                    "SELECT COUNT(*) as count FROM comments WHERE parent_id = $1",
+                    parent_id
+                )
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to allocate reply sibling index: {}", e)))?;
+                
+                (result.count.unwrap_or(0) + 1) as i32
+            }
+        };
+        
+        Ok(next_index)
     }
 
-    async fn increment_reply_count(&self, _comment_id: Uuid) -> Result<()> {
-        // Simplified - will implement later
+    async fn increment_reply_count(&self, comment_id: Uuid) -> Result<()> {
+        sqlx::query!(
+            "UPDATE comments SET reply_count = reply_count + 1, updated_at = NOW() WHERE id = $1",
+            comment_id
+        )
+        .execute(&*self.pool)
+        .await
+        .map_err(|e| crate::AppError::DatabaseError(format!("Failed to increment reply count: {}", e)))?;
+        
         Ok(())
     }
 }
