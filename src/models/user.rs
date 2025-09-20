@@ -9,6 +9,9 @@ pub struct User {
     pub email: String,
     #[serde(skip_serializing)] // Never serialize password hash
     pub password_hash: String,
+    pub display_name: Option<String>,
+    pub bio: Option<String>,
+    pub avatar_url: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub is_active: bool,
@@ -32,6 +35,9 @@ pub struct UserResponse {
     pub id: Uuid,
     pub username: String,
     pub email: String,
+    pub display_name: Option<String>,
+    pub bio: Option<String>,
+    pub avatar_url: Option<String>,
     pub created_at: DateTime<Utc>,
     pub is_active: bool,
 }
@@ -42,6 +48,9 @@ impl From<User> for UserResponse {
             id: user.id,
             username: user.username,
             email: user.email,
+            display_name: user.display_name,
+            bio: user.bio,
+            avatar_url: user.avatar_url,
             created_at: user.created_at,
             is_active: user.is_active,
         }

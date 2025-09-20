@@ -6,7 +6,7 @@
  */
 
 use crate::models::comment::{Comment, CreateCommentRequest, CommentResponse};
-use crate::db::repository::{CommentRepository, MockCommentRepository};
+use crate::db::repository::CommentRepository;
 use crate::services::sentiment_service::SentimentService;
 use crate::services::moderation_service::ModerationService;
 use crate::{AppError, Result};
@@ -17,7 +17,7 @@ use chrono::Utc;
 
 /// Enhanced comment service with sentiment analysis and hierarchy
 pub struct CommentService {
-    comment_repo: Arc<MockCommentRepository>,
+    comment_repo: Arc<dyn CommentRepository>,
     sentiment_service: Option<Arc<SentimentService>>,
     moderation_service: Option<Arc<ModerationService>>,
 }
@@ -29,7 +29,7 @@ const DEPTH_INCREMENT: i32 = 1;
 
 impl CommentService {
     /// Create a new CommentService (basic version for now)
-    pub fn new(comment_repo: Arc<MockCommentRepository>) -> Self {
+    pub fn new(comment_repo: Arc<dyn CommentRepository>) -> Self {
         Self { 
             comment_repo,
             sentiment_service: None, // TODO: Connect to sentiment service
@@ -39,7 +39,7 @@ impl CommentService {
     
     /// Create CommentService with AI services (enhanced version)
     pub fn new_with_ai(
-        comment_repo: Arc<MockCommentRepository>,
+        comment_repo: Arc<dyn CommentRepository>,
         sentiment_service: Option<Arc<SentimentService>>,
         moderation_service: Option<Arc<ModerationService>>,
     ) -> Self {

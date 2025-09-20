@@ -1,17 +1,20 @@
 pub mod cosmos;
 pub mod repository;
+pub mod postgres;
 
 // Database connection and state management
 use crate::config::AppConfig;
-use repository::{MockUserRepository, MockPostRepository, MockCommentRepository, MockVoteRepository, CsvUserRepository, UserRepository, VoteRepository};
+use repository::{UserRepository, PostRepository, CommentRepository, VoteRepository};
+use postgres::{PostgresDatabase, PostgresUserRepository, PostgresPostRepository, PostgresCommentRepository, PostgresVoteRepository};
 use std::sync::Arc;
+use std::env;
 
 #[derive(Clone)]
 pub struct DatabaseClient {
-    // Repositories for development with CSV persistence for users
+    // PostgreSQL repositories for production-ready persistence
     pub user_repo: Arc<dyn UserRepository>,
-    pub post_repo: Arc<MockPostRepository>, 
-    pub comment_repo: Arc<MockCommentRepository>,
+    pub post_repo: Arc<dyn PostRepository>, 
+    pub comment_repo: Arc<dyn CommentRepository>,
     pub vote_repo: Arc<dyn VoteRepository>,
     // TODO: Add Cosmos DB client when reintroduced
     // pub cosmos_client: CosmosClient,
@@ -19,11 +22,19 @@ pub struct DatabaseClient {
 
 impl DatabaseClient {
     pub async fn new(_config: &AppConfig) -> Result<Self, Box<dyn std::error::Error>> {
+        // Get DATABASE_URL from environment
+        let database_url = env::var("DATABASE_URL")
+            .map_err(|_| "DATABASE_URL environment variable not set")?;
+            
+        // Create PostgreSQL database connection
+        let postgres_db = PostgresDatabase::new(&database_url).await
+            .map_err(|e| format!("Failed to connect to PostgreSQL: {}", e))?;
+            
         Ok(Self {
-            user_repo: Arc::new(CsvUserRepository::new(None)), // Uses default "users_backup.csv"
-            post_repo: Arc::new(MockPostRepository::new()),
-            comment_repo: Arc::new(MockCommentRepository::new()),
-            vote_repo: Arc::new(MockVoteRepository::new()) as Arc<dyn VoteRepository>,
+            user_repo: Arc::new(postgres_db.user_repo()) as Arc<dyn UserRepository>,
+            post_repo: Arc::new(postgres_db.post_repo()) as Arc<dyn PostRepository>,
+            comment_repo: Arc::new(postgres_db.comment_repo()) as Arc<dyn CommentRepository>,
+            vote_repo: Arc::new(postgres_db.vote_repo()) as Arc<dyn VoteRepository>,
         })
     }
 
