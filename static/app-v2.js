@@ -358,12 +358,29 @@ document.addEventListener('DOMContentLoaded', function() {
     // Cache management functions accessible from console
     window.clearCache = function() {
         postsCache.clearAll();
+        commentsCache.clearAll();
         console.log('🗑️ All caches cleared manually');
     };
     
     window.clearCurrentViewCache = function() {
         postsCache.clearView(currentView, currentUser?.id);
         console.log(`🗑️ Cache cleared for current view: ${currentView}`);
+    };
+    
+    // Comments cache debug function
+    window.debugCommentsCache = function() {
+        const stats = commentsCache.getStats();
+        console.log('=== COMMENTS CACHE DEBUG ===');
+        console.log('Total posts with cached comments:', stats.totalPosts);
+        console.log('Total cached comments:', stats.totalComments);
+        console.log('Memory estimate:', stats.memoryEstimateMB.toFixed(2) + ' MB');
+        console.log('Cache config:', COMMENTS_CACHE_CONFIG);
+        console.log('============================');
+    };
+    
+    window.clearCommentsCache = function() {
+        commentsCache.clearAll();
+        console.log('🗑️ Comments cache cleared manually');
     };
     
     // Auto-setup function that clears everything and logs in
@@ -557,6 +574,7 @@ function logout() {
     currentView = 'feed'; // Reset to main feed
     clearOptimisticVoteState(); // Clear optimistic voting state on logout
     postsCache.clearAll(); // Clear all cached data on logout
+    commentsCache.clearAll(); // Clear comments cache on logout
     showGuestInterface();
     showToast('Logged out successfully', 'info');
 }
@@ -2238,8 +2256,148 @@ function loadContentFilterState() {
 
 // ===== COMMENT SYSTEM =====
 
-// Comment system state
+// Comment system state and caching
 let loadedComments = new Set(); // Track which post IDs have loaded comments
+
+// Comments cache configuration
+const COMMENTS_CACHE_CONFIG = {
+    staleTimeMinutes: 5, // Comments become stale after 5 minutes
+    maxCommentsPerPost: 200, // Maximum comments to cache per post
+    maxCachedPosts: 50 // Maximum posts to cache comments for
+};
+
+// Comments cache class for intelligent caching
+class CommentsCache {
+    constructor() {
+        this.cache = new Map(); // postId -> { comments, lastFetch, isLoading }
+        this.lastCleanup = Date.now();
+        this.cleanupInterval = 5 * 60 * 1000; // 5 minutes
+    }
+
+    // Get cache key for a post
+    getCacheKey(postId) {
+        return `post_${postId}`;
+    }
+
+    // Check if cached comments are fresh
+    isFresh(postId) {
+        const cached = this.cache.get(this.getCacheKey(postId));
+        if (!cached) return false;
+        
+        const staleTime = COMMENTS_CACHE_CONFIG.staleTimeMinutes * 60 * 1000;
+        return (Date.now() - cached.lastFetch) < staleTime;
+    }
+
+    // Get cached comments
+    get(postId) {
+        const cached = this.cache.get(this.getCacheKey(postId));
+        return cached ? cached.comments : null;
+    }
+
+    // Set comments in cache
+    set(postId, comments) {
+        const cacheKey = this.getCacheKey(postId);
+        this.cache.set(cacheKey, {
+            comments: comments.slice(0, COMMENTS_CACHE_CONFIG.maxCommentsPerPost), // Limit cache size
+            lastFetch: Date.now(),
+            isLoading: false
+        });
+        
+        this.performCleanup();
+    }
+
+    // Set loading state
+    setLoading(postId, isLoading) {
+        const cacheKey = this.getCacheKey(postId);
+        const cached = this.cache.get(cacheKey) || { comments: null, lastFetch: 0 };
+        cached.isLoading = isLoading;
+        this.cache.set(cacheKey, cached);
+    }
+
+    // Check if currently loading
+    isLoading(postId) {
+        const cached = this.cache.get(this.getCacheKey(postId));
+        return cached ? cached.isLoading : false;
+    }
+
+    // Clear cache for a specific post
+    clear(postId) {
+        this.cache.delete(this.getCacheKey(postId));
+        loadedComments.delete(postId);
+    }
+
+    // Clear all cache
+    clearAll() {
+        this.cache.clear();
+        loadedComments.clear();
+        console.log('🗑️ Comments cache: All caches cleared');
+    }
+
+    // Add a new comment to cache (for optimistic updates)
+    addComment(postId, comment) {
+        const cached = this.cache.get(this.getCacheKey(postId));
+        if (cached && cached.comments) {
+            cached.comments.unshift(comment); // Add to beginning
+            this.cache.set(this.getCacheKey(postId), cached);
+        }
+    }
+
+    // Periodic cleanup of old cache entries
+    performCleanup() {
+        const now = Date.now();
+        if (now - this.lastCleanup < this.cleanupInterval) return;
+
+        const cacheEntries = Array.from(this.cache.entries());
+        
+        // Remove stale entries
+        let removedCount = 0;
+        for (const [key, value] of cacheEntries) {
+            const staleTime = COMMENTS_CACHE_CONFIG.staleTimeMinutes * 60 * 1000;
+            if (now - value.lastFetch > staleTime * 2) { // Remove if twice as old as stale time
+                this.cache.delete(key);
+                removedCount++;
+            }
+        }
+
+        // Limit cache size (LRU style)
+        if (this.cache.size > COMMENTS_CACHE_CONFIG.maxCachedPosts) {
+            const sortedEntries = Array.from(this.cache.entries())
+                .sort((a, b) => a[1].lastFetch - b[1].lastFetch);
+            
+            const toRemove = this.cache.size - COMMENTS_CACHE_CONFIG.maxCachedPosts;
+            for (let i = 0; i < toRemove; i++) {
+                this.cache.delete(sortedEntries[i][0]);
+                removedCount++;
+            }
+        }
+
+        if (removedCount > 0) {
+            console.log(`🧹 Comments cache: Cleaned up ${removedCount} entries`);
+        }
+
+        this.lastCleanup = now;
+    }
+
+    // Get cache statistics
+    getStats() {
+        const totalPosts = this.cache.size;
+        let totalComments = 0;
+        for (const cached of this.cache.values()) {
+            if (cached.comments) {
+                totalComments += cached.comments.length;
+            }
+        }
+        
+        return {
+            totalPosts,
+            totalComments,
+            memoryEstimateMB: ((totalPosts * 1000) + (totalComments * 500)) / (1024 * 1024) // Rough estimate
+        };
+    }
+}
+
+// Initialize comments cache
+const commentsCache = new CommentsCache();
 
 // Toggle comment section visibility
 function toggleComments(postId) {
@@ -2257,26 +2415,50 @@ function toggleComments(postId) {
     }
 }
 
-// Load comments for a post
+// Load comments for a post with caching
 async function loadComments(postId) {
-    if (loadedComments.has(postId)) return;
+    // Check if already loading
+    if (commentsCache.isLoading(postId)) {
+        console.log(`📦 Comments: Already loading comments for post ${postId}`);
+        return;
+    }
+
+    // Check cache first
+    if (commentsCache.isFresh(postId) && loadedComments.has(postId)) {
+        console.log(`📦 Comments: Using cached comments for post ${postId}`);
+        const cachedComments = commentsCache.get(postId);
+        if (cachedComments) {
+            renderComments(postId, cachedComments);
+            return;
+        }
+    }
     
     const commentsList = document.getElementById(`comments-list-${postId}`);
-    commentsList.innerHTML = '<div class="loading-comments">Loading comments...</div>';
+    commentsList.innerHTML = '<div class="loading-comments">💬 Loading comments...</div>';
+    
+    commentsCache.setLoading(postId, true);
     
     try {
         const response = await fetch(`${API_BASE}/posts/${postId}/comments`);
         const data = await response.json();
         
         if (response.ok) {
+            const comments = data.comments || [];
+            
+            // Cache the comments
+            commentsCache.set(postId, comments);
             loadedComments.add(postId);
-            renderComments(postId, data.comments || []);
+            
+            console.log(`📦 Comments: Loaded and cached ${comments.length} comments for post ${postId}`);
+            renderComments(postId, comments);
         } else {
-            commentsList.innerHTML = '<div class="error-message">Failed to load comments</div>';
+            commentsList.innerHTML = '<div class="error-message">❌ Failed to load comments</div>';
         }
     } catch (error) {
         console.error('Load comments error:', error);
-        commentsList.innerHTML = '<div class="error-message">Failed to load comments</div>';
+        commentsList.innerHTML = '<div class="error-message">❌ Network error loading comments</div>';
+    } finally {
+        commentsCache.setLoading(postId, false);
     }
 }
 
@@ -2319,10 +2501,15 @@ async function postComment(postId) {
         if (response.ok) {
             textarea.value = '';
             updateCommentCounter({ target: textarea });
-            showToast('Comment posted!', 'success');
+            showToast('💬 Comment posted!', 'success');
             
-            // Reload comments to show the new one
-            loadedComments.delete(postId);
+            // Add optimistic update to cache
+            if (data.comment) {
+                commentsCache.addComment(postId, data);
+            }
+            
+            // Clear cache and reload comments to show the new one with fresh data
+            commentsCache.clear(postId);
             loadComments(postId);
             
             // Update comment count in post
@@ -2519,10 +2706,60 @@ function cancelReply(commentId) {
     textarea.value = '';
 }
 
-// Post reply (placeholder - will implement nested replies later)
+// Post reply to a comment
 async function postReply(parentCommentId, postId) {
-    showToast('Nested replies coming soon!', 'info');
-    cancelReply(parentCommentId);
+    if (!authToken) {
+        showToast('Please log in to reply', 'error');
+        return;
+    }
+    
+    const textarea = document.getElementById(`reply-input-${parentCommentId}`);
+    const content = textarea.value.trim();
+    
+    if (!content) {
+        showToast('Please enter a reply', 'error');
+        return;
+    }
+    
+    if (content.length > 2000) {
+        showToast('Reply is too long (max 2000 characters)', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/posts/${postId}/comments`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+                post_id: postId,
+                content: content,
+                parent_id: parentCommentId // This is a reply to another comment
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            textarea.value = '';
+            cancelReply(parentCommentId);
+            showToast('💬 Reply posted!', 'success');
+            
+            // Clear cache and reload comments to show the new reply
+            commentsCache.clear(postId);
+            loadComments(postId);
+            
+            // Update comment count in post
+            updatePostCommentCount(postId);
+        } else {
+            showToast(data.message || 'Failed to post reply', 'error');
+        }
+    } catch (error) {
+        console.error('Post reply error:', error);
+        showToast('Failed to post reply', 'error');
+    }
 }
 
 // ===== END COMMENT SYSTEM =====
