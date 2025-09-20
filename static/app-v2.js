@@ -871,12 +871,23 @@ async function saveCommentToDatabase(optimisticId, postId, content, parentId = n
         const data = await response.json();
         
         if (response.ok) {
-            // Mark comment as saved and trigger refresh from database
+            // Replace optimistic comment with real data
+            replaceOptimisticComment(postId, optimisticId, data.comment);
             markCommentAsSaved(optimisticId, postId, data.comment);
             showToast('✅ Comment saved to database!', 'success');
             
-            // Refresh comments from database to ensure consistency
-            await refreshCommentsFromDatabase(postId);
+            // Update cache with new comment but don't refresh UI (it's already updated)
+            const comments = commentsCache.get(postId) || [];
+            comments.unshift({
+                comment: data.comment,
+                author: currentUser.username,
+                can_modify: true,
+                is_collapsed: false,
+                replies: []
+            });
+            commentsCache.set(postId, comments);
+            
+            console.log('✅ Comment saved and cache updated without UI refresh');
         } else {
             markCommentAsFailed(optimisticId, postId, data);
             showToast('❌ Failed to save comment to database', 'error');
@@ -922,8 +933,12 @@ function markPostAsFailed(optimisticId, errorData) {
 function markCommentAsSaved(optimisticId, postId, realComment) {
     const optimisticElement = document.querySelector(`[data-comment-id="${optimisticId}"]`);
     if (optimisticElement) {
+        // Update the data attribute to use the real comment ID
+        optimisticElement.setAttribute('data-comment-id', realComment.id);
         optimisticElement.classList.add('saved');
         optimisticElement.classList.remove('comment-pending');
+        
+        console.log(`✅ Comment ${optimisticId} marked as saved with real ID ${realComment.id}`);
     }
 }
 
@@ -2981,6 +2996,9 @@ function addOptimisticComment(postId, commentData) {
         commentsList.insertAdjacentHTML('afterbegin', commentHTML);
     }
     
+    // Mark this post as having comments loaded
+    loadedComments.add(postId);
+    
     // Apply pending styling explicitly
     setTimeout(() => {
         const optimisticElement = document.querySelector(`[data-comment-id="${commentData.comment.id}"]`);
@@ -3004,8 +3022,24 @@ function replaceOptimisticComment(postId, tempId, realComment) {
             isPending: false
         };
         
-        const realHTML = createCommentHTML(realCommentData, false);
-        tempElement.outerHTML = realHTML;
+        // Update the data attribute to use the real comment ID
+        tempElement.setAttribute('data-comment-id', realComment.id);
+        
+        // Remove pending styling
+        tempElement.classList.remove('comment-pending');
+        tempElement.classList.add('saved');
+        
+        // Update any data that might have changed (like sentiment analysis)
+        const sentimentBadge = tempElement.querySelector('.sentiment-badge');
+        if (sentimentBadge && realComment.sentiment_analysis && realComment.sentiment_analysis.sentiment_type) {
+            // Update sentiment if it was analyzed
+            const sentimentType = realComment.sentiment_analysis.sentiment_type;
+            const sentimentConfig = getSentimentConfig(sentimentType);
+            sentimentBadge.style.backgroundColor = sentimentConfig.color;
+            sentimentBadge.textContent = `${sentimentConfig.emoji} ${sentimentConfig.name}`;
+        }
+        
+        console.log(`✅ Replaced optimistic comment ${tempId} with real comment ${realComment.id}`);
     }
 }
 

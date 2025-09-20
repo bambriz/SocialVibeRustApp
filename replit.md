@@ -173,12 +173,15 @@ The application includes rich sample data with:
 - **✅ Mobile-Responsive Design**: Touch-friendly interface with pull-to-refresh and swipe-to-load gestures
 - **✅ Enhanced Sample Data**: Rich test data with nested comments and diverse sentiment examples
 - **✅ Collapsible UI Components**: Independent Share Your Thoughts and Vibe Check sections with smooth animations
+- **✅ Eventual Consistency**: Fire-and-forget database operations with optimistic UI updates and background synchronization
+- **✅ Comment Persistence**: Fixed comment display issues - comments now persist properly in their posts without UI refresh conflicts
 
 ### Technical Improvements
 - **Database-First Architecture**: Eliminated CSV backup dependency for improved performance
 - **Touch Gesture System**: Full mobile gesture support with threshold-based swipe detection
-- **Visual Feedback Enhancements**: Pending state animations and mobile-optimized sticky positioning
+- **Visual Feedback Enhancements**: Pending state animations and mobile-optimized sticky positioning with save/failed states
 - **Cache Optimization**: Improved caching system with proper invalidation and consistency management
+- **Surgical Comment Updates**: Comments update in-place without full UI refresh, maintaining user experience continuity
 
 ### Potential Future Integrations
 The architecture is designed to accommodate:
