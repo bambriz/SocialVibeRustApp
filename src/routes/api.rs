@@ -8,7 +8,7 @@ use crate::AppState;
 use crate::routes::{users, posts, auth, comments, vote_routes};
 use crate::auth::middleware::auth_middleware;
 
-// Function to create protected routes with auth middleware applied
+// Function to create protected routes without middleware (middleware applied at top level)
 pub fn protected_routes_with_auth() -> Router<AppState> {
     Router::new()
         .route("/posts", post(posts::create_post))
@@ -16,7 +16,6 @@ pub fn protected_routes_with_auth() -> Router<AppState> {
         .route("/posts/:post_id", delete(posts::delete_post))
         .merge(comments::protected_routes())
         .merge(vote_routes::protected_vote_routes())
-        .layer(middleware::from_fn(auth_middleware_stateful))
 }
 
 pub fn routes() -> Router<AppState> {
@@ -29,28 +28,25 @@ pub fn routes() -> Router<AppState> {
         .route("/posts/:post_id", get(posts::get_post))
         .route("/posts/user/:user_id", get(posts::get_user_posts));
 
+    let protected_routes = protected_routes_with_auth();
+
     public_routes
-        .merge(protected_routes_with_auth())
+        .merge(protected_routes)
         .merge(comments::public_routes()) 
         .merge(vote_routes::public_vote_routes())
 }
 
-// Updated auth middleware that works with .with_state()
-async fn auth_middleware_stateful(
+// Function to apply auth middleware with state - called from main.rs
+pub fn apply_auth_middleware(router: Router<AppState>, app_state: &AppState) -> Router<AppState> {
+    router.layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware_with_state))
+}
+
+// Auth middleware that receives AppState directly as parameter
+async fn auth_middleware_with_state(
+    State(app_state): State<AppState>,
     mut request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
-    // Extract AppState from request extensions (provided by the router .with_state())
-    let app_state = match request.extensions().get::<AppState>() {
-        Some(state) => state.clone(),
-        None => {
-            return axum::response::Response::builder()
-                .status(500)
-                .header("content-type", "application/json")
-                .body(r#"{"error": "Internal server error"}"#.into())
-                .unwrap_or_else(|_| axum::response::Response::default());
-        }
-    };
     let headers = request.headers().clone();
     
     // Extract Authorization header

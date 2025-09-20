@@ -424,7 +424,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let python_manager_for_shutdown = app_state.python_manager.clone();
 
     // Build our application with routes
-    let app = create_routes()
+    let router = create_routes();
+    let router_with_auth = social_media_app::routes::api::apply_auth_middleware(router, &app_state);
+    let app = router_with_auth
         .layer(CorsLayer::permissive())
         .with_state(app_state);
 
