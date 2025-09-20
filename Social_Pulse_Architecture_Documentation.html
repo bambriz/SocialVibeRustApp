@@ -1,0 +1,947 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Social Pulse - Architecture Documentation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: white;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 0.5rem;
+            margin-top: 2rem;
+            page-break-before: always;
+        }
+        
+        h1:first-child {
+            page-break-before: auto;
+        }
+        
+        h2 {
+            color: #34495e;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 0.3rem;
+            margin-top: 1.5rem;
+        }
+        
+        h3 {
+            color: #34495e;
+            margin-top: 1.2rem;
+        }
+        
+        code {
+            background-color: #f8f9fa;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            color: #e74c3c;
+        }
+        
+        pre {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 1rem;
+            overflow-x: auto;
+            page-break-inside: avoid;
+        }
+        
+        pre code {
+            background: none;
+            color: #333;
+        }
+        
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1rem 0;
+            page-break-inside: avoid;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 0.7rem;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 1rem;
+            margin: 1rem 0;
+            background-color: #f8f9fa;
+            padding: 1rem;
+            page-break-inside: avoid;
+        }
+        
+        .mermaid-note {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 1rem;
+            margin: 1rem 0;
+            color: #856404;
+            page-break-inside: avoid;
+        }
+        
+        ul, ol {
+            padding-left: 2rem;
+        }
+        
+        li {
+            margin: 0.3rem 0;
+        }
+        
+        .pdf-instructions {
+            background-color: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 5px;
+            padding: 1rem;
+            margin: 2rem 0;
+            color: #1565c0;
+            text-align: center;
+        }
+        
+        @media print {
+            body {
+                max-width: none;
+                margin: 0;
+                padding: 1rem;
+            }
+            
+            .pdf-instructions {
+                display: none;
+            }
+            
+            h1, h2, h3 {
+                page-break-after: avoid;
+            }
+        }
+        
+        @page {
+            margin: 1in;
+        }
+    </style>
+</head>
+<body>
+    <div class="pdf-instructions">
+        <strong>📄 PDF Conversion Instructions:</strong><br>
+        To convert this HTML file to PDF: <br>
+        1. Open this file in Chrome/Firefox → Print → Save as PDF<br>
+        2. Or use online tools like <a href="https://html-pdf-api.netlify.app/">html-pdf-api.netlify.app</a><br>
+        3. For best results, use A4 page size with 1-inch margins
+    </div>
+    
+    <h1>Social Pulse - Comprehensive Architecture Documentation</h1>
+<h2>Table of Contents</h2>
+<ol>
+<li><a href="#system-overview">System Overview</a></li>
+<li><a href="#architecture-diagrams">Architecture Diagrams</a></li>
+<li><a href="#technology-stack">Technology Stack</a></li>
+<li><a href="#component-architecture">Component Architecture</a></li>
+<li><a href="#data-flow-patterns">Data Flow Patterns</a></li>
+<li><a href="#api-documentation">API Documentation</a></li>
+<li><a href="#performance-optimizations">Performance Optimizations</a></li>
+<li><a href="#security-architecture">Security Architecture</a></li>
+<li><a href="#pros-and-cons-analysis">Pros and Cons Analysis</a></li>
+<li><a href="#deployment-architecture">Deployment Architecture</a></li>
+</ol>
+<hr>
+<h2>System Overview</h2>
+<p>Social Pulse is a modern, sentiment-aware social media platform built with a <strong>multi-service architecture</strong> combining:</p>
+<ul>
+<li><strong>Rust backend</strong> (Axum framework) for high-performance API services</li>
+<li><strong>Python microservice</strong> for AI/ML sentiment analysis and content moderation</li>
+<li><strong>Vanilla JavaScript frontend</strong> with advanced caching and real-time interactions</li>
+<li><strong>PostgreSQL database</strong> for reliable data persistence</li>
+<li><strong>AI-powered content analysis</strong> using HuggingFace models</li>
+</ul>
+<h3>Key Features</h3>
+<ul>
+<li>✅ Real-time sentiment analysis on posts and comments</li>
+<li>✅ Reddit-style hierarchical comment system with infinite nesting</li>
+<li>✅ Advanced client-side caching with LRU memory management</li>
+<li>✅ Optimistic UI updates for instant user feedback</li>
+<li>✅ Content moderation with toxicity detection</li>
+<li>✅ Vote/emotion system for user engagement</li>
+<li>✅ Mobile-friendly responsive design</li>
+<li>✅ Swipe-based navigation (Facebook/Reddit style)</li>
+</ul>
+<h3>Implementation Status</h3>
+<ul>
+<li>✅ <strong>Fully Implemented:</strong> Core CRUD operations, sentiment analysis, comment threading, caching, authentication</li>
+<li>🚧 <strong>Partially Implemented:</strong> Rate limiting (planned), compression (planned), advanced deployment configs</li>
+<li>📋 <strong>Planned Features:</strong> Real-time notifications, advanced recommendation algorithms</li>
+</ul>
+<hr>
+<h2>Architecture Diagrams</h2>
+<h3>1. High-Level System Architecture</h3>
+<pre><code class="language-mermaid">graph TB
+    subgraph &quot;Client Layer&quot;
+        UI[Vanilla JS Frontend]
+        Cache[LRU Cache System]
+        UI --&gt; Cache
+    end
+
+    subgraph &quot;API Gateway Layer&quot;
+        RustAPI[Rust API Server&lt;br/&gt;Axum Framework&lt;br/&gt;Port 5000]
+    end
+
+    subgraph &quot;Microservices Layer&quot;
+        PythonAI[Python AI Service&lt;br/&gt;FastAPI&lt;br/&gt;Port 8001]
+        subgraph &quot;AI Components&quot;
+            Sentiment[HuggingFace&lt;br/&gt;EmotionClassifier]
+            Moderation[Toxicity Detection&lt;br/&gt;NRCLex + Text2Emotion]
+        end
+        PythonAI --&gt; Sentiment
+        PythonAI --&gt; Moderation
+    end
+
+    subgraph &quot;Data Layer&quot;
+        DB[(PostgreSQL Database&lt;br/&gt;Posts, Users, Comments&lt;br/&gt;Votes, Sentiment Data)]
+    end
+
+    UI --&gt;|HTTP/JSON| RustAPI
+    RustAPI --&gt;|HTTP| PythonAI
+    RustAPI --&gt;|SQL| DB
+    
+    Cache -.-&gt;|Cache Miss| RustAPI
+    RustAPI -.-&gt;|Cache Update| Cache
+
+    style UI fill:#e1f5fe
+    style RustAPI fill:#f3e5f5
+    style PythonAI fill:#e8f5e8
+    style DB fill:#fff3e0
+</code></pre>
+<h3>2. Request Flow Architecture</h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Client as Frontend (JS)
+    participant Cache as LRU Cache
+    participant Rust as Rust API
+    participant Python as Python AI
+    participant DB as PostgreSQL
+
+    Client-&gt;&gt;Cache: Check for cached data
+    alt Cache Hit
+        Cache--&gt;&gt;Client: Return cached data
+    else Cache Miss
+        Client-&gt;&gt;Rust: API Request
+        Rust-&gt;&gt;DB: Query data
+        DB--&gt;&gt;Rust: Return data
+        
+        opt Content Analysis Needed
+            Rust-&gt;&gt;Python: Analyze content
+            Python-&gt;&gt;Python: Run AI models
+            Python--&gt;&gt;Rust: Return analysis
+        end
+        
+        Rust--&gt;&gt;Client: JSON Response
+        Client-&gt;&gt;Cache: Update cache
+    end
+</code></pre>
+<h3>3. Component Interaction Diagram</h3>
+<pre><code class="language-mermaid">graph LR
+    subgraph &quot;Frontend Layer&quot;
+        PostsUI[Posts Interface]
+        CommentsUI[Comments Interface] 
+        CacheManager[Cache Manager]
+        VotingUI[Voting Interface]
+    end
+
+    subgraph &quot;Rust Backend&quot;
+        AuthService[Authentication Service]
+        PostService[Post Service]
+        CommentService[Comment Service]
+        VoteService[Vote Service]
+        PythonManager[Python Manager]
+    end
+
+    subgraph &quot;Python AI Service&quot;
+        SentimentAnalyzer[Sentiment Analyzer]
+        ContentModerator[Content Moderator]
+        EmotionClassifier[Emotion Classifier]
+    end
+
+    subgraph &quot;Database&quot;
+        UserTable[Users Table]
+        PostTable[Posts Table]
+        CommentTable[Comments Table]
+        VoteTable[Votes Table]
+    end
+
+    PostsUI --&gt; PostService
+    CommentsUI --&gt; CommentService
+    VotingUI --&gt; VoteService
+    
+    PostService --&gt; PythonManager
+    CommentService --&gt; PythonManager
+    PythonManager --&gt; SentimentAnalyzer
+    PythonManager --&gt; ContentModerator
+    
+    PostService --&gt; PostTable
+    CommentService --&gt; CommentTable
+    VoteService --&gt; VoteTable
+    AuthService --&gt; UserTable
+
+    style PostsUI fill:#e3f2fd
+    style CommentsUI fill:#e8f5e8
+    style VotingUI fill:#fff3e0
+    style PostService fill:#f3e5f5
+    style SentimentAnalyzer fill:#e0f2f1
+</code></pre>
+<hr>
+<h2>Technology Stack</h2>
+<h3>Backend Technologies</h3>
+<h4>Rust (Primary Backend)</h4>
+<p><strong>Framework:</strong> Axum<br><strong>Purpose:</strong> High-performance API server, business logic, and data management</p>
+<p><strong>Key Libraries:</strong></p>
+<ul>
+<li><code>axum</code> - Modern async web framework</li>
+<li><code>tokio</code> - Async runtime for concurrent operations</li>
+<li><code>sqlx</code> - Type-safe SQL database interactions</li>
+<li><code>serde</code> - Serialization/deserialization for JSON APIs</li>
+<li><code>jsonwebtoken</code> - JWT authentication</li>
+<li><code>argon2</code> - Secure password hashing</li>
+<li><code>chrono</code> - Date/time handling</li>
+<li><code>uuid</code> - Unique identifier generation</li>
+</ul>
+<h4>Python (AI Microservice)</h4>
+<p><strong>Framework:</strong> FastAPI<br><strong>Purpose:</strong> Sentiment analysis and content moderation</p>
+<p><strong>Key Libraries:</strong></p>
+<ul>
+<li><code>fastapi</code> - Modern web framework for APIs</li>
+<li><code>uvicorn</code> - ASGI server for production</li>
+<li><code>transformers</code> - HuggingFace model integration</li>
+<li><code>torch</code> - Deep learning framework</li>
+<li><code>nrclex</code> - Emotion lexicon analysis</li>
+<li><code>text2emotion</code> - Text emotion detection</li>
+<li><code>numpy</code> - Numerical computing</li>
+<li><code>scikit-learn</code> - Machine learning utilities</li>
+</ul>
+<h3>Frontend Technologies</h3>
+<h4>Vanilla JavaScript</h4>
+<p><strong>Purpose:</strong> Client-side application with modern features</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>ES6+ modern JavaScript</li>
+<li>Fetch API for HTTP requests</li>
+<li>LocalStorage for session management</li>
+<li>CSS Grid and Flexbox for layout</li>
+<li>Progressive Web App capabilities</li>
+</ul>
+<h4>Caching System</h4>
+<p><strong>Custom LRU Implementation:</strong></p>
+<ul>
+<li>Memory-efficient caching</li>
+<li>Automatic cleanup and expiration</li>
+<li>Optimistic updates</li>
+<li>Cache invalidation strategies</li>
+</ul>
+<h3>Database</h3>
+<h4>PostgreSQL</h4>
+<p><strong>Purpose:</strong> Primary data persistence layer</p>
+<p><strong>Schema Design:</strong></p>
+<ul>
+<li>Users table with authentication data</li>
+<li>Posts table with sentiment metadata</li>
+<li>Comments table with hierarchical threading</li>
+<li>Votes table for user engagement</li>
+<li>Indexes for performance optimization</li>
+</ul>
+<hr>
+<h2>Component Architecture</h2>
+<h3>MVC Architecture Pattern</h3>
+<h4>Models (Data Layer)</h4>
+<p><strong>Rust Models (<code>src/models/</code>):</strong></p>
+<pre><code class="language-mermaid">classDiagram
+    class User {
+        +Uuid id
+        +String username
+        +String email
+        +String password_hash
+        +DateTime created_at
+        +DateTime updated_at
+    }
+
+    class Post {
+        +Uuid id
+        +Uuid user_id
+        +String content
+        +Option~f64~ sentiment_score
+        +Vec~String~ sentiment_colors
+        +Option~String~ sentiment_type
+        +bool is_blocked
+        +Vec~String~ toxicity_tags
+        +i32 vote_count
+        +f64 popularity_score
+        +DateTime created_at
+        +DateTime updated_at
+    }
+
+    class Comment {
+        +Uuid id
+        +Uuid post_id
+        +Uuid user_id
+        +Option~Uuid~ parent_id
+        +String content
+        +String path
+        +i32 depth
+        +Option~f64~ sentiment_score
+        +Vec~String~ sentiment_colors
+        +Option~String~ sentiment_type
+        +bool is_blocked
+        +i32 reply_count
+        +f64 popularity_score
+        +DateTime created_at
+        +DateTime updated_at
+    }
+
+    class Vote {
+        +Uuid id
+        +Uuid user_id
+        +Uuid target_id
+        +String target_type
+        +String vote_type
+        +String emotion_tag
+        +DateTime created_at
+    }
+
+    User ||--o{ Post : creates
+    User ||--o{ Comment : writes
+    User ||--o{ Vote : casts
+    Post ||--o{ Comment : contains
+    Comment ||--o{ Comment : replies_to
+</code></pre>
+<h4>Controllers (Service Layer)</h4>
+<p><strong>Rust Services (<code>src/services/</code>):</strong></p>
+<pre><code class="language-mermaid">graph TD
+    subgraph &quot;Service Layer Architecture&quot;
+        PostService[Post Service&lt;br/&gt;- CRUD operations&lt;br/&gt;- Sentiment integration&lt;br/&gt;- Popularity scoring]
+        
+        CommentService[Comment Service&lt;br/&gt;- Hierarchical threading&lt;br/&gt;- Path management&lt;br/&gt;- Reply handling]
+        
+        VoteService[Vote Service&lt;br/&gt;- Emotion voting&lt;br/&gt;- Vote aggregation&lt;br/&gt;- Cache management]
+        
+        PythonManager[Python Manager&lt;br/&gt;- Subprocess management&lt;br/&gt;- Health monitoring&lt;br/&gt;- Request routing]
+        
+        SentimentService[Sentiment Service&lt;br/&gt;- Analysis requests&lt;br/&gt;- Result processing&lt;br/&gt;- Caching]
+        
+        ModerationService[Moderation Service&lt;br/&gt;- Content filtering&lt;br/&gt;- Toxicity detection&lt;br/&gt;- Policy enforcement]
+    end
+
+    PostService --&gt; SentimentService
+    PostService --&gt; ModerationService
+    CommentService --&gt; SentimentService
+    CommentService --&gt; ModerationService
+    VoteService --&gt; PostService
+    VoteService --&gt; CommentService
+    SentimentService --&gt; PythonManager
+    ModerationService --&gt; PythonManager
+</code></pre>
+<h4>Views (Presentation Layer)</h4>
+<p><strong>JavaScript Frontend Architecture:</strong></p>
+<pre><code class="language-mermaid">graph TB
+    subgraph &quot;Frontend Architecture&quot;
+        App[App Controller&lt;br/&gt;Main application logic]
+        
+        PostManager[Post Manager&lt;br/&gt;- Feed rendering&lt;br/&gt;- Post creation&lt;br/&gt;- Filtering]
+        
+        CommentManager[Comment Manager&lt;br/&gt;- Thread rendering&lt;br/&gt;- Reply handling&lt;br/&gt;- Nesting logic]
+        
+        CacheManager[Cache Manager&lt;br/&gt;- LRU implementation&lt;br/&gt;- Memory management&lt;br/&gt;- Invalidation]
+        
+        VoteManager[Vote Manager&lt;br/&gt;- Optimistic updates&lt;br/&gt;- Emotion selection&lt;br/&gt;- State management]
+        
+        UIManager[UI Manager&lt;br/&gt;- Modal handling&lt;br/&gt;- Toast notifications&lt;br/&gt;- Loading states]
+    end
+
+    App --&gt; PostManager
+    App --&gt; CommentManager
+    App --&gt; VoteManager
+    App --&gt; UIManager
+    PostManager --&gt; CacheManager
+    CommentManager --&gt; CacheManager
+    VoteManager --&gt; CacheManager
+</code></pre>
+<hr>
+<h2>Data Flow Patterns</h2>
+<h3>1. Post Creation Flow</h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant User as User
+    participant UI as Frontend
+    participant Cache as Cache
+    participant Rust as Rust API
+    participant Python as Python AI
+    participant DB as Database
+
+    User-&gt;&gt;UI: Create post
+    UI-&gt;&gt;UI: Validate input
+    UI-&gt;&gt;Rust: POST /api/posts
+    
+    Rust-&gt;&gt;Python: Analyze sentiment
+    Python-&gt;&gt;Python: Run emotion models
+    Python--&gt;&gt;Rust: Return analysis
+    
+    Rust-&gt;&gt;Python: Check moderation
+    Python-&gt;&gt;Python: Run toxicity detection
+    Python--&gt;&gt;Rust: Return moderation result
+    
+    alt Content Approved
+        Rust-&gt;&gt;DB: Insert post with metadata
+        DB--&gt;&gt;Rust: Return created post
+        Rust--&gt;&gt;UI: Success response
+        UI-&gt;&gt;Cache: Invalidate posts cache
+        UI-&gt;&gt;UI: Update feed optimistically
+    else Content Blocked
+        Rust--&gt;&gt;UI: Rejection response
+        UI-&gt;&gt;UI: Show error message
+    end
+</code></pre>
+<h3>2. Comment Thread Loading</h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant User as User
+    participant UI as Frontend
+    participant Cache as Comments Cache
+    participant Rust as Rust API
+    participant DB as Database
+
+    User-&gt;&gt;UI: Click &quot;Show Comments&quot;
+    UI-&gt;&gt;Cache: Check cache for post comments
+    
+    alt Cache Hit (Fresh)
+        Cache--&gt;&gt;UI: Return cached comments
+        UI-&gt;&gt;UI: Render comment tree
+    else Cache Miss/Stale
+        UI-&gt;&gt;Rust: GET /api/posts/{id}/comments
+        Rust-&gt;&gt;DB: Query hierarchical comments
+        DB--&gt;&gt;Rust: Return comment tree
+        Rust--&gt;&gt;UI: JSON response
+        UI-&gt;&gt;Cache: Update cache
+        UI-&gt;&gt;UI: Render comment tree
+    end
+</code></pre>
+<h3>3. Voting System Flow</h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant User as User
+    participant UI as Frontend
+    participant VoteCache as Vote Cache
+    participant Rust as Rust API
+    participant DB as Database
+
+    User-&gt;&gt;UI: Click emotion vote
+    UI-&gt;&gt;VoteCache: Update optimistic state
+    UI-&gt;&gt;UI: Show immediate feedback
+    
+    UI-&gt;&gt;Rust: POST /api/votes
+    
+    alt Vote Successful
+        Rust-&gt;&gt;DB: Insert/update vote
+        DB--&gt;&gt;Rust: Confirm vote
+        Rust--&gt;&gt;UI: Success response
+        UI-&gt;&gt;VoteCache: Confirm optimistic update
+    else Vote Failed
+        Rust--&gt;&gt;UI: Error response
+        UI-&gt;&gt;VoteCache: Rollback optimistic update
+        UI-&gt;&gt;UI: Show error message
+    end
+</code></pre>
+<hr>
+<h2>API Documentation</h2>
+<h3>Authentication Endpoints</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Endpoint</th>
+<th>Purpose</th>
+<th>Auth Required</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>POST</td>
+<td><code>/api/auth/register</code></td>
+<td>User registration</td>
+<td>No</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/auth/login</code></td>
+<td>User login</td>
+<td>No</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/auth/verify</code></td>
+<td>Token verification</td>
+<td>Yes</td>
+</tr>
+</tbody></table>
+<h3>Posts Endpoints</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Endpoint</th>
+<th>Purpose</th>
+<th>Auth Required</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET</td>
+<td><code>/api/posts</code></td>
+<td>Get paginated posts</td>
+<td>No</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/posts</code></td>
+<td>Create new post</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/posts/{id}</code></td>
+<td>Get specific post</td>
+<td>No</td>
+</tr>
+<tr>
+<td>PUT</td>
+<td><code>/api/posts/{id}</code></td>
+<td>Update post</td>
+<td>Yes (owner)</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/posts/{id}</code></td>
+<td>Delete post</td>
+<td>Yes (owner)</td>
+</tr>
+</tbody></table>
+<h3>Comments Endpoints</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Endpoint</th>
+<th>Purpose</th>
+<th>Auth Required</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET</td>
+<td><code>/api/posts/{id}/comments</code></td>
+<td>Get post comments</td>
+<td>No</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/posts/{id}/comments</code></td>
+<td>Create comment</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/comments/{id}</code></td>
+<td>Get specific comment</td>
+<td>No</td>
+</tr>
+<tr>
+<td>PUT</td>
+<td><code>/api/comments/{id}</code></td>
+<td>Update comment</td>
+<td>Yes (owner)</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/comments/{id}</code></td>
+<td>Delete comment</td>
+<td>Yes (owner)</td>
+</tr>
+</tbody></table>
+<h3>Voting Endpoints</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Endpoint</th>
+<th>Purpose</th>
+<th>Auth Required</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>POST</td>
+<td><code>/api/votes</code></td>
+<td>Cast vote/emotion</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/votes/{target_id}</code></td>
+<td>Get vote summary</td>
+<td>No</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/votes/{id}</code></td>
+<td>Remove vote</td>
+<td>Yes (owner)</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Performance Optimizations</h2>
+<h3>1. Caching Strategy</h3>
+<h4>Frontend Caching</h4>
+<ul>
+<li><strong>LRU Cache Implementation:</strong> Intelligent memory management</li>
+<li><strong>Cache Partitioning:</strong> Separate caches for posts, comments, votes</li>
+<li><strong>Staleness Detection:</strong> Time-based cache invalidation</li>
+<li><strong>Optimistic Updates:</strong> Immediate UI feedback with rollback capability</li>
+</ul>
+<h4>Backend Caching</h4>
+<ul>
+<li><strong>Database Connection Pooling:</strong> Efficient connection reuse ✅ (implemented)</li>
+<li><strong>Query Optimization:</strong> Indexed lookups and prepared statements ✅ (implemented)</li>
+<li><strong>Result Caching:</strong> Cache frequent database queries (planned)</li>
+</ul>
+<h3>2. Database Performance</h3>
+<h4>Indexing Strategy</h4>
+<pre><code class="language-sql">-- Optimized indexes for common queries
+CREATE INDEX idx_posts_created_at ON posts(created_at DESC);
+CREATE INDEX idx_posts_popularity ON posts(popularity_score DESC);
+CREATE INDEX idx_comments_post_id ON comments(post_id);
+CREATE INDEX idx_comments_path ON comments(path);
+CREATE INDEX idx_votes_target ON votes(target_id, target_type);
+</code></pre>
+<h4>Hierarchical Comments</h4>
+<ul>
+<li><strong>Materialized Path Pattern:</strong> Efficient tree traversal</li>
+<li><strong>Atomic Path Generation:</strong> Consistent threading</li>
+<li><strong>Batch Loading:</strong> Reduce N+1 query problems</li>
+</ul>
+<h3>3. Network Optimization</h3>
+<h4>Request Batching</h4>
+<ul>
+<li><strong>Bulk Operations:</strong> Multiple votes/comments in single request (planned)</li>
+<li><strong>Pagination:</strong> Controlled data loading ✅ (implemented)</li>
+<li><strong>Compression:</strong> Gzip compression for JSON responses (planned)</li>
+</ul>
+<h4>Connection Management</h4>
+<ul>
+<li><strong>HTTP/2:</strong> Multiplexed connections (depends on deployment)</li>
+<li><strong>Keep-Alive:</strong> Persistent connections ✅ (implemented via Axum)</li>
+<li><strong>Connection Pooling:</strong> Database connection pooling ✅ (implemented via SQLx)</li>
+</ul>
+<hr>
+<h2>Security Architecture</h2>
+<h3>1. Authentication &amp; Authorization</h3>
+<h4>JWT Token System</h4>
+<pre><code class="language-mermaid">graph LR
+    Login[User Login] --&gt; Validate[Validate Credentials]
+    Validate --&gt; Generate[Generate JWT Token]
+    Generate --&gt; Store[Store in LocalStorage]
+    Store --&gt; Requests[Include in API Requests]
+    Requests --&gt; Verify[Verify Token]
+    Verify --&gt; Access[Grant Access]
+</code></pre>
+<h4>Security Measures</h4>
+<ul>
+<li><strong>Argon2 Password Hashing:</strong> Industry-standard password security</li>
+<li><strong>Token Expiration:</strong> Time-limited session tokens</li>
+<li><strong>CORS Protection:</strong> Cross-origin request filtering</li>
+<li><strong>Rate Limiting:</strong> Prevent abuse and DoS attacks (planned)</li>
+</ul>
+<h3>2. Content Security</h3>
+<h4>Input Validation</h4>
+<ul>
+<li><strong>XSS Prevention:</strong> HTML escaping for all user content</li>
+<li><strong>SQL Injection Protection:</strong> Parameterized queries</li>
+<li><strong>Content Length Limits:</strong> Prevent oversized inputs</li>
+<li><strong>Character Encoding:</strong> UTF-8 validation</li>
+</ul>
+<h4>AI-Powered Moderation</h4>
+<ul>
+<li><strong>Toxicity Detection:</strong> Automatic content filtering</li>
+<li><strong>Sentiment Analysis:</strong> Emotion-based content categorization</li>
+<li><strong>Real-time Processing:</strong> Immediate content analysis</li>
+</ul>
+<h3>3. Data Protection</h3>
+<h4>Database Security</h4>
+<ul>
+<li><strong>Encrypted Connections:</strong> TLS for database communications (recommended for production)</li>
+<li><strong>Access Controls:</strong> Role-based database permissions</li>
+<li><strong>Audit Logging:</strong> Track data access and modifications</li>
+<li><strong>Backup Encryption:</strong> Secure data backups</li>
+</ul>
+<hr>
+<h2>Pros and Cons Analysis</h2>
+<h3>Technology Choices</h3>
+<h4>Rust Backend</h4>
+<p><strong>Pros:</strong>
+✅ <strong>Memory Safety:</strong> Zero-cost abstractions prevent common bugs<br>✅ <strong>Performance:</strong> Near C++ performance with safety guarantees<br>✅ <strong>Concurrency:</strong> Excellent async/await support with Tokio<br>✅ <strong>Type Safety:</strong> Compile-time error detection<br>✅ <strong>Ecosystem:</strong> Growing ecosystem with quality crates<br>✅ <strong>Future-Proof:</strong> Systems programming language with longevity  </p>
+<p><strong>Cons:</strong>
+❌ <strong>Learning Curve:</strong> Steep learning curve for new developers<br>❌ <strong>Compilation Time:</strong> Slower builds compared to interpreted languages<br>❌ <strong>Ecosystem Maturity:</strong> Some libraries still in development<br>❌ <strong>Developer Pool:</strong> Smaller pool of experienced Rust developers  </p>
+<h4>Python AI Service</h4>
+<p><strong>Pros:</strong>
+✅ <strong>AI/ML Ecosystem:</strong> Unmatched library support for machine learning<br>✅ <strong>Rapid Development:</strong> Quick prototyping and iteration<br>✅ <strong>Model Availability:</strong> Easy access to pre-trained models<br>✅ <strong>Community:</strong> Large community and extensive documentation<br>✅ <strong>Integration:</strong> Seamless integration with HuggingFace and PyTorch  </p>
+<p><strong>Cons:</strong>
+❌ <strong>Performance:</strong> Slower execution compared to compiled languages<br>❌ <strong>Memory Usage:</strong> Higher memory consumption<br>❌ <strong>GIL Limitations:</strong> Global Interpreter Lock limits true parallelism<br>❌ <strong>Deployment:</strong> More complex deployment requirements  </p>
+<h4>Vanilla JavaScript Frontend</h4>
+<p><strong>Pros:</strong>
+✅ <strong>No Build Step:</strong> Direct browser execution<br>✅ <strong>Performance:</strong> No framework overhead<br>✅ <strong>Control:</strong> Complete control over DOM manipulation<br>✅ <strong>Simplicity:</strong> Easier debugging and maintenance<br>✅ <strong>Bundle Size:</strong> Minimal JavaScript payload  </p>
+<p><strong>Cons:</strong>
+❌ <strong>Development Speed:</strong> Slower development compared to frameworks<br>❌ <strong>Code Organization:</strong> More effort required for large applications<br>❌ <strong>Browser Compatibility:</strong> Manual handling of browser differences<br>❌ <strong>State Management:</strong> Manual state synchronization  </p>
+<h4>PostgreSQL Database</h4>
+<p><strong>Pros:</strong>
+✅ <strong>ACID Compliance:</strong> Strong consistency guarantees<br>✅ <strong>Performance:</strong> Excellent query optimization<br>✅ <strong>Features:</strong> Rich feature set including JSON support<br>✅ <strong>Reliability:</strong> Proven reliability in production<br>✅ <strong>Extensions:</strong> Powerful extension ecosystem  </p>
+<p><strong>Cons:</strong>
+❌ <strong>Complexity:</strong> More complex setup than simpler databases<br>❌ <strong>Resource Usage:</strong> Higher resource requirements<br>❌ <strong>Scaling:</strong> Vertical scaling limitations  </p>
+<h3>Architecture Decisions</h3>
+<h4>Microservices Architecture</h4>
+<p><strong>Pros:</strong>
+✅ <strong>Separation of Concerns:</strong> Clear service boundaries<br>✅ <strong>Technology Diversity:</strong> Use best tool for each job<br>✅ <strong>Scalability:</strong> Scale services independently<br>✅ <strong>Maintenance:</strong> Easier to maintain and update individual services  </p>
+<p><strong>Cons:</strong>
+❌ <strong>Complexity:</strong> Increased system complexity<br>❌ <strong>Network Overhead:</strong> Inter-service communication costs<br>❌ <strong>Debugging:</strong> More difficult to debug distributed systems<br>❌ <strong>Deployment:</strong> More complex deployment pipeline  </p>
+<h4>Client-Side Caching</h4>
+<p><strong>Pros:</strong>
+✅ <strong>Performance:</strong> Dramatic improvement in perceived performance<br>✅ <strong>User Experience:</strong> Instant interactions and feedback<br>✅ <strong>Server Load:</strong> Reduced server requests and bandwidth<br>✅ <strong>Offline Capability:</strong> Partial offline functionality  </p>
+<p><strong>Cons:</strong>
+❌ <strong>Memory Usage:</strong> Increased client-side memory consumption<br>❌ <strong>Complexity:</strong> Cache invalidation and consistency challenges<br>❌ <strong>Stale Data:</strong> Risk of showing outdated information  </p>
+<hr>
+<h2>Deployment Architecture</h2>
+<h3>Production Deployment Strategy</h3>
+<pre><code class="language-mermaid">graph TB
+    subgraph &quot;Load Balancer&quot;
+        LB[Nginx Load Balancer&lt;br/&gt;SSL Termination]
+    end
+
+    subgraph &quot;Application Tier&quot;
+        Rust1[Rust API Instance 1&lt;br/&gt;Port 5000]
+        Rust2[Rust API Instance 2&lt;br/&gt;Port 5001]
+        Rust3[Rust API Instance 3&lt;br/&gt;Port 5002]
+    end
+
+    subgraph &quot;AI Service Tier&quot;
+        Python1[Python AI Instance 1&lt;br/&gt;Port 8001]
+        Python2[Python AI Instance 2&lt;br/&gt;Port 8002]
+    end
+
+    subgraph &quot;Database Tier&quot;
+        Primary[(PostgreSQL Primary)]
+        Replica[(PostgreSQL Read Replica)]
+    end
+
+    subgraph &quot;Static Assets&quot;
+        CDN[CDN for Static Files&lt;br/&gt;JavaScript, CSS, Images]
+    end
+
+    LB --&gt; Rust1
+    LB --&gt; Rust2
+    LB --&gt; Rust3
+
+    Rust1 --&gt; Python1
+    Rust2 --&gt; Python1
+    Rust3 --&gt; Python2
+
+    Rust1 --&gt; Primary
+    Rust2 --&gt; Primary
+    Rust3 --&gt; Primary
+
+    Rust1 -.-&gt; Replica
+    Rust2 -.-&gt; Replica
+    Rust3 -.-&gt; Replica
+
+    LB --&gt; CDN
+</code></pre>
+<h3>Container Strategy (Planned Deployment Configuration)</h3>
+<pre><code class="language-yaml"># docker-compose.yml structure (example configuration)
+services:
+  rust-api:
+    build: .
+    ports: [&quot;5000:5000&quot;]
+    environment:
+      - DATABASE_URL
+      - PYTHON_SERVER_MODE=external
+    depends_on: [postgres, python-ai]
+
+  python-ai:
+    build: ./python_scripts
+    ports: [&quot;8001:8001&quot;]
+    environment:
+      - MODEL_CACHE_DIR=/models
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=social_media
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  nginx:
+    image: nginx:alpine
+    ports: [&quot;80:80&quot;, &quot;443:443&quot;]
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./static:/usr/share/nginx/html
+</code></pre>
+<h3>Monitoring and Observability</h3>
+<h4>Metrics Collection</h4>
+<ul>
+<li><strong>Application Metrics:</strong> Request rates, response times, error rates</li>
+<li><strong>System Metrics:</strong> CPU, memory, disk usage, network I/O</li>
+<li><strong>Database Metrics:</strong> Query performance, connection pool status</li>
+<li><strong>Cache Metrics:</strong> Hit rates, memory usage, eviction rates</li>
+</ul>
+<h4>Logging Strategy</h4>
+<pre><code class="language-mermaid">graph LR
+    App[Application Logs] --&gt; Collector[Log Collector]
+    System[System Logs] --&gt; Collector
+    DB[Database Logs] --&gt; Collector
+    Collector --&gt; Storage[Log Storage]
+    Storage --&gt; Analysis[Log Analysis]
+    Storage --&gt; Alerts[Alert System]
+</code></pre>
+<hr>
+<h2>Conclusion</h2>
+<p>Social Pulse represents a modern, scalable social media platform that leverages cutting-edge technologies to deliver a superior user experience. The architecture balances performance, security, and maintainability while incorporating AI-powered features that set it apart from traditional social platforms.</p>
+<h3>Key Achievements</h3>
+<ul>
+<li><strong>Performance:</strong> Sub-second response times with intelligent caching</li>
+<li><strong>Scalability:</strong> Horizontally scalable microservices architecture</li>
+<li><strong>Security:</strong> Multi-layered security with AI-powered content moderation</li>
+<li><strong>User Experience:</strong> Instant feedback with optimistic UI updates</li>
+<li><strong>Maintainability:</strong> Clean separation of concerns with well-defined APIs</li>
+</ul>
+<h3>Future Enhancements</h3>
+<ul>
+<li>Real-time notifications with WebSocket support</li>
+<li>Advanced recommendation algorithms</li>
+<li>Multi-language sentiment analysis</li>
+<li>Enhanced content moderation with custom AI models</li>
+<li>Mobile applications with shared API layer</li>
+</ul>
+<p>The platform provides a solid foundation for production deployment, with core features implemented and additional optimizations planned for scaling with growing user demands while maintaining excellent performance and security standards.</p>
+<hr>
+<p><em>Documentation Version: 1.0</em><br><em>Last Updated: September 2025</em><br><em>Platform: Social Pulse v1.0</em></p>
+
+    
+    <div class="mermaid-note">
+        <strong>📊 Note about Diagrams:</strong> This document references Mermaid diagrams in the source Markdown. 
+        The textual descriptions provide complete architectural information. For visual diagrams, the source 
+        Markdown can be viewed in tools like Typora, GitLab, or GitHub that support Mermaid rendering.
+    </div>
+</body>
+</html>

@@ -1,4 +1,4 @@
-modules = ["rust-stable", "python-3.11"]
+modules = ["rust-stable", "python-3.11", "nodejs-20"]
 [nix]
 packages = ["freetype", "geckodriver", "glibcLocales", "jq", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "openssl", "pkg-config", "postgresql", "tcl", "tk", "xsimd", "zlib"]
 channel = "stable-25_05"
@@ -45,3 +45,7 @@ externalPort = 4200
 [[ports]]
 localPort = 43987
 externalPort = 6800
+
+[[ports]]
+localPort = 44873
+externalPort = 3000

@@ -241,8 +241,8 @@
 
 /* CSS Variables for responsive sticky positioning */
 :root {
-    --post-creator-top: 80px;
-    --feed-header-top: 180px;
+    --post-creator-top: 85px;
+    --feed-header-top: 185px;
 }
 
 body {
@@ -251,6 +251,8 @@ body {
     min-height: 100vh;
     color: #333;
     line-height: 1.6;
+    /* Improved contrast for better visibility */
+    background-attachment: fixed;
 }
 
 /* Utility Classes */
@@ -258,13 +260,16 @@ body {
 
 /* Navigation */
 .navbar {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(20px);
     padding: 1rem 0;
     position: sticky;
     top: 0;
     z-index: 1000;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-top: none;
 }
 
 .nav-container {
@@ -446,30 +451,34 @@ body {
 
 /* Post Creator - Sticky positioning like navbar */
 .post-creator {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(15px);
     border-radius: 1rem;
     padding: 2rem;
     margin-bottom: 2rem;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
     position: sticky;
     top: var(--post-creator-top, 80px); /* Use CSS variable for responsive positioning */
     z-index: 900;
     transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 /* Collapsible post creator */
 .post-creator.collapsed {
     padding: 1rem 2rem;
     cursor: pointer;
-    border: 2px dashed rgba(79, 70, 229, 0.3);
-    background: rgba(79, 70, 229, 0.05);
+    border: 2px dashed rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
 }
 
 .post-creator.collapsed:hover {
-    border-color: rgba(79, 70, 229, 0.5);
-    background: rgba(79, 70, 229, 0.1);
+    border-color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.35);
     transform: translateY(-2px);
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.25);
 }
 
 .post-creator.collapsed .creator-content {
@@ -478,15 +487,18 @@ body {
 
 .post-creator.collapsed .creator-toggle {
     text-align: center;
-    color: #6b7280;
+    color: #1f2937;
     font-style: italic;
     user-select: none;
+    font-weight: 500;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
 }
 
 .post-creator.expanded {
     cursor: default;
-    border: none;
-    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(15px);
 }
 
 .post-creator.expanded .creator-toggle {
@@ -553,24 +565,28 @@ body {
 
 /* Feed */
 .feed-container {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(15px);
     border-radius: 1rem;
     overflow: hidden;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
     margin-top: 1rem; /* Space for sticky post creator */
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 /* Sticky feed header with filters */
 .feed-header {
     padding: 2rem 2rem 1rem;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
     position: sticky;
     top: var(--feed-header-top, 180px); /* Use CSS variable for responsive positioning */
     background: rgba(255, 255, 255, 0.98);
-    backdrop-filter: blur(15px);
+    backdrop-filter: blur(20px);
     z-index: 850;
     border-radius: 1rem 1rem 0 0;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .feed-header h2 {
@@ -587,18 +603,23 @@ body {
 
 .filter-btn {
     padding: 0.5rem 1rem;
-    background: #f3f4f6;
-    border: none;
+    background: rgba(243, 244, 246, 0.9);
+    border: 1px solid rgba(209, 213, 219, 0.5);
     border-radius: 2rem;
-    color: #6b7280;
+    color: #374151;
     cursor: pointer;
     font-size: 0.8rem;
     transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    font-weight: 500;
 }
 
 .filter-btn.active, .filter-btn:hover {
-    background: #4f46e5;
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
     color: white;
+    border-color: transparent;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
 }
 
 /* Content Filters */
