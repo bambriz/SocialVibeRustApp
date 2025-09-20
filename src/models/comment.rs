@@ -46,17 +46,29 @@ pub struct Comment {
     /// LEARNING: Simple integer counter for UI indentation and collapse logic
     pub depth: i32, // Updated from u8 to i32 to match database
     
-    /// AI-generated sentiment analysis results (JSON format)
-    /// LEARNING: serde_json::Value allows flexible JSON storage in Rust
-    pub sentiment_analysis: Option<serde_json::Value>,
+    /// Sentiment analysis score (-1.0 to 1.0)
+    /// LEARNING: Normalized sentiment score for consistent processing
+    pub sentiment_score: Option<f64>,
     
-    /// AI content moderation results (toxicity detection, etc.)
-    /// LEARNING: Store structured moderation data for transparency
-    pub moderation_result: Option<serde_json::Value>,
+    /// Color codes for sentiment display
+    /// LEARNING: Store hex color codes for frontend styling
+    pub sentiment_colors: Vec<String>,
     
-    /// Whether this comment has been flagged by moderation
+    /// Human-readable sentiment name (e.g., "angry", "joy", "sarcastic+happy")
+    /// LEARNING: Descriptive sentiment types for UI display
+    pub sentiment_type: Option<String>,
+    
+    /// Whether this comment has been blocked by moderation
     /// LEARNING: Boolean flags for quick filtering in queries
-    pub is_flagged: bool, // Updated from is_blocked for consistency
+    pub is_blocked: bool,
+    
+    /// Toxicity categories (e.g., "toxicity", "insult", "threat")
+    /// LEARNING: Store specific violation types for transparency
+    pub toxicity_tags: Vec<String>,
+    
+    /// Complete diagnostic data from moderation system
+    /// LEARNING: Store full analysis results for debugging
+    pub toxicity_scores: Option<serde_json::Value>,
     
     /// When this comment was originally created
     /// LEARNING: DateTime<Utc> for timezone-aware timestamps
