@@ -589,10 +589,10 @@ async function showUserHome() {
     const previousView = currentView;
     currentView = 'user_home';
     document.getElementById('feedTitle').textContent = `My Posts (${currentUser.username})`;
-    // Hide vibe check and content filters for user posts
-    const feedControlsContainer = document.querySelector('.feed-controls-container');
-    if (feedControlsContainer) {
-        feedControlsContainer.style.display = 'none';
+    // Hide vibe check component for user posts
+    const vibeCheckComponent = document.getElementById('vibeCheckComponent');
+    if (vibeCheckComponent) {
+        vibeCheckComponent.style.display = 'none';
     }
     
     // Check if we're switching views and have cached data
@@ -622,10 +622,10 @@ async function showMainFeed() {
     const previousView = currentView;
     currentView = 'feed';
     document.getElementById('feedTitle').textContent = 'Social Pulse Waves';
-    // Show vibe check and content filters for main feed
-    const feedControlsContainer = document.querySelector('.feed-controls-container');
-    if (feedControlsContainer) {
-        feedControlsContainer.style.display = 'block';
+    // Show vibe check component for main feed
+    const vibeCheckComponent = document.getElementById('vibeCheckComponent');
+    if (vibeCheckComponent) {
+        vibeCheckComponent.style.display = 'block';
     }
     
     // Check if we're switching views and have cached data
@@ -690,6 +690,32 @@ function togglePostCreator() {
         setTimeout(() => {
             postCreator.classList.remove('collapsing');
             postCreator.classList.add('collapsed');
+            updateStickyPositions();
+        }, 300);
+    }
+}
+
+// Toggle vibe check component between collapsed and expanded states
+function toggleVibeCheck() {
+    const vibeCheckComponent = document.getElementById('vibeCheckComponent');
+    const isCollapsed = vibeCheckComponent.classList.contains('collapsed');
+    
+    if (isCollapsed) {
+        // Expanding
+        vibeCheckComponent.classList.remove('collapsed');
+        vibeCheckComponent.classList.add('expanded');
+        
+        // Update sticky positioning dynamically based on actual element heights
+        updateStickyPositions();
+    } else {
+        // Collapsing with smooth animation
+        vibeCheckComponent.classList.add('collapsing');
+        vibeCheckComponent.classList.remove('expanded');
+        
+        // Wait for animation to complete, then apply collapsed state
+        setTimeout(() => {
+            vibeCheckComponent.classList.remove('collapsing');
+            vibeCheckComponent.classList.add('collapsed');
             updateStickyPositions();
         }, 300);
     }
