@@ -2654,11 +2654,12 @@ async function loadComments(postId) {
     }
 
     // Check cache first
-    if (commentsCache.isFresh(postId) && loadedComments.has(postId)) {
+    if (commentsCache.isFresh(postId)) {
         console.log(`📦 Comments: Using cached comments for post ${postId}`);
         const cachedComments = commentsCache.get(postId);
         if (cachedComments) {
             renderComments(postId, cachedComments);
+            loadedComments.add(postId); // Ensure tracking state is updated
             return;
         }
     }
@@ -2781,8 +2782,9 @@ async function postComment(postId) {
             replaceOptimisticComment(postId, optimisticComment.comment.id, data.comment);
             showToast('💬 Comment posted!', 'success');
             
-            // Update cache with real comment
-            commentsCache.addComment(postId, data.comment);
+            // Clear cache and reload comments to ensure fresh data display
+            commentsCache.clear(postId);
+            loadComments(postId);
         } else {
             // Remove failed optimistic comment
             removeOptimisticComment(postId, optimisticComment.comment.id);
@@ -3139,12 +3141,13 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Refresh posts periodically (every 30 seconds)
-setInterval(() => {
-    if (document.visibilityState === 'visible') {
-        loadPosts();
-    }
-}, 30000);
+// Auto-refresh disabled per user request
+// Users can manually refresh using pull-to-refresh or reload buttons
+// setInterval(() => {
+//     if (document.visibilityState === 'visible') {
+//         loadPosts();
+//     }
+// }, 30000);
 
 // ===== DELETE FUNCTIONALITY =====
 

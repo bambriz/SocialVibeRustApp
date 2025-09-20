@@ -360,13 +360,21 @@ impl PostService {
     }
 
     pub async fn calculate_popularity_score(&self, post: &Post) -> f64 {
-        // Base score from sentiment analysis
-        let sentiment_score = post.popularity_score;
+        // Base score from sentiment analysis (use actual sentiment score, not popularity_score!)
+        let sentiment_score = post.sentiment_score.unwrap_or(1.0);
         
         // Factor in engagement metrics
         let comment_boost = (post.comment_count as f64) * 0.1;
         let recency_hours = (Utc::now() - post.created_at).num_hours() as f64;
-        let recency_decay = 1.0 / (1.0 + recency_hours * 0.01); // Decay over time
+        
+        // Enhanced time decay - recent posts get bigger boost, older posts decay faster
+        let recency_decay = if recency_hours <= 24.0 {
+            // Posts within 24 hours get a boost
+            1.0 + (24.0 - recency_hours) * 0.05  // Up to 20% boost for very recent posts
+        } else {
+            // Older posts decay more aggressively 
+            1.0 / (1.0 + (recency_hours - 24.0) * 0.02)
+        };
         
         let base_score = (sentiment_score + comment_boost) * recency_decay;
         
