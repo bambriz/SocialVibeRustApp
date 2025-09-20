@@ -1,252 +1,294 @@
 # Social Pulse - Sentiment-Based Social Media Platform
 
-Social Pulse is a modern social media application that combines traditional social networking features with advanced AI-powered sentiment analysis and content moderation capabilities. Built with Rust (backend) and vanilla JavaScript (frontend), featuring HuggingFace EmotionClassifier and Detoxify for comprehensive content analysis.
+Social Pulse is a modern social media application that combines traditional social networking features with AI-powered sentiment analysis, hierarchical comment system, emotion-based voting, and comprehensive content moderation. Built with Rust (Axum backend), vanilla JavaScript frontend, and PostgreSQL database, featuring HuggingFace EmotionClassifier and Detoxify for real-time content analysis.
 
 ## 🚀 Features
 
-- **Advanced Sentiment Analysis**: HuggingFace EmotionClassifier with combo emotions (sarcastic+joy, affectionate+sad)
-- **AI-Powered Content Moderation**: Detoxify-based toxicity detection with dual-tier blocking system
-- **Real-time Processing**: Content analyzed before publication with immediate feedback
-- **Emotion Categories**: Joy, sad, angry, fear, disgust, surprise, confused, neutral, sarcastic, affectionate
-- **Toxicity Tagging**: Identity attack blocking (≥0.8) + toxicity tagging (≥0.5) for other categories
-- **Persistent Caching**: HuggingFace model caching for faster startup times
-- **Dual Storage**: Primary SQLite with CSV backup for data persistence
+### Core Social Features
+- **User Authentication**: JWT-based secure authentication with registration and login
+- **Post Creation & Management**: Create, view, edit, and delete posts with rich text content
+- **Hierarchical Comment System**: Reddit-style threaded comments with replies and nested discussions
+- **Emotion-Based Voting**: Interactive voting system with emotion tags (joy, sad, angry, etc.) and content filter tags
+- **User Profiles**: Personalized "My Posts" pages with user-specific content management
+- **Infinite Scroll Feed**: Instagram/Facebook/Reddit-style continuous feed loading
 
-## 🛠️ Setup Instructions for Windows with RustRover
+### AI-Powered Content Analysis
+- **Advanced Sentiment Analysis**: HuggingFace EmotionClassifier with 10 emotion categories
+- **Content Moderation**: Detoxify-based toxicity detection with automatic content flagging
+- **Real-time Processing**: Content analyzed before publication with immediate sentiment feedback
+- **Emotion Categories**: Joy, sad, angry, fear, disgust, surprise, confused, neutral, sarcastic, affectionate
+- **Toxicity Detection**: Multi-tier toxicity detection with blocking and tagging systems
+
+### Technical Features
+- **PostgreSQL Database**: Production-ready database with automatic migrations
+- **Subprocess Management**: Python AI server runs as managed subprocess with health monitoring
+- **Model Caching**: HuggingFace model caching for faster startup times
+- **Responsive Design**: Mobile-friendly interface with touch-optimized interactions
+- **Delete Controls**: Context-aware delete permissions (only on "My Posts" page)
+
+## 🛠️ Setup Instructions
 
 ### Prerequisites
 
-1. **Install RustRover** (JetBrains IDE for Rust)
-   - Download from: https://www.jetbrains.com/rust/
-   - Install with default settings
+This application is designed to run on **Replit** and requires:
+- **Rust toolchain** (automatically provided by Replit)
+- **Node.js** (for npm package management)
+- **Python 3.11+** (for AI processing)
+- **PostgreSQL database** (automatically configured on Replit)
 
-2. **Install PyCharm Plugin** for RustRover
-   - Open RustRover → File → Settings → Plugins
-   - Search for "Python" or "PyCharm"
-   - Install the official Python plugin
-   - Restart RustRover
+### Quick Start on Replit
 
-3. **Install Rust Toolchain**
-   ```powershell
-   # Install rustup (Rust installer) 
-   winget install Rustlang.Rust.MSVC
-   # Or download from: https://rustup.rs/
-   
-   # Verify installation
-   rustc --version
-   cargo --version
+1. **Fork/Import this repository** to your Replit workspace
+
+2. **Install required languages:**
+   ```bash
+   # Rust and Node.js are automatically detected and installed
+   # Python dependencies will be installed automatically
    ```
 
-4. **Install Python 3.11+**
-   ```powershell
-   # Using winget
-   winget install Python.Python.3.11
+3. **Configure environment variables** (if needed):
+   ```bash
+   # Database is automatically configured with:
+   # DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE
    
-   # Or download from: https://www.python.org/downloads/
-   # Make sure Python is added to PATH
-   
-   # Verify installation
-   python --version
-   pip --version
+   # Optional: Configure Python server mode
+   export PYTHON_SERVER_MODE=subprocess  # (default)
    ```
 
-### Project Setup
-
-1. **Clone and Open Project**
-   ```powershell
-   git clone <your-repo-url>
-   cd social-pulse
-   ```
-   - Open RustRover → Open → Select the `social-pulse` folder
-
-2. **Configure Python Environment in RustRover**
-   - File → Settings → Build, Execution, Deployment → Python Interpreter
-   - Add new Python interpreter (use system Python 3.11+)
-   - Set working directory to project root
-
-3. **Install Python Dependencies**
-   ```powershell
-   # Navigate to project directory
-   cd social-pulse
-   
-   # Install Python dependencies
-   pip install -r requirements.txt
-   # OR using the project dependencies:
-   pip install emotionclassifier>=0.1.4 hatesonar>=0.0.7 nrclex>=3.0.0 numpy>=1.26.4 opencv-python>=4.11.0.86 pillow>=11.3.0 scikit-learn>=1.7.2 scipy>=1.16.2 text2emotion>=0.0.5 textblob>=0.19.0 torch>=2.8.0 detoxify>=0.5.0
-   
-   # For PyTorch CPU (Windows):
-   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+4. **Install Python dependencies:**
+   ```bash
+   pip install emotionclassifier hatesonar nrclex numpy opencv-python pillow scikit-learn scipy text2emotion textblob torch detoxify
    ```
 
-4. **Install Rust Dependencies**
-   ```powershell
-   # This will download and compile all Rust dependencies
-   cargo build
-   ```
-
-### Running the Application
-
-1. **Start the Application**
-   ```powershell
-   # Build and run (debug mode)
+5. **Build and run the application:**
+   ```bash
    cargo run
-   
-   # OR build and run (release mode for better performance)
-   cargo run --release
    ```
 
-   The application will:
-   - Start the Python AI server (sentiment analysis + content moderation)
-   - Initialize HuggingFace and Detoxify models (may take 1-2 minutes first time)
-   - Start the Rust web server on `http://localhost:5000`
-   - Populate sample posts for testing
+The application will:
+- Start the Python AI server automatically
+- Initialize HuggingFace and Detoxify models (1-2 minutes first time)
+- Start the Rust web server on port 5000
+- Set up PostgreSQL database schema automatically
 
-2. **Access the Application**
-   - **Frontend**: http://localhost:5000
-   - **Health Check**: http://localhost:5000/health
-   - **Python AI Server**: http://localhost:8001/health
+### Database Setup
 
-### Testing the System
+The application uses **PostgreSQL** with automatic schema management:
 
-#### Frontend Testing
-1. Open http://localhost:5000 in your browser
-2. Create a new post with different emotions:
-   - **Joy**: "I'm so happy and excited today!"
-   - **Sarcasm**: "Oh great, just perfect timing"
-   - **Affection**: "I love you so much, my dear"
-   - **Toxicity**: "You are stupid" (will be tagged, not blocked)
-   - **Hate Speech**: "I hate all [identity group]" (will be blocked)
+- **Database**: Automatically created and configured on Replit
+- **Schema**: Auto-generated from Rust models with proper relations
+- **Migrations**: Handled automatically on startup
+- **Sample Data**: Use provided scripts for population (see Scripts section)
 
-#### API Testing with curl/PowerShell
-```powershell
-# Test sentiment analysis
-curl -X POST http://localhost:8001/analyze -H "Content-Type: application/json" -d '{\"text\":\"I am happy today!\"}'
+### Scripts
 
-# Test content moderation  
-curl -X POST http://localhost:8001/moderate -H "Content-Type: application/json" -d '{\"text\":\"You are an idiot\"}'
+The `scripts/` directory contains data population utilities:
 
-# Check health status
-curl http://localhost:8001/health
+```bash
+# Populate with 12 users and 36 posts
+node scripts/populate_data.js
+
+# Add comments to existing posts
+node scripts/populate_comments.js
 ```
 
-#### Expected Responses
-- **Sentiment**: `{"sentiment_type":"joy","confidence":0.8,"is_sarcastic":false,"is_combo":false}`
-- **Moderation**: `{"is_blocked":false,"toxicity_tags":["toxicity","insult"],"confidence":0.05}`
-- **Health**: `{"status":"healthy","primary_detector":"huggingface-emotionclassifier"}`
+## 📊 API Endpoints
 
-### Development in RustRover
+### Authentication
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login
 
-#### Rust Configuration
-1. **Build Configuration**
-   - Run → Edit Configurations → Add "Cargo Command"
-   - Command: `run`
-   - Working directory: project root
+### Posts
+- `GET /api/posts` - List all posts with pagination
+- `POST /api/posts` - Create new post (requires auth)
+- `GET /api/posts/:id` - Get specific post
+- `PUT /api/posts/:id` - Update post (requires auth)
+- `DELETE /api/posts/:id` - Delete post (requires auth)
+- `GET /api/posts/user/:user_id` - Get user's posts
 
-2. **Debug Configuration**
-   - Set breakpoints in Rust code
-   - Use RustRover's integrated debugger
-   - Environment variables can be set in run configuration
+### Comments
+- `GET /api/posts/:post_id/comments` - Get comments for post
+- `POST /api/posts/:post_id/comments` - Create comment (requires auth)
+- `GET /api/comments/:comment_id` - Get specific comment
+- `PUT /api/comments/:comment_id` - Update comment (requires auth)
+- `DELETE /api/comments/:comment_id` - Delete comment (requires auth)
+- `GET /api/comments/:comment_id/thread` - Get comment thread
 
-#### Python Configuration  
-1. **Python Scripts**
-   - Navigate to `python_scripts/` folder
-   - Right-click Python files → "Run" or "Debug"
-   - Use PyCharm plugin features for Python development
+### Voting System
+- `POST /api/vote/:target_id/:target_type/:vote_type/:tag` - Cast vote (requires auth)
+- `DELETE /api/vote/:target_id/:target_type/:vote_type/:tag` - Remove vote (requires auth)
+- `GET /api/vote/:target_id/:target_type` - Get vote summary
 
-2. **Python Module Testing**
-   ```python
-   # Test individual modules
-   cd python_scripts
-   python -c "from sentiment_analyzer import SentimentAnalyzer; sa = SentimentAnalyzer(); print(sa.analyze_sentiment('I am happy'))"
-   ```
+### AI Services
+- `POST /api/analyze` - Sentiment analysis (internal)
+- `POST /api/moderate` - Content moderation (internal)
 
-### Project Structure
+## 🏗️ Project Structure
 
 ```
 social-pulse/
 ├── src/                          # Rust backend source code
 │   ├── main.rs                   # Application entry point
-│   ├── models/                   # Data models (User, Post, etc.)
-│   ├── handlers/                 # HTTP request handlers
+│   ├── models/                   # Data models (User, Post, Comment, Vote)
+│   ├── routes/                   # HTTP route handlers
 │   ├── services/                 # Business logic services
-│   └── middleware/               # Authentication, logging
+│   ├── auth/                     # Authentication & middleware
+│   └── db/                       # Database repositories
 ├── python_scripts/               # Python AI modules
 │   ├── async_server.py          # HTTP server for AI endpoints
 │   ├── sentiment_analyzer.py    # HuggingFace sentiment analysis
-│   ├── content_moderator.py     # Detoxify content moderation
-│   └── model_cache.py          # Model caching utilities
+│   └── content_moderator.py     # Detoxify content moderation
 ├── static/                       # Frontend assets
 │   ├── index.html               # Main HTML page
 │   ├── app-v2.js               # JavaScript application
 │   └── styles.css              # CSS styling
-├── tests/                        # Rust integration tests
+├── scripts/                      # Data population scripts
+│   ├── populate_data.js         # Full data population
+│   └── populate_comments.js     # Comment population
 ├── Cargo.toml                   # Rust dependencies
-├── pyproject.toml              # Python dependencies
+├── replit.nix                   # Nix configuration for Replit
 └── README.md                   # This file
 ```
 
-### Key Components
+## 🎯 Usage
 
-- **Rust Backend**: Axum web framework with JWT authentication, post management, and Python integration
-- **Python AI Server**: Modular sentiment analysis and content moderation using state-of-the-art models
-- **Frontend**: Vanilla JavaScript SPA with real-time sentiment preview and toxicity warnings
-- **Data Storage**: SQLite database with CSV backup for data persistence
-- **Caching System**: Persistent model caching for faster startup times
+### Creating Content
 
-### Troubleshooting
+1. **Register/Login**: Create an account or sign in
+2. **Create Posts**: Click "Create New Post" and add content
+3. **Real-time Analysis**: See sentiment analysis as you type
+4. **Content Warnings**: Receive warnings for potentially problematic content
 
-#### Common Issues
+### Interacting with Content
 
-1. **Python Server Won't Start**
-   ```powershell
-   # Check Python path
-   python --version
-   
-   # Install missing dependencies
-   pip install torch detoxify emotionclassifier
-   
-   # Test Python server directly
-   cd python_scripts
-   python async_server.py
-   ```
+1. **Voting**: Click emotion tags (😊 Joy, 😢 Sad, etc.) to vote on posts
+2. **Comments**: Add threaded comments and replies to posts
+3. **Delete Controls**: Delete your own content from the "My Posts" page
 
-2. **Rust Compilation Errors**
-   ```powershell
-   # Update Rust toolchain
-   rustup update
-   
-   # Clean build
-   cargo clean
-   cargo build
-   ```
+### Viewing Content
 
-3. **Model Download Issues**
+1. **Main Feed**: Scroll through posts with infinite loading
+2. **User Posts**: Visit "My Posts" to see and manage your content
+3. **Comment Threads**: Click comment counts to view discussions
+
+## 🧪 Testing
+
+### Frontend Testing
+1. Open the application in Replit's webview
+2. Create posts with different emotional content:
+   - **Joy**: "I'm so happy and excited today!"
+   - **Sarcasm**: "Oh great, just perfect timing"
+   - **Affection**: "I love you so much"
+   - **Toxicity**: Content with mild toxicity (tagged but not blocked)
+
+### API Testing
+```bash
+# Test health endpoints
+curl https://your-repl-name.replit.dev/api/health
+
+# Test post creation (requires auth token)
+curl -X POST https://your-repl-name.replit.dev/api/posts \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Test Post","content":"This is a test post"}'
+```
+
+## 🔧 Development
+
+### Environment Configuration
+
+The application supports configuration through environment variables:
+
+- `DATABASE_URL`: PostgreSQL connection string (auto-configured)
+- `PYTHON_SERVER_MODE`: `subprocess` (default) or `external`
+- `SESSION_SECRET`: JWT signing secret (auto-generated)
+
+### Database Management
+
+PostgreSQL database is automatically managed:
+
+- **Schema Creation**: Automatic on startup
+- **Data Persistence**: All data stored in PostgreSQL
+- **Backup**: Use PostgreSQL tools or Replit's database export
+
+### Python AI Server
+
+The AI server runs automatically as a subprocess:
+
+- **Startup**: Managed by Rust application
+- **Health Monitoring**: Automatic restart on failure
+- **Model Caching**: Models cached for faster subsequent starts
+- **Logging**: Integrated with main application logs
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+1. **Server Won't Start**
+   - Check if Python dependencies are installed: `pip list`
+   - Verify database connection in Replit's database tab
+   - Check logs for specific error messages
+
+2. **AI Models Not Loading**
    - First run may take 2-5 minutes to download HuggingFace models
    - Ensure stable internet connection
-   - Models are cached in `/tmp/social_pulse_cache/`
+   - Check available memory (models require ~1GB RAM)
 
-4. **Port Conflicts**
-   - Rust server: Port 5000
-   - Python AI server: Port 8001
-   - Check if ports are available: `netstat -an | findstr :5000`
+3. **Database Issues**
+   - Verify PostgreSQL is running in Replit's database tab
+   - Check environment variables are properly set
+   - Review database logs for connection errors
 
-#### Performance Tips
-- Use `cargo run --release` for better performance
-- Models are cached after first load for faster startup
-- Close unused applications to free memory for AI models
+4. **Frontend Not Loading**
+   - Ensure server is running on port 5000
+   - Check webview configuration in Replit
+   - Verify static files are being served correctly
 
-### Contributing
+### Performance Tips
+
+- **Model Caching**: Models are cached after first load for faster startup
+- **Database Indexing**: Key database fields are automatically indexed
+- **Memory Management**: Close unused tabs to free memory for AI models
+- **Pagination**: Large datasets are paginated for better performance
+
+## 🔒 Security Features
+
+- **JWT Authentication**: Stateless authentication with secure token handling
+- **Password Hashing**: Argon2 password hashing for user security
+- **Content Moderation**: Automatic detection and flagging of toxic content
+- **Input Validation**: Comprehensive validation on both client and server
+- **SQL Injection Protection**: Parameterized queries prevent SQL injection
+- **CORS Configuration**: Proper cross-origin resource sharing setup
+
+## 📈 Monitoring
+
+The application includes comprehensive monitoring:
+
+- **Health Endpoints**: `/api/health` for application status
+- **Structured Logging**: Detailed logs with trace IDs
+- **Error Handling**: Graceful error handling with user-friendly messages
+- **Performance Metrics**: Built-in performance tracking
+
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create feature branch: `git checkout -b feature-name`
-3. Make changes with proper tests
+2. Create a feature branch: `git checkout -b feature-name`
+3. Make your changes with proper tests
 4. Run tests: `cargo test`
-5. Submit pull request
+5. Submit a pull request
 
-### License
+### Development Guidelines
+
+- Follow Rust naming conventions and error handling patterns
+- Add comprehensive tests for new features
+- Update documentation for API changes
+- Ensure all code passes formatting: `cargo fmt`
+- Run clippy for linting: `cargo clippy`
+
+## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
 ---
 
-**Happy coding with Social Pulse! 🚀**
+**Ready to build the future of social media with AI-powered insights! 🚀**
