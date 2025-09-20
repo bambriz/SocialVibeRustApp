@@ -12,6 +12,7 @@ pub struct AppConfig {
 pub enum PythonServerMode {
     Subprocess,
     External,
+    Disabled,
 }
 
 impl AppConfig {
@@ -22,7 +23,8 @@ impl AppConfig {
         
         let python_server_mode = match python_mode.as_str() {
             "external" => PythonServerMode::External,
-            _ => PythonServerMode::Subprocess, // Default to subprocess mode
+            "subprocess" => PythonServerMode::Subprocess,
+            "disabled" | _ => PythonServerMode::Disabled, // Default to disabled mode
         };
         
         Self {

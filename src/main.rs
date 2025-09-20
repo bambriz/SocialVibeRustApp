@@ -411,6 +411,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Err("External Python server dependency not available".into());
             }
         }
+        PythonServerMode::Disabled => {
+            info!("⚠️ STARTUP: Python sentiment analysis server is disabled");
+            info!("💡 STARTUP: Sentiment analysis features will use fallback responses");
+        }
     }
 
     // Populate sample posts for demonstration purposes

@@ -64,6 +64,7 @@ impl AppState {
                 Some(std::sync::Arc::new(manager))
             }
             PythonServerMode::External => None,
+            PythonServerMode::Disabled => None,
         };
 
         Ok(Self {

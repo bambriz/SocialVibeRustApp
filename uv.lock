@@ -996,6 +996,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "emotionclassifier" },
     { name = "hatesonar" },
+    { name = "nltk" },
     { name = "nrclex" },
     { name = "numpy" },
     { name = "opencv-python" },
@@ -1014,6 +1015,7 @@ dependencies = [
 requires-dist = [
     { name = "emotionclassifier", specifier = ">=0.1.4" },
     { name = "hatesonar", specifier = ">=0.0.7" },
+    { name = "nltk", specifier = ">=3.9.1" },
     { name = "nrclex", specifier = ">=3.0.0" },
     { name = "numpy", specifier = ">=1.26.4" },
     { name = "opencv-python", specifier = ">=4.11.0.86" },
