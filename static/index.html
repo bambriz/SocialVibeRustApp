@@ -22,6 +22,8 @@
                 <button class="btn btn-outline" onclick="showRegister()">Sign Up</button>
             </div>
             <div class="nav-user hidden" id="navUser">
+                <button class="btn btn-primary" onclick="showUserHome()">My Posts</button>
+                <button class="btn btn-outline" onclick="showMainFeed()">Feed</button>
                 <span class="username" id="navUsername">Welcome!</span>
                 <button class="btn btn-outline" onclick="logout()">Logout</button>
             </div>
@@ -104,8 +106,8 @@
         <!-- Posts Feed -->
         <div class="feed-container">
             <div class="feed-header">
-                <h2>Vibe Check</h2>
-                <div class="feed-controls">
+                <h2 id="feedTitle">Vibe Check</h2>
+                <div class="feed-controls" id="feedControls">
                     <button class="filter-btn active" data-filter="all" onclick="filterFeed('all', this)">All Posts</button>
                     <button class="filter-btn" data-filter="joy" onclick="filterFeed('joy', this)">😊 Happy</button>
                     <button class="filter-btn" data-filter="neutral" onclick="filterFeed('neutral', this)">😐 Neutral</button>

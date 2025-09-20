@@ -19,6 +19,7 @@ pub trait PostRepository: Send + Sync {
     async fn get_post_by_id(&self, id: Uuid) -> Result<Option<Post>>;
     async fn get_posts_paginated(&self, limit: u32, offset: u32) -> Result<Vec<Post>>;
     async fn get_posts_by_popularity(&self, limit: u32, offset: u32) -> Result<Vec<Post>>;
+    async fn get_posts_by_user(&self, user_id: Uuid, limit: u32, offset: u32) -> Result<Vec<Post>>;
     async fn update_post(&self, post: &Post) -> Result<Post>;
     async fn delete_post(&self, id: Uuid) -> Result<()>;
     async fn increment_comment_count(&self, post_id: Uuid) -> Result<()>;
@@ -608,6 +609,28 @@ impl PostRepository for MockPostRepository {
         }
     }
 
+    async fn get_posts_by_user(&self, user_id: Uuid, limit: u32, offset: u32) -> Result<Vec<Post>> {
+        let posts_list = self.posts_list.lock().unwrap();
+        
+        // Filter posts by user_id and sort by created_at in descending order
+        let mut user_posts: Vec<Post> = posts_list
+            .iter()
+            .filter(|post| post.author_id == user_id)
+            .cloned()
+            .collect();
+        
+        user_posts.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        
+        let start = offset as usize;
+        let end = std::cmp::min(start + limit as usize, user_posts.len());
+        
+        if start >= user_posts.len() {
+            Ok(vec![])
+        } else {
+            Ok(user_posts[start..end].to_vec())
+        }
+    }
+
     async fn update_post(&self, post: &Post) -> Result<Post> {
         let mut posts = self.posts.lock().unwrap();
         let mut posts_list = self.posts_list.lock().unwrap();
@@ -758,6 +781,28 @@ impl PostRepository for CsvPostRepository {
             Ok(vec![])
         } else {
             Ok(posts[start..end].to_vec())
+        }
+    }
+
+    async fn get_posts_by_user(&self, user_id: Uuid, limit: u32, offset: u32) -> Result<Vec<Post>> {
+        let cache = self.posts_cache.lock().unwrap();
+        
+        // Filter posts by user_id and sort by created_at in descending order
+        let mut user_posts: Vec<Post> = cache
+            .values()
+            .filter(|post| post.author_id == user_id)
+            .cloned()
+            .collect();
+        
+        user_posts.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        
+        let start = offset as usize;
+        let end = std::cmp::min(start + limit as usize, user_posts.len());
+        
+        if start >= user_posts.len() {
+            Ok(vec![])
+        } else {
+            Ok(user_posts[start..end].to_vec())
         }
     }
 

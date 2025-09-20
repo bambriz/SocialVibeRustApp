@@ -11,7 +11,8 @@ pub fn routes() -> Router<AppState> {
         .route("/auth/login", post(auth::login))
         .route("/users", get(users::get_users))
         .route("/posts", get(posts::get_posts))
-        .route("/posts/:post_id", get(posts::get_post));
+        .route("/posts/:post_id", get(posts::get_post))
+        .route("/posts/user/:user_id", get(posts::get_user_posts));
 
     let protected_routes = Router::new()
         .route("/posts", post(posts::create_post))
@@ -45,6 +46,7 @@ async fn api_health() -> Json<Value> {
                 "create": "POST /api/posts (requires auth)",
                 "list": "GET /api/posts",
                 "get": "GET /api/posts/:id",
+                "user_posts": "GET /api/posts/user/:user_id",
                 "update": "PUT /api/posts/:id (requires auth)",
                 "delete": "DELETE /api/posts/:id (requires auth)"
             },

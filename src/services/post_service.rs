@@ -434,6 +434,18 @@ impl PostService {
         
         Ok(posts.into_iter().map(PostResponse::from).collect())
     }
+
+    /// Get posts for a specific user with pagination
+    pub async fn get_posts_by_user(&self, user_id: uuid::Uuid, limit: u32, offset: u32) -> Result<Vec<PostResponse>> {
+        // Try primary repository first, then fallback to CSV using helper method
+        let posts = self.try_with_fallback(
+            "get_posts_by_user",
+            || self.primary_repo.get_posts_by_user(user_id, limit, offset),
+            || self.csv_fallback_repo.get_posts_by_user(user_id, limit, offset),
+        ).await?;
+        
+        Ok(posts.into_iter().map(PostResponse::from).collect())
+    }
     
     pub async fn update_post(&self, post_id: Uuid, request: CreatePostRequest, author_id: Uuid) -> Result<PostResponse> {
         // First, get the existing post using fallback helper

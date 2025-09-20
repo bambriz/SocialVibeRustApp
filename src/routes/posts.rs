@@ -152,6 +152,46 @@ pub async fn update_post(
     })))
 }
 
+pub async fn get_user_posts(
+    State(app_state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+    Query(params): Query<PaginationParams>,
+) -> Result<ResponseJson<Value>> {
+    // Validate pagination parameters
+    if params.limit < MIN_LIMIT || params.limit > MAX_LIMIT {
+        return Err(AppError::ValidationError(format!(
+            "Invalid limit. Must be between {} and {}", MIN_LIMIT, MAX_LIMIT
+        )));
+    }
+    
+    if params.offset > MAX_OFFSET {
+        return Err(AppError::ValidationError(format!(
+            "Invalid offset. Must be <= {}", MAX_OFFSET
+        )));
+    }
+    
+    // Get posts for specific user
+    let posts = app_state.post_service.get_posts_by_user(user_id, params.limit, params.offset).await?;
+    
+    // Calculate pagination metadata (safe from division by zero)
+    let page = if params.limit > 0 {
+        (params.offset / params.limit) + 1
+    } else {
+        1
+    };
+    let has_more = posts.len() == params.limit as usize;
+    
+    Ok(ResponseJson(json!({
+        "posts": posts,
+        "user_id": user_id,
+        "total": posts.len(),
+        "page": page,
+        "limit": params.limit,
+        "offset": params.offset,
+        "has_more": has_more
+    })))
+}
+
 pub async fn delete_post(
     State(app_state): State<AppState>,
     Path(post_id): Path<Uuid>,

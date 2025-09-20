@@ -2,6 +2,7 @@
 let currentUser = null;
 let authToken = localStorage.getItem('authToken');
 let posts = [];
+let currentView = 'feed'; // 'feed' or 'user_home'
 
 // Content filter state - tracks which toxicity types should be hidden
 let contentFilters = {
@@ -227,8 +228,31 @@ function logout() {
     authToken = null;
     currentUser = null;
     localStorage.removeItem('authToken');
+    currentView = 'feed'; // Reset to main feed
     showGuestInterface();
     showToast('Logged out successfully', 'info');
+}
+
+// User home page functions
+function showUserHome() {
+    if (!currentUser) {
+        showToast('Please log in to view your posts', 'error');
+        return;
+    }
+    
+    currentView = 'user_home';
+    document.getElementById('feedTitle').textContent = `My Posts (${currentUser.username})`;
+    document.getElementById('feedControls').style.display = 'none'; // Hide filters for user posts
+    loadPosts(true); // Reset and load user's posts
+    showToast('Showing your posts', 'info');
+}
+
+function showMainFeed() {
+    currentView = 'feed';
+    document.getElementById('feedTitle').textContent = 'Vibe Check';
+    document.getElementById('feedControls').style.display = 'block'; // Show filters
+    loadPosts(true); // Reset and load main feed
+    showToast('Showing main feed', 'info');
 }
 
 function showUserInterface() {
@@ -314,7 +338,13 @@ async function loadPosts(reset = true) {
     }
     
     try {
-        const url = `${API_BASE}/posts?limit=${paginationState.limit}&offset=${paginationState.offset}`;
+        // Choose URL based on current view
+        let url;
+        if (currentView === 'user_home' && currentUser) {
+            url = `${API_BASE}/posts/user/${currentUser.id}?limit=${paginationState.limit}&offset=${paginationState.offset}`;
+        } else {
+            url = `${API_BASE}/posts?limit=${paginationState.limit}&offset=${paginationState.offset}`;
+        }
         const response = await fetch(url);
         const data = await response.json();
         
