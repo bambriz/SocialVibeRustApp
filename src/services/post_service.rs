@@ -1,7 +1,7 @@
 use crate::models::Post;
 use crate::models::post::{CreatePostRequest, PostResponse};
 use crate::models::sentiment::{Sentiment, SentimentType};
-use crate::db::repository::{PostRepository, MockPostRepository, CsvPostRepository};
+use crate::db::repository::{PostRepository, CsvPostRepository};
 use crate::services::{SentimentService, ModerationService, VoteService};
 use crate::{AppError, Result};
 use crate::error::ContentModerationError;

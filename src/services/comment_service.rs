@@ -12,7 +12,6 @@ use crate::services::moderation_service::ModerationService;
 use crate::{AppError, Result};
 use uuid::Uuid;
 use std::sync::Arc;
-use std::collections::HashMap;
 use chrono::Utc;
 
 /// Enhanced comment service with sentiment analysis and hierarchy

@@ -1,6 +1,6 @@
 // Repository trait abstractions for database operations
 use crate::models::{User, Post, Comment, Vote, TagVoteCount, VoteSummary};
-use crate::{AppError, Result};
+use crate::Result;
 use uuid::Uuid;
 use async_trait::async_trait;
 

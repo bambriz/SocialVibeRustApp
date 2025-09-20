@@ -3,11 +3,11 @@ use axum::{
     http::{header, HeaderMap},
     response::Json as ResponseJson,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 use crate::{AppState, AppError, Result};
-use crate::models::post::{CreatePostRequest, PostResponse};
+use crate::models::post::CreatePostRequest;
 
 #[derive(Debug, Deserialize)]
 pub struct PaginationParams {

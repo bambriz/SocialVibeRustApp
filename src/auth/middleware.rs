@@ -1,12 +1,11 @@
 // Authentication middleware for protecting routes
 use axum::{
-    extract::{Request, State},
-    http::{header, HeaderMap, StatusCode},
+    extract::Request,
+    http::header,
     middleware::Next,
     response::Response,
 };
-use crate::{AppError, AppState};
-use crate::auth::Claims;
+use crate::AppState;
 
 #[derive(Debug, Clone)]
 pub struct UserContext {

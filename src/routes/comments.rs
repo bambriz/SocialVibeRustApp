@@ -8,8 +8,7 @@
 
 use axum::{
     extract::{Path, Query, State},
-    Extension, middleware,
-    http::StatusCode,
+    Extension,
     response::Json,
     routing::{get, post, put, delete},
     Router,
@@ -20,7 +19,6 @@ use uuid::Uuid;
 use crate::{
     auth::Claims,
     models::comment::{CreateCommentRequest, CommentResponse},
-    services::comment_service::CommentService,
     AppError, Result,
 };
 

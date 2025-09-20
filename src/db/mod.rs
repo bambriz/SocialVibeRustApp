@@ -5,7 +5,7 @@ pub mod postgres;
 // Database connection and state management
 use crate::config::AppConfig;
 use repository::{UserRepository, PostRepository, CommentRepository, VoteRepository};
-use postgres::{PostgresDatabase, PostgresUserRepository, PostgresPostRepository, PostgresCommentRepository, PostgresVoteRepository};
+use postgres::PostgresDatabase;
 use std::sync::Arc;
 use std::env;
 

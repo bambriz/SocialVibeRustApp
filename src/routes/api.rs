@@ -1,13 +1,9 @@
 use axum::{
     routing::{get, post, put, delete}, 
     Router, Json, middleware,
-    extract::{State, Request},
-    middleware::Next,
-    response::Response,
-    http::HeaderMap,
 };
 use serde_json::{json, Value};
-use crate::{AppState, AppError};
+use crate::AppState;
 use crate::routes::{users, posts, auth, comments, vote_routes};
 use crate::auth::middleware::auth_middleware;
 

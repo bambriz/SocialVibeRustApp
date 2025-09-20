@@ -1,14 +1,11 @@
 use axum::{
     extract::{State, Path},
     Extension,
-    http::StatusCode,
     response::Json,
     routing::{get, post, delete},
     Router,
-    middleware,
 };
 use uuid::Uuid;
-use chrono::Utc;
 
 use crate::{AppState, Result, AppError};
 use crate::models::{CreateVoteRequest, TagVoteCount, VoteSummary};

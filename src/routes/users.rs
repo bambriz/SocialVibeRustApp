@@ -1,11 +1,10 @@
 use axum::{
     extract::{State, Json},
-    http::StatusCode,
     response::Json as ResponseJson,
 };
 use serde_json::{json, Value};
-use crate::{AppState, AppError, Result};
-use crate::models::user::{CreateUserRequest, UserResponse};
+use crate::{AppState, Result};
+use crate::models::user::CreateUserRequest;
 
 pub async fn create_user(
     State(app_state): State<AppState>,

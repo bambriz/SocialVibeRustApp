@@ -2,9 +2,9 @@ use axum::{
     extract::{State, Json},
     response::Json as ResponseJson,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{json, Value};
-use crate::{AppState, AppError, Result};
+use crate::{AppState, Result};
 use crate::models::user::{CreateUserRequest, LoginRequest};
 
 #[derive(Serialize)]
