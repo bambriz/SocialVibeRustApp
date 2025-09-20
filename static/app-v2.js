@@ -17,6 +17,288 @@ let paginationState = {
     isLoading: false
 };
 
+// === POSTS CACHE SYSTEM ===
+
+// Cache configuration
+const CACHE_CONFIG = {
+    maxPostsPerView: 500,        // Maximum posts to cache per view
+    maxTotalMemoryMB: 50,        // Rough memory limit in MB
+    staleTimeMinutes: 10,        // Cache freshness time
+    preloadPages: 2              // Pages to preload ahead
+};
+
+// Posts cache class for intelligent caching and filtering
+class PostsCache {
+    constructor() {
+        this.caches = new Map(); // viewKey -> ViewCache
+        this.lastCleanup = Date.now();
+        this.cleanupInterval = 5 * 60 * 1000; // 5 minutes
+    }
+
+    // Get or create cache for a specific view
+    getViewCache(viewType, userId = null) {
+        const viewKey = viewType === 'user_home' && userId ? `user_${userId}` : 'main_feed';
+        
+        if (!this.caches.has(viewKey)) {
+            this.caches.set(viewKey, new ViewCache(viewKey, viewType));
+        }
+        
+        return this.caches.get(viewKey);
+    }
+
+    // Get all cached posts across views for global filtering
+    getAllCachedPosts() {
+        const allPosts = [];
+        for (const cache of this.caches.values()) {
+            allPosts.push(...cache.getAllPosts());
+        }
+        return allPosts;
+    }
+
+    // Clear all caches (hard refresh)
+    clearAll() {
+        this.caches.clear();
+        console.log('🗑️ Cache: All caches cleared');
+    }
+
+    // Clear specific view cache
+    clearView(viewType, userId = null) {
+        const viewKey = viewType === 'user_home' && userId ? `user_${userId}` : 'main_feed';
+        this.caches.delete(viewKey);
+        console.log(`🗑️ Cache: Cleared cache for ${viewKey}`);
+    }
+
+    // Memory management - periodic cleanup with global memory enforcement
+    performCleanup() {
+        const now = Date.now();
+        if (now - this.lastCleanup < this.cleanupInterval) return;
+
+        console.log('🧹 Cache: Performing cleanup...');
+        
+        // Clean each view cache first
+        for (const [viewKey, cache] of this.caches.entries()) {
+            const sizeBefore = cache.posts.size;
+            cache.cleanup();
+            const sizeAfter = cache.posts.size;
+            
+            if (sizeBefore > sizeAfter) {
+                console.log(`🧹 Cache: ${viewKey} cleaned ${sizeBefore - sizeAfter} posts`);
+            }
+        }
+
+        // Enforce global memory limit
+        this.enforceGlobalMemoryLimit();
+
+        this.lastCleanup = now;
+    }
+
+    // Enforce global memory limit across all views
+    enforceGlobalMemoryLimit() {
+        let stats = this.getStats();
+        if (stats.memoryEstimateMB <= CACHE_CONFIG.maxTotalMemoryMB) return;
+
+        console.log(`🧹 Cache: Memory limit exceeded (${stats.memoryEstimateMB.toFixed(2)}MB > ${CACHE_CONFIG.maxTotalMemoryMB}MB), enforcing global cleanup`);
+
+        // Loop until memory is below limit or no caches remain
+        let attempts = 0;
+        const maxAttempts = 10; // Safety valve to prevent infinite loops
+        
+        while (stats.memoryEstimateMB > CACHE_CONFIG.maxTotalMemoryMB && stats.totalPosts > 0 && attempts < maxAttempts) {
+            // Sort views by last access and clean least recently used first
+            const viewsByAccess = Array.from(this.caches.entries())
+                .filter(([_, cache]) => cache.posts.size > 0) // Only process views with posts
+                .sort((a, b) => a[1].lastAccess - b[1].lastAccess);
+            
+            if (viewsByAccess.length === 0) break;
+            
+            // Calculate adaptive removal size based on memory overage
+            const overageMB = stats.memoryEstimateMB - CACHE_CONFIG.maxTotalMemoryMB;
+            const avgPostSizeMB = stats.memoryEstimateMB / stats.totalPosts;
+            const targetRemoval = Math.max(10, Math.ceil(overageMB / avgPostSizeMB));
+            
+            // Remove from least recently used view
+            const [viewKey, cache] = viewsByAccess[0];
+            const postsToRemove = Math.min(targetRemoval, cache.posts.size);
+            cache.forceCleanup(postsToRemove);
+            
+            console.log(`🧹 Cache: Global cleanup removed ${postsToRemove} posts from ${viewKey} (${overageMB.toFixed(2)}MB overage)`);
+            
+            // Recalculate stats and increment attempt counter
+            stats = this.getStats();
+            attempts++;
+        }
+        
+        if (attempts >= maxAttempts) {
+            console.warn('🚨 Cache: Max cleanup attempts reached, may still exceed memory limit');
+        } else if (stats.memoryEstimateMB <= CACHE_CONFIG.maxTotalMemoryMB) {
+            console.log(`✅ Cache: Memory now within limit (${stats.memoryEstimateMB.toFixed(2)}MB)`);
+        }
+    }
+
+    // Get cache statistics
+    getStats() {
+        const stats = {
+            totalViews: this.caches.size,
+            totalPosts: 0,
+            memoryEstimateMB: 0,
+            views: {}
+        };
+
+        for (const [viewKey, cache] of this.caches.entries()) {
+            const viewStats = cache.getStats();
+            stats.totalPosts += viewStats.postCount;
+            stats.memoryEstimateMB += viewStats.memoryEstimateMB;
+            stats.views[viewKey] = viewStats;
+        }
+
+        return stats;
+    }
+}
+
+// View-specific cache (main feed, user posts, etc.)
+class ViewCache {
+    constructor(viewKey, viewType) {
+        this.viewKey = viewKey;
+        this.viewType = viewType;
+        this.posts = new Map(); // postId -> post
+        this.postOrder = []; // Array of post IDs in order
+        this.paginationRanges = new Set(); // Track loaded ranges "offset-limit"
+        this.lastAccess = Date.now();
+        this.lastFetch = 0;
+        this.hasMore = true;
+    }
+
+    // Add posts to cache
+    addPosts(newPosts, offset, limit) {
+        const now = Date.now();
+        this.lastAccess = now;
+        this.lastFetch = now;
+
+        // Mark this range as loaded
+        this.paginationRanges.add(`${offset}-${limit}`);
+
+        // Add posts to cache
+        newPosts.forEach(post => {
+            if (!this.posts.has(post.id)) {
+                this.posts.set(post.id, { ...post, _cached_at: now, _last_access: now });
+                this.postOrder.push(post.id);
+            }
+        });
+
+        // Update hasMore based on response (don't rely just on length check)
+        // This will be properly set by the calling code with server response
+        this.hasMore = newPosts.length === limit;
+
+        console.log(`📦 Cache: Added ${newPosts.length} posts to ${this.viewKey} (total: ${this.posts.size})`);
+    }
+
+    // Check if a specific range is already cached
+    hasRange(offset, limit) {
+        return this.paginationRanges.has(`${offset}-${limit}`);
+    }
+
+    // Get posts for a specific range with LRU tracking
+    getPostsInRange(offset, limit) {
+        const now = Date.now();
+        this.lastAccess = now;
+        
+        const endIndex = offset + limit;
+        const requestedIds = this.postOrder.slice(offset, endIndex);
+        
+        // Update last access time for accessed posts (true LRU)
+        return requestedIds.map(id => {
+            const post = this.posts.get(id);
+            if (post) {
+                post._last_access = now;
+            }
+            return post;
+        }).filter(Boolean);
+    }
+
+    // Get all cached posts with LRU tracking
+    getAllPosts() {
+        const now = Date.now();
+        this.lastAccess = now;
+        
+        // Update last access time for all accessed posts (true LRU)
+        return this.postOrder.map(id => {
+            const post = this.posts.get(id);
+            if (post) {
+                post._last_access = now;
+            }
+            return post;
+        });
+    }
+
+    // Check if cache is fresh
+    isFresh() {
+        const staleTime = CACHE_CONFIG.staleTimeMinutes * 60 * 1000;
+        return (Date.now() - this.lastFetch) < staleTime;
+    }
+
+    // Clean up old posts (proper LRU based on last access)
+    cleanup() {
+        if (this.posts.size <= CACHE_CONFIG.maxPostsPerView) return;
+        
+        const toRemove = this.posts.size - CACHE_CONFIG.maxPostsPerView;
+        this.forceCleanup(toRemove);
+    }
+
+    // Force cleanup of specific number of posts (for global memory management)
+    forceCleanup(postsToRemove) {
+        if (postsToRemove <= 0 || this.posts.size === 0) return;
+
+        // Sort by last access time (true LRU), remove least recently used
+        const postsArray = Array.from(this.posts.entries());
+        postsArray.sort((a, b) => (a[1]._last_access || a[1]._cached_at || 0) - (b[1]._last_access || b[1]._cached_at || 0));
+
+        const actualRemove = Math.min(postsToRemove, postsArray.length);
+        for (let i = 0; i < actualRemove; i++) {
+            const [postId] = postsArray[i];
+            this.posts.delete(postId);
+            
+            // Also remove from order array
+            const orderIndex = this.postOrder.indexOf(postId);
+            if (orderIndex !== -1) {
+                this.postOrder.splice(orderIndex, 1);
+            }
+        }
+
+        // Clear pagination ranges since we've modified the cache
+        this.paginationRanges.clear();
+    }
+
+    // Update hasMore from server response
+    updateHasMore(serverHasMore) {
+        this.hasMore = serverHasMore;
+    }
+
+    // Get cache statistics
+    getStats() {
+        const postCount = this.posts.size;
+        const avgPostSize = 2000; // Rough estimate: 2KB per post
+        const memoryEstimateMB = (postCount * avgPostSize) / (1024 * 1024);
+
+        return {
+            viewKey: this.viewKey,
+            postCount,
+            memoryEstimateMB: Math.round(memoryEstimateMB * 100) / 100,
+            ranges: this.paginationRanges.size,
+            hasMore: this.hasMore,
+            isFresh: this.isFresh(),
+            lastAccess: new Date(this.lastAccess).toLocaleTimeString()
+        };
+    }
+}
+
+// Initialize global cache
+const postsCache = new PostsCache();
+
+// Start automatic cache cleanup interval
+setInterval(() => {
+    postsCache.performCleanup();
+}, 5 * 60 * 1000); // Every 5 minutes
+
 // API Configuration - Use full domain for Replit environment
 const API_BASE = window.location.origin + '/api';
 
@@ -43,6 +325,34 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         console.log('Post form visible:', !document.getElementById('postCreator').classList.contains('hidden'));
         console.log('========================');
+    };
+    
+    // Cache debug function accessible from console
+    window.debugCache = function() {
+        const stats = postsCache.getStats();
+        console.log('=== CACHE DEBUG INFO ===');
+        console.log('Total views cached:', stats.totalViews);
+        console.log('Total posts cached:', stats.totalPosts);
+        console.log('Memory estimate:', stats.memoryEstimateMB.toFixed(2) + ' MB');
+        console.log('Cache config:', CACHE_CONFIG);
+        console.log('View details:');
+        for (const [viewKey, viewStats] of Object.entries(stats.views)) {
+            console.log(`  ${viewKey}:`, viewStats);
+        }
+        console.log('Current view:', currentView);
+        console.log('Current posts array length:', posts.length);
+        console.log('========================');
+    };
+    
+    // Cache management functions accessible from console
+    window.clearCache = function() {
+        postsCache.clearAll();
+        console.log('🗑️ All caches cleared manually');
+    };
+    
+    window.clearCurrentViewCache = function() {
+        postsCache.clearView(currentView, currentUser?.id);
+        console.log(`🗑️ Cache cleared for current view: ${currentView}`);
     };
     
     // Auto-setup function that clears everything and logs in
@@ -230,28 +540,71 @@ function logout() {
     localStorage.removeItem('authToken');
     currentView = 'feed'; // Reset to main feed
     clearOptimisticVoteState(); // Clear optimistic voting state on logout
+    postsCache.clearAll(); // Clear all cached data on logout
     showGuestInterface();
     showToast('Logged out successfully', 'info');
 }
 
 // User home page functions
-function showUserHome() {
+async function showUserHome() {
     if (!currentUser) {
         showToast('Please log in to view your posts', 'error');
         return;
     }
     
+    const previousView = currentView;
     currentView = 'user_home';
     document.getElementById('feedTitle').textContent = `My Posts (${currentUser.username})`;
     document.getElementById('feedControls').style.display = 'none'; // Hide filters for user posts
+    
+    // Check if we're switching views and have cached data
+    if (previousView !== currentView) {
+        const cache = postsCache.getViewCache(currentView, currentUser.id);
+        if (cache.posts.size > 0 && cache.isFresh()) {
+            console.log('📦 Cache: Switching to user view with cached data');
+            posts = cache.getAllPosts();
+            paginationState.offset = posts.length;
+            paginationState.hasMore = cache.hasMore;
+            
+            // Load vote data for cached posts to ensure freshness
+            if (posts.length > 0) {
+                await loadVoteDataForPosts(posts);
+            }
+            
+            applyCurrentFilters();
+            return;
+        }
+    }
+    
     loadPosts(true); // Reset and load user's posts
     showToast('Showing your posts', 'info');
 }
 
-function showMainFeed() {
+async function showMainFeed() {
+    const previousView = currentView;
     currentView = 'feed';
     document.getElementById('feedTitle').textContent = 'Vibe Check';
     document.getElementById('feedControls').style.display = 'block'; // Show filters
+    
+    // Check if we're switching views and have cached data
+    if (previousView !== currentView) {
+        const cache = postsCache.getViewCache(currentView, null);
+        if (cache.posts.size > 0 && cache.isFresh()) {
+            console.log('📦 Cache: Switching to main feed with cached data');
+            posts = cache.getAllPosts();
+            paginationState.offset = posts.length;
+            paginationState.hasMore = cache.hasMore;
+            
+            // Load vote data for cached posts to ensure freshness
+            if (posts.length > 0) {
+                await loadVoteDataForPosts(posts);
+            }
+            
+            applyCurrentFilters();
+            return;
+        }
+    }
+    
     loadPosts(true); // Reset and load main feed
     showToast('Showing main feed', 'info');
 }
@@ -320,19 +673,80 @@ async function handleCreatePost(e) {
     }
 }
 
+// Cache-aware posts loading with smart caching and filtering
 async function loadPosts(reset = true) {
     if (paginationState.isLoading) return;
     
     paginationState.isLoading = true;
+    
+    // Get appropriate cache for current view
+    const cache = postsCache.getViewCache(currentView, currentUser?.id);
     
     if (reset) {
         paginationState.offset = 0;
         paginationState.hasMore = true;
         posts = [];
         clearOptimisticVoteState(); // Clear optimistic state when resetting posts
+        
+        // Robust hard refresh detection - clear cache on hard refresh
+        const isHardRefresh = (
+            (performance.navigation && performance.navigation.type === performance.navigation.TYPE_RELOAD) ||
+            (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]?.type === 'reload') ||
+            document.referrer === '' && window.history.length === 1
+        );
+        
+        if (isHardRefresh) {
+            console.log('🔄 Cache: Hard refresh detected, clearing cache');
+            postsCache.clearAll();
+        }
+        
+        // Check if we have fresh cached data for initial load
+        if (cache.posts.size > 0 && cache.isFresh()) {
+            console.log('📦 Cache: Using cached data for reset load');
+            posts = cache.getAllPosts();
+            paginationState.hasMore = cache.hasMore;
+            paginationState.offset = posts.length;
+            
+            // Load vote data for cached posts to ensure freshness
+            if (posts.length > 0) {
+                await loadVoteDataForPosts(posts);
+            }
+            
+            // Apply filters and render immediately from cache
+            setTimeout(() => {
+                applyCurrentFilters();
+            }, 50);
+            
+            paginationState.isLoading = false;
+            return;
+        }
+        
         // Show skeleton loading for initial load
         showSkeletonLoading(true);
     } else {
+        // For infinite scroll, check if we already have this range cached
+        if (cache.hasRange(paginationState.offset, paginationState.limit)) {
+            console.log(`📦 Cache: Using cached data for range ${paginationState.offset}-${paginationState.limit}`);
+            
+            const cachedPosts = cache.getPostsInRange(paginationState.offset, paginationState.limit);
+            posts = [...posts, ...cachedPosts];
+            paginationState.offset += cachedPosts.length;
+            paginationState.hasMore = cache.hasMore;
+            
+            // Load vote data for cached posts to keep them fresh
+            if (cachedPosts.length > 0) {
+                await loadVoteDataForPosts(cachedPosts);
+            }
+            
+            // Apply filters and render
+            setTimeout(() => {
+                applyCurrentFilters();
+            }, 50);
+            
+            paginationState.isLoading = false;
+            return;
+        }
+        
         // Show skeleton loading for additional posts
         showSkeletonLoading(false);
     }
@@ -353,6 +767,8 @@ async function loadPosts(reset = true) {
             url = `${API_BASE}/posts?limit=${paginationState.limit}&offset=${paginationState.offset}`;
         }
         
+        console.log(`🌐 Cache: Fetching from server - ${url}`);
+        
         // Add a small delay for better UX (minimum loading time for skeletons to be visible)
         const [response] = await Promise.all([
             fetch(url),
@@ -363,6 +779,13 @@ async function loadPosts(reset = true) {
         
         if (response.ok) {
             const newPosts = Array.isArray(data) ? data : data.posts || [];
+            
+            // Add to cache with proper hasMore handling
+            cache.addPosts(newPosts, paginationState.offset, paginationState.limit);
+            
+            // Update cache hasMore from server response
+            const serverHasMore = data.has_more !== false && newPosts.length === paginationState.limit;
+            cache.updateHasMore(serverHasMore);
             
             if (reset) {
                 posts = newPosts;
@@ -375,8 +798,8 @@ async function loadPosts(reset = true) {
                 await loadVoteDataForPosts(newPosts);
             }
             
-            // Update pagination state
-            paginationState.hasMore = data.has_more !== false && newPosts.length === paginationState.limit;
+            // Update pagination state from server truth
+            paginationState.hasMore = serverHasMore;
             paginationState.offset += newPosts.length;
             
             // Hide skeleton loading before showing real posts
@@ -384,16 +807,12 @@ async function loadPosts(reset = true) {
             
             // Small delay to allow skeleton removal animation to complete
             setTimeout(() => {
-                // Apply active filters consistently
-                const activeFilterBtn = document.querySelector('.filter-btn.active');
-                if (activeFilterBtn) {
-                    const sentiment = activeFilterBtn.dataset.filter;
-                    filterFeed(sentiment); // This applies both emotion and content filters
-                } else {
-                    // If no active emotion filter, just apply content filters
-                    renderPosts(applyContentFiltering(posts), reset);
-                }
+                applyCurrentFilters();
             }, 150);
+            
+            // Perform periodic cache cleanup
+            postsCache.performCleanup();
+            
         } else {
             hideSkeletonLoading();
             showRetryMessage(reset);
@@ -408,6 +827,18 @@ async function loadPosts(reset = true) {
             spinner.classList.add('hidden');
         }
         hideInfiniteScrollLoader();
+    }
+}
+
+// Apply current active filters (separated for reuse)
+function applyCurrentFilters() {
+    const activeFilterBtn = document.querySelector('.filter-btn.active');
+    if (activeFilterBtn) {
+        const sentiment = activeFilterBtn.dataset.filter;
+        filterFeed(sentiment); // This applies both emotion and content filters
+    } else {
+        // If no active emotion filter, just apply content filters
+        renderPosts(applyContentFiltering(posts));
     }
 }
 
@@ -1435,7 +1866,7 @@ function predictSentiment(text) {
     };
 }
 
-// Feed filtering
+// Enhanced cache-aware feed filtering
 function filterFeed(sentiment, buttonElement = null) {
     // Update active filter button
     document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -1452,10 +1883,13 @@ function filterFeed(sentiment, buttonElement = null) {
         }
     }
     
+    // Use cache-aware filtering for better performance and more comprehensive results
+    const sourceData = getCachedPostsForCurrentView();
+    
     if (sentiment === 'all') {
-        renderPosts(applyContentFiltering(posts));
+        renderPosts(applyContentFiltering(sourceData));
     } else {
-        const filtered = posts.filter(post => {
+        const filtered = sourceData.filter(post => {
             const sentimentClass = getSentimentClass(post);
             
             // Handle sarcastic combinations - fixed class name
@@ -1469,7 +1903,23 @@ function filterFeed(sentiment, buttonElement = null) {
     }
 }
 
-// Content filtering functions
+// Get cached posts for current view - falls back to current posts array if cache is empty
+function getCachedPostsForCurrentView() {
+    const cache = postsCache.getViewCache(currentView, currentUser?.id);
+    const cachedPosts = cache.getAllPosts();
+    
+    // If cache has data, use it for more comprehensive filtering
+    // Otherwise fall back to current posts array
+    if (cachedPosts.length > 0) {
+        console.log(`📦 Cache: Filtering ${cachedPosts.length} cached posts`);
+        return cachedPosts;
+    } else {
+        console.log(`📦 Cache: No cached data, filtering ${posts.length} current posts`);
+        return posts;
+    }
+}
+
+// Enhanced cache-aware content filtering
 function applyContentFilters() {
     // Update the hidden toxicity types based on unchecked checkboxes
     contentFilters.hiddenToxicityTypes.clear();
@@ -1494,15 +1944,17 @@ function applyContentFilters() {
     // Save filter state to localStorage
     saveContentFilterState();
     
-    // Re-apply current filters
+    // Re-apply current filters using cache-aware filtering
     const activeFilterBtn = document.querySelector('.filter-btn.active');
     if (activeFilterBtn) {
         const currentFilter = activeFilterBtn.dataset.filter || 'all';
         
-        // Get currently filtered posts by sentiment
-        let currentPosts = posts;
+        // Use cache-aware filtering for comprehensive results
+        const sourceData = getCachedPostsForCurrentView();
+        let currentPosts = sourceData;
+        
         if (currentFilter !== 'all') {
-            currentPosts = posts.filter(post => {
+            currentPosts = sourceData.filter(post => {
                 const sentimentClass = getSentimentClass(post);
                 if (currentFilter === 'sarcastic' && sentimentClass === 'sentiment-sarcastic') {
                     return true;
