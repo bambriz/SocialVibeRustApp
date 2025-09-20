@@ -913,7 +913,7 @@ impl MockCommentRepository {
     /// Atomically allocate next sibling index for a specific parent (including post-level)
     /// This prevents race conditions in path generation
     pub async fn allocate_next_sibling_index(&self, post_id: Uuid, parent_id: Option<Uuid>) -> Result<usize> {
-        let mut comments = self.comments.lock().unwrap();
+        let comments = self.comments.lock().unwrap();
         let count = match parent_id {
             None => {
                 // Root-level: Count top-level comments for this specific post

@@ -5,29 +5,25 @@ use axum::{
 };
 use serde_json::{json, Value};
 use crate::AppState;
-use crate::routes::{users, posts, auth, comments, vote_routes};
+use crate::routes::{posts, auth, comments, vote_routes};
 
 // Function to create protected routes without middleware (middleware applied at top level)
-pub fn protected_routes_with_auth() -> Router<AppState> {
-    Router::new()
-        .route("/posts", post(posts::create_post))
-        .route("/posts/:post_id", put(posts::update_post))
-        .route("/posts/:post_id", delete(posts::delete_post))
-        .merge(comments::protected_routes())
-        .merge(vote_routes::protected_vote_routes())
-}
 
 pub fn routes(app_state: &AppState) -> Router<AppState> {
     let public_routes = Router::new()
         .route("/health", get(api_health))
         .route("/auth/register", post(auth::register))
         .route("/auth/login", post(auth::login))
-        .route("/users", get(users::get_users))
         .route("/posts", get(posts::get_posts))
         .route("/posts/:post_id", get(posts::get_post))
         .route("/posts/user/:user_id", get(posts::get_user_posts));
 
-    let protected_routes = protected_routes_with_auth()
+    let protected_routes = Router::new()
+        .route("/posts", post(posts::create_post))
+        .route("/posts/:post_id", put(posts::update_post))
+        .route("/posts/:post_id", delete(posts::delete_post))
+        .merge(comments::protected_routes())
+        .merge(vote_routes::protected_vote_routes())
         .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware_with_state));
 
     public_routes

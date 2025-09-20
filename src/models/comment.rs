@@ -300,7 +300,7 @@ impl CommentTreeNode {
     /// 
     /// LEARNING EXERCISE: Tree construction algorithms
     /// YOUR TASK: Convert flat database results into nested tree structure
-    pub fn build_tree(comments: Vec<Comment>) -> Vec<CommentTreeNode> {
+    pub fn build_tree(_comments: Vec<Comment>) -> Vec<CommentTreeNode> {
         // TODO: YOUR IMPLEMENTATION HERE
         //
         // ALGORITHM:

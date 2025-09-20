@@ -3,6 +3,7 @@ use crate::{AppError, Result};
 use crate::auth::Claims;
 
 pub struct JwtService {
+    #[allow(dead_code)]
     secret: String,
 }
 

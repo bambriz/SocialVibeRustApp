@@ -210,6 +210,7 @@ impl PythonManager {
     }
 
     /// Supervision loop that monitors and restarts the subprocess if needed
+    #[allow(dead_code)]
     async fn supervision_loop(&self) {
         info!("[PY] Starting supervision loop");
         

@@ -16,6 +16,11 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use chrono::Utc;
 
+/// Hierarchical path generation for Reddit-style nesting
+const MAX_DEPTH: i32 = 10;
+const PATH_SEPARATOR: &str = "/";
+const DEPTH_INCREMENT: i32 = 1;
+
 /// Enhanced comment service with sentiment analysis and hierarchy
 pub struct CommentService {
     comment_repo: Arc<dyn CommentRepository>,
@@ -24,21 +29,8 @@ pub struct CommentService {
     vote_service: Option<Arc<VoteService>>,
 }
 
-/// Hierarchical path generation for Reddit-style nesting
-const MAX_DEPTH: i32 = 10;
-const PATH_SEPARATOR: &str = "/";
-const DEPTH_INCREMENT: i32 = 1;
 
 impl CommentService {
-    /// Create a new CommentService (basic version for now)
-    pub fn new(comment_repo: Arc<dyn CommentRepository>) -> Self {
-        Self { 
-            comment_repo,
-            sentiment_service: None, // TODO: Connect to sentiment service
-            moderation_service: None, // TODO: Connect to moderation service
-            vote_service: None, // TODO: Connect to vote service
-        }
-    }
     
     /// Create CommentService with AI services (enhanced version)
     pub fn new_with_ai(
@@ -56,6 +48,7 @@ impl CommentService {
     }
     
     /// Generate materialized path with atomic sibling index allocation
+    #[allow(dead_code)]
     async fn generate_comment_path(&self, post_id: Uuid, parent_id: Option<Uuid>) -> Result<(String, i32)> {
         match parent_id {
             None => {
@@ -200,6 +193,7 @@ impl CommentService {
     }
     
     /// Increment reply count for parent comment
+    #[allow(dead_code)]
     async fn increment_reply_count(&self, parent_id: Uuid) -> Result<()> {
         // This would be handled by the repository layer
         // For now, we'll leave it as a placeholder
@@ -234,7 +228,7 @@ impl CommentService {
     
     /// Sort comments by popularity while preserving hierarchical structure
     /// Root comments are sorted by popularity, and replies within each parent are also sorted by popularity
-    async fn sort_comments_by_popularity(&self, mut comments: Vec<Comment>) -> Vec<Comment> {
+    async fn sort_comments_by_popularity(&self, comments: Vec<Comment>) -> Vec<Comment> {
         use std::collections::HashMap;
         
         // Calculate current popularity scores for all comments including votes

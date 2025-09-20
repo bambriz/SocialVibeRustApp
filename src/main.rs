@@ -2,7 +2,6 @@ use social_media_app::{AppState, AppConfig, PythonServerMode};
 use social_media_app::routes::create_routes;
 use social_media_app::models::post::CreatePostRequest;
 use social_media_app::models::User;
-// Removed unused import
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 use tracing::{info, warn, error, Level};

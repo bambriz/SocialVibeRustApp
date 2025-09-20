@@ -95,7 +95,7 @@ async fn get_vote_counts(
 async fn get_user_vote(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((target_id, target_type, vote_type, tag)): Path<(Uuid, String, String, String)>,
+    Path((target_id, _target_type, vote_type, tag)): Path<(Uuid, String, String, String)>,
 ) -> Result<Json<Option<Vote>>> {
     let user_id = Uuid::parse_str(&claims.user_id)
         .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;

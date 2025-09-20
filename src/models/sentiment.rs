@@ -41,7 +41,7 @@ impl SentimentType {
         vec![self.color_code()]
     }
 
-    pub fn from_analysis(analysis_result: &str) -> Vec<Self> {
+    pub fn from_analysis(_analysis_result: &str) -> Vec<Self> {
         // This will be implemented to parse sentiment analysis results from Python
         // For now, return a default
         vec![SentimentType::Neutral]

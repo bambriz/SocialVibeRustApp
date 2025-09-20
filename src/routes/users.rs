@@ -18,12 +18,3 @@ pub async fn create_user(
     })))
 }
 
-pub async fn get_users(
-    State(_app_state): State<AppState>,
-) -> Result<ResponseJson<Value>> {
-    // TODO: Implement user listing with pagination
-    Ok(ResponseJson(json!({
-        "users": [],
-        "message": "User listing not implemented yet"
-    })))
-}
