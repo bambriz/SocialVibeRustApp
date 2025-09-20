@@ -2146,3 +2146,103 @@ button, .btn, .filter-btn, .comment-toggle, .votable-tag {
 }
 
 /* ===== END DELETE FUNCTIONALITY STYLES ===== */
+
+/* === EVENTUAL CONSISTENCY STYLES === */
+
+/* Enhanced pending post styling for async saves */
+.post-pending {
+    opacity: 0.8;
+    border: 2px dashed #6b7280 !important;
+    position: relative;
+    background: #f9fafb !important;
+}
+
+.post-pending::after {
+    content: '⏳ Saving...';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #3b82f6;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    z-index: 1;
+}
+
+/* Saved post styling */
+.post-card.saved {
+    border: 2px solid #10b981 !important;
+    background: #f0fdf4 !important;
+}
+
+.post-card.saved::after {
+    content: '✅ Saved';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #10b981;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    z-index: 1;
+}
+
+/* Failed post styling */
+.post-card.failed {
+    border: 2px solid #ef4444 !important;
+    background: #fef2f2 !important;
+}
+
+.post-card.failed::after {
+    content: '❌ Failed';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #ef4444;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    z-index: 1;
+}
+
+/* Comment pending/saved/failed styles */
+.comment-pending {
+    opacity: 0.8;
+    border-left: 3px dashed #6b7280 !important;
+    background: #f9fafb !important;
+}
+
+.comment.saved {
+    border-left: 3px solid #10b981 !important;
+    background: #f0fdf4 !important;
+}
+
+.comment.failed {
+    border-left: 3px solid #ef4444 !important;
+    background: #fef2f2 !important;
+}
+
+/* Retry button */
+.retry-btn {
+    background: #f97316;
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    margin-left: 8px;
+    transition: background-color 0.2s ease;
+}
+
+.retry-btn:hover {
+    background: #ea580c;
+}
+
+/* Animation for state transitions */
+.post-card, .comment {
+    transition: border-color 0.3s ease, background-color 0.3s ease;
+}

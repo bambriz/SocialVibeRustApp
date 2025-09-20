@@ -811,7 +811,14 @@ async function handleCreatePost(e) {
     
     // Add optimistic post to UI immediately
     addOptimisticPost(optimisticPost);
+    showToast('📝 Creating post...', 'info');
     
+    // Fire-and-forget async database save - don't wait for response
+    savePostToDatabase(optimisticPost.id, title, content);
+}
+
+// Async database operations - eventual consistency pattern
+async function savePostToDatabase(optimisticId, title, content) {
     try {
         const response = await fetch(`${API_BASE}/posts`, {
             method: 'POST',
@@ -825,39 +832,221 @@ async function handleCreatePost(e) {
         const data = await response.json();
         
         if (response.ok) {
-            // Replace optimistic post with real one
-            replaceOptimisticPost(optimisticPost.id, data.post);
-            showToast('Post created successfully!', 'success');
+            // Mark post as saved and trigger refresh from database
+            markPostAsSaved(optimisticId, data.post);
+            showToast('✅ Post saved to database!', 'success');
             
-            // Update cache with real post
-            const cache = postsCache.getViewCache(currentView, currentView === 'user_home' ? currentUser.id : null);
-            cache.addPost(data.post);
+            // Refresh data from database to ensure consistency
+            await refreshPostsFromDatabase();
         } else {
-            console.log('Error details:', data);
-            
-            // Remove failed optimistic post
-            removeOptimisticPost(optimisticPost.id);
-            
-            // Restore form content
-            document.getElementById('postTitle').value = title;
-            document.getElementById('postContent').value = content;
+            console.log('Database save failed:', data);
+            markPostAsFailed(optimisticId, data);
             
             // Check if this is a content moderation error
             if (data.error_type === 'content_moderation') {
-                showToast(data.error || 'Post blocked due to content violation', 'error');
+                showToast('❌ ' + (data.error || 'Post blocked due to content violation'), 'error');
             } else {
-                showToast('Failed to create post. Please try again.', 'error');
+                showToast('❌ Failed to save post to database', 'error');
             }
         }
     } catch (error) {
-        console.error('Create post error:', error);
+        console.error('Database save error:', error);
+        markPostAsFailed(optimisticId, { error: 'Network error' });
+        showToast('❌ Network error saving post', 'error');
+    }
+}
+
+async function saveCommentToDatabase(optimisticId, postId, content, parentId = null) {
+    try {
+        const url = `${API_BASE}/posts/${postId}/comments`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ content, parent_id: parentId })
+        });
         
-        // Remove failed optimistic post and restore form
-        removeOptimisticPost(optimisticPost.id);
-        document.getElementById('postTitle').value = title;
-        document.getElementById('postContent').value = content;
+        const data = await response.json();
         
-        showToast('Failed to create post. Please check your connection and try again.', 'error');
+        if (response.ok) {
+            // Mark comment as saved and trigger refresh from database
+            markCommentAsSaved(optimisticId, postId, data.comment);
+            showToast('✅ Comment saved to database!', 'success');
+            
+            // Refresh comments from database to ensure consistency
+            await refreshCommentsFromDatabase(postId);
+        } else {
+            markCommentAsFailed(optimisticId, postId, data);
+            showToast('❌ Failed to save comment to database', 'error');
+        }
+    } catch (error) {
+        console.error('Comment database save error:', error);
+        markCommentAsFailed(optimisticId, postId, { error: 'Network error' });
+        showToast('❌ Network error saving comment', 'error');
+    }
+}
+
+// Eventual consistency helpers
+function markPostAsSaved(optimisticId, realPost) {
+    const optimisticElement = document.querySelector(`[data-post-id="${optimisticId}"]`);
+    if (optimisticElement) {
+        optimisticElement.classList.add('saved');
+        optimisticElement.classList.remove('post-pending');
+        
+        // Update posts array
+        const postIndex = posts.findIndex(p => p.id === optimisticId);
+        if (postIndex !== -1) {
+            posts[postIndex] = { ...realPost, isSaved: true };
+        }
+    }
+}
+
+function markPostAsFailed(optimisticId, errorData) {
+    const optimisticElement = document.querySelector(`[data-post-id="${optimisticId}"]`);
+    if (optimisticElement) {
+        optimisticElement.classList.add('failed');
+        optimisticElement.title = 'Failed to save: ' + (errorData.error || 'Unknown error');
+        
+        // Add retry button
+        const postActions = optimisticElement.querySelector('.post-actions');
+        if (postActions && !postActions.querySelector('.retry-btn')) {
+            postActions.insertAdjacentHTML('beforeend', `
+                <button class="retry-btn" onclick="retryPostSave('${optimisticId}')">🔄 Retry Save</button>
+            `);
+        }
+    }
+}
+
+function markCommentAsSaved(optimisticId, postId, realComment) {
+    const optimisticElement = document.querySelector(`[data-comment-id="${optimisticId}"]`);
+    if (optimisticElement) {
+        optimisticElement.classList.add('saved');
+        optimisticElement.classList.remove('comment-pending');
+    }
+}
+
+function markCommentAsFailed(optimisticId, postId, errorData) {
+    const optimisticElement = document.querySelector(`[data-comment-id="${optimisticId}"]`);
+    if (optimisticElement) {
+        optimisticElement.classList.remove('comment-pending');
+        optimisticElement.classList.add('failed');
+        optimisticElement.title = 'Failed to save: ' + (errorData.error || 'Unknown error');
+        
+        // Add retry button to comment actions
+        const commentActions = optimisticElement.querySelector('.comment-actions');
+        if (commentActions && !commentActions.querySelector('.retry-btn')) {
+            const retryBtn = document.createElement('button');
+            retryBtn.className = 'retry-btn';
+            retryBtn.textContent = '🔄 Retry Save';
+            retryBtn.onclick = () => retryCommentSave(optimisticId, postId);
+            commentActions.appendChild(retryBtn);
+        }
+    }
+}
+
+// Database refresh functions - only called after saves are confirmed
+async function refreshPostsFromDatabase() {
+    console.log('🔄 Refreshing posts from database after save confirmation');
+    
+    // Clear cache to force fresh fetch
+    postsCache.clearAll();
+    
+    // Reload current view from database
+    if (currentView === 'main_feed') {
+        await loadPostsFeed(true); // Force refresh
+    } else if (currentView === 'user_home' && currentUser) {
+        await loadUserPosts(currentUser.id, true); // Force refresh
+    }
+}
+
+async function refreshCommentsFromDatabase(postId) {
+    console.log(`🔄 Refreshing comments for post ${postId} from database after save confirmation`);
+    
+    // Clear comments cache for this post to force fresh fetch
+    commentsCache.clear(postId);
+    loadedComments.delete(postId);
+    
+    // Add small delay to ensure database consistency
+    setTimeout(async () => {
+        try {
+            // Force reload comments from database
+            await loadComments(postId);
+            console.log(`✅ Comments refreshed successfully for post ${postId}`);
+        } catch (error) {
+            console.error(`❌ Failed to refresh comments for post ${postId}:`, error);
+        }
+    }, 500);
+}
+
+// Retry mechanisms with exponential backoff
+const retryQueues = {
+    posts: new Map(),
+    comments: new Map()
+};
+
+async function retryPostSave(optimisticId) {
+    const post = posts.find(p => p.id === optimisticId);
+    if (post) {
+        // Remove failed styling
+        const element = document.querySelector(`[data-post-id="${optimisticId}"]`);
+        if (element) {
+            element.classList.remove('failed');
+            element.classList.add('post-pending');
+            
+            // Remove retry button
+            const retryBtn = element.querySelector('.retry-btn');
+            if (retryBtn) retryBtn.remove();
+        }
+        
+        showToast('🔄 Retrying post save...', 'info');
+        
+        // Retry save with exponential backoff
+        await savePostToDatabase(optimisticId, post.title, post.content);
+    }
+}
+
+async function retryCommentSave(optimisticId, postId) {
+    // Find comment content from the UI since we don't store comment data
+    const commentElement = document.querySelector(`[data-comment-id="${optimisticId}"]`);
+    if (commentElement) {
+        const contentElement = commentElement.querySelector('.comment-content');
+        const content = contentElement ? contentElement.textContent.trim() : '';
+        
+        if (content) {
+            // Remove failed styling
+            commentElement.classList.remove('failed');
+            commentElement.classList.add('comment-pending');
+            
+            // Remove retry button
+            const retryBtn = commentElement.querySelector('.retry-btn');
+            if (retryBtn) retryBtn.remove();
+            
+            showToast('🔄 Retrying comment save...', 'info');
+            
+            // Retry save
+            await saveCommentToDatabase(optimisticId, postId, content);
+        }
+    }
+}
+
+// Automatic retry with exponential backoff for network errors
+async function autoRetryWithBackoff(operation, maxRetries = 3, baseDelay = 1000) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await operation();
+        } catch (error) {
+            console.warn(`Attempt ${attempt}/${maxRetries} failed:`, error);
+            
+            if (attempt === maxRetries) {
+                throw error; // Final attempt failed
+            }
+            
+            // Exponential backoff: 1s, 2s, 4s
+            const delay = baseDelay * Math.pow(2, attempt - 1);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
     }
 }
 
@@ -874,6 +1063,14 @@ function addOptimisticPost(post) {
     
     // Add to posts array
     posts.unshift(post);
+    
+    // Apply pending styling explicitly
+    setTimeout(() => {
+        const optimisticElement = document.querySelector(`[data-post-id="${post.id}"]`);
+        if (optimisticElement) {
+            optimisticElement.classList.add('post-pending');
+        }
+    }, 10);
 }
 
 function replaceOptimisticPost(tempId, realPost) {
@@ -2763,47 +2960,10 @@ async function postComment(postId) {
     // Add optimistic comment to UI immediately
     addOptimisticComment(postId, optimisticComment);
     updatePostCommentCount(postId);
+    showToast('💬 Creating comment...', 'info');
     
-    try {
-        const response = await fetch(`${API_BASE}/posts/${postId}/comments`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
-            body: JSON.stringify({
-                post_id: postId,
-                content: content,
-                parent_id: null // Top-level comment
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            // Replace optimistic comment with real one
-            replaceOptimisticComment(postId, optimisticComment.comment.id, data.comment);
-            showToast('💬 Comment posted!', 'success');
-            
-            // Clear cache and reload comments to ensure fresh data display
-            commentsCache.clear(postId);
-            loadComments(postId);
-        } else {
-            // Remove failed optimistic comment
-            removeOptimisticComment(postId, optimisticComment.comment.id);
-            
-            // Show error and restore content
-            textarea.value = content;
-            showToast(data.message || 'Failed to post comment', 'error');
-        }
-    } catch (error) {
-        console.error('Post comment error:', error);
-        
-        // Remove failed optimistic comment and restore content
-        removeOptimisticComment(postId, optimisticComment.comment.id);
-        textarea.value = content;
-        showToast('Failed to post comment', 'error');
-    }
+    // Fire-and-forget async database save - don't wait for response
+    saveCommentToDatabase(optimisticComment.comment.id, postId, content);
 }
 
 // Add optimistic comment to UI immediately
@@ -2820,6 +2980,14 @@ function addOptimisticComment(postId, commentData) {
     } else {
         commentsList.insertAdjacentHTML('afterbegin', commentHTML);
     }
+    
+    // Apply pending styling explicitly
+    setTimeout(() => {
+        const optimisticElement = document.querySelector(`[data-comment-id="${commentData.comment.id}"]`);
+        if (optimisticElement) {
+            optimisticElement.classList.add('comment-pending');
+        }
+    }, 10);
 }
 
 // Replace optimistic comment with real one
