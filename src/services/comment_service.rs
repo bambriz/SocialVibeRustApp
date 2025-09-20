@@ -109,8 +109,7 @@ impl CommentService {
             return Err(AppError::ValidationError("Comment content exceeds 2000 character limit".to_string()));
         }
 
-        // 1. Generate hierarchical path and depth with atomic allocation
-        let (path, depth) = self.generate_comment_path(post_id, request.parent_id).await?;
+        // Path and depth will be computed atomically in the repository
         
         // 2. Content moderation check
         let (moderation_result, is_flagged) = if let Some(moderation_service) = &self.moderation_service {
@@ -150,15 +149,15 @@ impl CommentService {
             None
         };
         
-        // 4. Create comment with full metadata
+        // 4. Create comment with full metadata (path and depth computed atomically)
         let comment = Comment {
             id: Uuid::new_v4(),
             post_id,
             user_id,
             parent_id: request.parent_id,
             content: request.content.clone(),
-            path,
-            depth,
+            path: String::new(), // Will be computed atomically
+            depth: 0, // Will be computed atomically
             sentiment_analysis,
             moderation_result,
             is_flagged: is_flagged, // Store flagging state separate from blocking
@@ -167,18 +166,10 @@ impl CommentService {
             reply_count: 0,
         };
         
-        // 5. Save to repository
+        // 5. Save using atomic method (computes path + inserts + increments reply count in single transaction)
         let saved_comment = self.comment_repo
-            .create_comment(&comment)
+            .create_comment_atomic(post_id, request.parent_id, &comment)
             .await?;
-            
-        // 6. Increment parent reply count if this is a reply
-        if let Some(parent_id) = request.parent_id {
-            if let Err(e) = self.comment_repo.increment_reply_count(parent_id).await {
-                tracing::warn!("Failed to increment parent reply count for {}: {}", parent_id, e);
-                // Don't fail the comment creation, just log the warning
-            }
-        }
         
         tracing::info!("✅ Created {} comment {} with sentiment analysis", 
             if request.parent_id.is_some() { "nested" } else { "top-level" },

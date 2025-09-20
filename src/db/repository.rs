@@ -32,6 +32,7 @@ pub trait PostRepository: Send + Sync {
 #[async_trait]
 pub trait CommentRepository: Send + Sync {
     async fn create_comment(&self, comment: &Comment) -> Result<Comment>;
+    async fn create_comment_atomic(&self, post_id: Uuid, parent_id: Option<Uuid>, comment: &Comment) -> Result<Comment>;
     async fn get_comment_by_id(&self, id: Uuid) -> Result<Option<Comment>>;
     async fn get_comments_by_post_id(&self, post_id: Uuid) -> Result<Vec<Comment>>;
     async fn get_comments_by_parent_id(&self, parent_id: Uuid) -> Result<Vec<Comment>>;
@@ -949,6 +950,12 @@ impl CommentRepository for MockCommentRepository {
         let mut comments = self.comments.lock().unwrap();
         comments.insert(comment.id, comment.clone());
         Ok(comment.clone())
+    }
+
+    async fn create_comment_atomic(&self, _post_id: Uuid, _parent_id: Option<Uuid>, comment: &Comment) -> Result<Comment> {
+        // Mock implementation: simply calls create_comment
+        // In real implementation, this would do atomic path allocation + insert
+        self.create_comment(comment).await
     }
 
     async fn get_comment_by_id(&self, id: Uuid) -> Result<Option<Comment>> {

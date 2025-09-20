@@ -183,7 +183,6 @@ pub struct PostgresPostRepository {
     pool: Arc<PgPool>,
 }
 
-#[async_trait]
 impl PostgresPostRepository {
     // Helper function to parse sentiment_analysis JSON into Post fields
     fn parse_sentiment_json(value: &Option<serde_json::Value>) -> (Option<f64>, Vec<String>, Option<String>) {
@@ -465,6 +464,136 @@ pub struct PostgresCommentRepository {
 
 #[async_trait]
 impl CommentRepository for PostgresCommentRepository {
+    // Atomic comment creation with path allocation in single transaction
+    async fn create_comment_atomic(&self, post_id: Uuid, parent_id: Option<Uuid>, comment: &Comment) -> Result<Comment> {
+        // Start atomic transaction for entire operation
+        let mut tx = self.pool.begin()
+            .await
+            .map_err(|e| crate::AppError::DatabaseError(format!("Failed to start atomic comment transaction: {}", e)))?;
+            
+        // Compute path and depth within transaction (with locking)
+        let (computed_path, computed_depth) = match parent_id {
+            None => {
+                // Root-level comment: Lock post and use MAX-based calculation
+                sqlx::query!(
+                    "SELECT id FROM posts WHERE id = $1 FOR UPDATE",
+                    post_id
+                )
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to lock post for atomic comment creation: {}", e)))?;
+                
+                // Use MAX instead of COUNT to handle deleted comments correctly
+                let result = sqlx::query!(
+                    r#"
+                    SELECT COALESCE(MAX(
+                        CAST(SPLIT_PART(TRIM(TRAILING '/' FROM path), '/', 1) AS INTEGER)
+                    ), 0) as max_index 
+                    FROM comments 
+                    WHERE post_id = $1 AND parent_id IS NULL
+                    "#,
+                    post_id
+                )
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to get max root index: {}", e)))?;
+                
+                let next_index = result.max_index.unwrap_or(0) + 1;
+                let path = format!("{:06}/", next_index);
+                (path, 0)
+            },
+            Some(parent_id) => {
+                // Reply: Lock parent comment and get path+depth in single query
+                let parent_result = sqlx::query!(
+                    "SELECT path, depth FROM comments WHERE id = $1 FOR UPDATE",
+                    parent_id
+                )
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to lock parent and get metadata: {}", e)))?
+                
+                // Use MAX to find highest sibling index under this parent
+                let result = sqlx::query!(
+                    r#"
+                    SELECT COALESCE(MAX(
+                        CAST(SPLIT_PART(TRIM(TRAILING '/' FROM SUBSTRING(path FROM LENGTH($2) + 1)), '/', 1) AS INTEGER)
+                    ), 0) as max_index
+                    FROM comments 
+                    WHERE parent_id = $1
+                    "#,
+                    parent_id,
+                    parent_result.path
+                )
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to get max reply index: {}", e)))?;
+                
+                let next_index = result.max_index.unwrap_or(0) + 1;
+                let parent_path = parent_result.path;
+                let new_path = format!("{}{:06}/", parent_path, next_index);
+                let child_depth = parent_result.depth + 1;
+                (new_path, child_depth)
+            }
+        };
+        
+        // Increment parent reply count if this is a reply (within same transaction)
+        if let Some(parent_id) = parent_id {
+            sqlx::query!(
+                "UPDATE comments SET reply_count = reply_count + 1 WHERE id = $1",
+                parent_id
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| crate::AppError::DatabaseError(format!("Failed to increment parent reply count: {}", e)))?;
+        }
+        
+        // Insert comment with atomically computed path - all within same transaction!
+        let row = sqlx::query!(
+            r#"
+            INSERT INTO comments (id, post_id, user_id, parent_id, content, path, depth, sentiment_analysis, moderation_result, is_flagged, created_at, updated_at, reply_count)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            RETURNING id, post_id, user_id, parent_id, content, path, depth, sentiment_analysis, moderation_result, is_flagged, created_at, updated_at, reply_count
+            "#,
+            comment.id,
+            comment.post_id,
+            comment.user_id,
+            comment.parent_id,
+            comment.content,
+            computed_path,
+            computed_depth,
+            comment.sentiment_analysis,
+            comment.moderation_result,
+            comment.is_flagged,
+            comment.created_at,
+            comment.updated_at,
+            comment.reply_count
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| crate::AppError::DatabaseError(format!("Failed to insert comment atomically: {}", e)))?;
+        
+        // Commit entire atomic operation
+        tx.commit()
+            .await
+            .map_err(|e| crate::AppError::DatabaseError(format!("Failed to commit atomic comment creation: {}", e)))?;
+        
+        Ok(Comment {
+            id: row.id,
+            post_id: row.post_id,
+            user_id: row.user_id,
+            parent_id: row.parent_id,
+            content: row.content,
+            path: row.path,
+            depth: row.depth,
+            sentiment_analysis: row.sentiment_analysis,
+            moderation_result: row.moderation_result,
+            is_flagged: row.is_flagged.unwrap_or(false),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            reply_count: row.reply_count.unwrap_or(0),
+        })
+    }
+
     async fn create_comment(&self, comment: &Comment) -> Result<Comment> {
         // Simplified implementation - will be enhanced later
         Ok(comment.clone())
@@ -517,32 +646,62 @@ impl CommentRepository for PostgresCommentRepository {
     }
 
     async fn allocate_next_sibling_index(&self, post_id: Uuid, parent_id: Option<Uuid>) -> Result<i32> {
+        // Use atomic transaction with locking to prevent race conditions
+        let mut tx = self.pool.begin()
+            .await
+            .map_err(|e| crate::AppError::DatabaseError(format!("Failed to start transaction: {}", e)))?;
+        
         let next_index = match parent_id {
             None => {
-                // Root-level comment: Count top-level comments for this post and add 1
+                // Root-level comment: Lock post and atomically count + allocate
+                // First, lock the post to prevent concurrent root comment creation
+                sqlx::query!(
+                    "SELECT id FROM posts WHERE id = $1 FOR UPDATE",
+                    post_id
+                )
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to lock post for root comment allocation: {}", e)))?;
+                
+                // Now count top-level comments for this post
                 let result = sqlx::query!(
                     "SELECT COUNT(*) as count FROM comments WHERE post_id = $1 AND parent_id IS NULL",
                     post_id
                 )
-                .fetch_one(&*self.pool)
+                .fetch_one(&mut *tx)
                 .await
-                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to allocate root sibling index: {}", e)))?;
+                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to count root sibling comments: {}", e)))?;
                 
                 (result.count.unwrap_or(0) + 1) as i32
             },
             Some(parent_id) => {
-                // Reply: Count replies to this specific parent and add 1
+                // Reply: Lock parent comment and atomically count + allocate
+                // First, lock the parent comment to prevent concurrent reply creation
+                sqlx::query!(
+                    "SELECT id FROM comments WHERE id = $1 FOR UPDATE",
+                    parent_id
+                )
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to lock parent comment for reply allocation: {}", e)))?;
+                
+                // Now count replies to this specific parent
                 let result = sqlx::query!(
                     "SELECT COUNT(*) as count FROM comments WHERE parent_id = $1",
                     parent_id
                 )
-                .fetch_one(&*self.pool)
+                .fetch_one(&mut *tx)
                 .await
-                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to allocate reply sibling index: {}", e)))?;
+                .map_err(|e| crate::AppError::DatabaseError(format!("Failed to count reply sibling comments: {}", e)))?;
                 
                 (result.count.unwrap_or(0) + 1) as i32
             }
         };
+        
+        // Commit the transaction to release locks
+        tx.commit()
+            .await
+            .map_err(|e| crate::AppError::DatabaseError(format!("Failed to commit sibling allocation transaction: {}", e)))?;
         
         Ok(next_index)
     }
