@@ -137,7 +137,7 @@ function setupEventListeners() {
     contentInput?.addEventListener('input', previewSentiment);
     
     // Infinite scroll detection
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', optimizedHandleScroll);
 }
 
 // Authentication functions
@@ -328,6 +328,11 @@ async function loadPosts(reset = true) {
         paginationState.offset = 0;
         paginationState.hasMore = true;
         posts = [];
+        // Show skeleton loading for initial load
+        showSkeletonLoading(true);
+    } else {
+        // Show skeleton loading for additional posts
+        showSkeletonLoading(false);
     }
     
     const container = document.getElementById('postsContainer');
@@ -345,7 +350,13 @@ async function loadPosts(reset = true) {
         } else {
             url = `${API_BASE}/posts?limit=${paginationState.limit}&offset=${paginationState.offset}`;
         }
-        const response = await fetch(url);
+        
+        // Add a small delay for better UX (minimum loading time for skeletons to be visible)
+        const [response] = await Promise.all([
+            fetch(url),
+            new Promise(resolve => setTimeout(resolve, reset ? 500 : 300))
+        ]);
+        
         const data = await response.json();
         
         if (response.ok) {
@@ -366,23 +377,29 @@ async function loadPosts(reset = true) {
             paginationState.hasMore = data.has_more !== false && newPosts.length === paginationState.limit;
             paginationState.offset += newPosts.length;
             
-            // Apply active filters consistently
-            const activeFilterBtn = document.querySelector('.filter-btn.active');
-            if (activeFilterBtn) {
-                const sentiment = activeFilterBtn.dataset.filter;
-                filterFeed(sentiment); // This applies both emotion and content filters
-            } else {
-                // If no active emotion filter, just apply content filters
-                renderPosts(applyContentFiltering(posts), reset);
-            }
+            // Hide skeleton loading before showing real posts
+            hideSkeletonLoading();
+            
+            // Small delay to allow skeleton removal animation to complete
+            setTimeout(() => {
+                // Apply active filters consistently
+                const activeFilterBtn = document.querySelector('.filter-btn.active');
+                if (activeFilterBtn) {
+                    const sentiment = activeFilterBtn.dataset.filter;
+                    filterFeed(sentiment); // This applies both emotion and content filters
+                } else {
+                    // If no active emotion filter, just apply content filters
+                    renderPosts(applyContentFiltering(posts), reset);
+                }
+            }, 150);
         } else {
-            showToast('Failed to load posts', 'error');
-            if (reset) renderEmptyState();
+            hideSkeletonLoading();
+            showRetryMessage(reset);
         }
     } catch (error) {
         console.error('Load posts error:', error);
-        showToast('Failed to load posts', 'error');
-        if (reset) renderEmptyState();
+        hideSkeletonLoading();
+        showRetryMessage(reset);
     } finally {
         paginationState.isLoading = false;
         if (spinner && reset) {
@@ -390,6 +407,139 @@ async function loadPosts(reset = true) {
         }
         hideInfiniteScrollLoader();
     }
+}
+
+// Enhanced error handling with retry functionality
+function showRetryMessage(isReset = true) {
+    if (isReset) {
+        const container = document.getElementById('postsList');
+        container.innerHTML = `
+            <div class="retry-state" style="text-align: center; padding: 3rem; color: #6b7280; animation: fadeIn 0.5s ease-out;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+                <h3 style="margin-bottom: 0.5rem; color: #ef4444;">Failed to load posts</h3>
+                <p style="margin-bottom: 2rem;">Something went wrong. Please try again.</p>
+                <button onclick="retryLoadPosts()" class="btn btn-primary" style="padding: 0.75rem 1.5rem; border-radius: 0.5rem; background: #4f46e5; color: white; border: none; cursor: pointer; font-weight: 500;">
+                    🔄 Retry
+                </button>
+            </div>
+        `;
+    } else {
+        showToast('Failed to load more posts. Scroll down to try again.', 'error');
+    }
+}
+
+function retryLoadPosts() {
+    loadPosts(true);
+}
+
+// Performance optimization - batch DOM updates
+function optimizedRenderPosts(postsToRender, replace = true) {
+    // Use document fragment for better performance
+    const fragment = document.createDocumentFragment();
+    const container = document.getElementById('postsList');
+    
+    if (postsToRender.length === 0) {
+        if (replace) {
+            renderEmptyState();
+        }
+        return;
+    }
+    
+    // Create all posts in memory first
+    postsToRender.forEach(post => {
+        const postElement = createPostElement(post);
+        fragment.appendChild(postElement);
+    });
+    
+    if (replace) {
+        container.innerHTML = '';
+        container.appendChild(fragment);
+        animatePostsIn(container.children, 0);
+    } else {
+        const startIndex = container.children.length;
+        container.appendChild(fragment);
+        const newPosts = Array.from(container.children).slice(startIndex);
+        animatePostsIn(newPosts, 200);
+    }
+    
+    // Setup event listeners after rendering
+    setupPostEventListeners();
+}
+
+function createPostElement(post) {
+    const article = document.createElement('article');
+    article.className = 'post-card';
+    article.style.cssText = getSentimentBackground(post);
+    
+    const sentimentClass = getSentimentClass(post);
+    const sentimentLabel = getSentimentLabel(post);
+    const timeAgo = formatTimeAgo(post.created_at);
+    
+    // Get toxicity tags for this post
+    const toxicityTags = getToxicityTags(post);
+    const toxicityTagsHTML = renderToxicityTags(toxicityTags, post.id);
+    
+    // Show delete controls only for posts owned by current user AND only on "My posts" page
+    const isOwner = currentUser && post.author_id === currentUser.id;
+    const isMyPostsPage = currentView === 'user_home';
+    const deleteControlsHTML = (isOwner && isMyPostsPage) ? `
+        <div class="delete-controls">
+            <input type="checkbox" class="delete-checkbox" data-type="post" data-id="${post.id}" 
+                   onchange="toggleDeleteControls()">
+            <button class="delete-icon" onclick="deletePost('${post.id}')" title="Delete Post">🗑️</button>
+        </div>
+    ` : '';
+    
+    article.innerHTML = `
+        <div class="post-header">
+            <div class="post-author-section">
+                <div class="post-author">${escapeHtml(post.author_username)}</div>
+                <div class="post-time">${timeAgo}</div>
+            </div>
+            <div class="post-header-right">
+                <div class="post-badges">
+                    ${sentimentLabel ? renderVotableEmotionTag(post, sentimentClass, sentimentLabel) : ''}
+                </div>
+                ${deleteControlsHTML}
+            </div>
+        </div>
+        <h3 class="post-title">${escapeHtml(post.title)}</h3>
+        <p class="post-content">${escapeHtml(post.content)}</p>
+        ${toxicityTagsHTML}
+        <div class="post-footer">
+            <div>Popularity: ${(post.popularity_score || 1.0).toFixed(1)}</div>
+            <button class="comment-toggle" onclick="toggleComments('${post.id}')">
+                💬 ${post.comment_count || 0} comments
+            </button>
+        </div>
+        
+        <!-- Comments Section -->
+        <div id="comments-${post.id}" class="comments-section hidden" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div class="comment-form" ${!authToken ? 'style="display:none;"' : ''}>
+                <textarea id="comment-input-${post.id}" placeholder="Share your thoughts..." 
+                        class="comment-textarea" rows="3" maxlength="2000"></textarea>
+                <div class="comment-form-actions">
+                    <span class="comment-counter">0/2000</span>
+                    <button onclick="postComment('${post.id}')" class="comment-submit-btn">Post Comment</button>
+                </div>
+            </div>
+            <div id="comments-list-${post.id}" class="comments-list">
+                <!-- Comments will be loaded here -->
+            </div>
+        </div>
+    `;
+    
+    return article;
+}
+
+function setupPostEventListeners() {
+    // Setup comment input character counters
+    document.querySelectorAll('.comment-textarea').forEach(textarea => {
+        if (!textarea.dataset.listenerAttached) {
+            textarea.addEventListener('input', updateCommentCounter);
+            textarea.dataset.listenerAttached = 'true';
+        }
+    });
 }
 
 function renderPosts(postsToRender, replace = true) {
@@ -400,6 +550,11 @@ function renderPosts(postsToRender, replace = true) {
             renderEmptyState();
         }
         return;
+    }
+    
+    // If replacing content, clear existing posts first
+    if (replace) {
+        container.innerHTML = '';
     }
     
     const postsHTML = postsToRender.map(post => {
@@ -467,8 +622,14 @@ function renderPosts(postsToRender, replace = true) {
     
     if (replace) {
         container.innerHTML = postsHTML;
+        // Animate in new posts with staggered timing
+        animatePostsIn(container.children, 0);
     } else {
+        const startIndex = container.children.length;
         container.insertAdjacentHTML('beforeend', postsHTML);
+        // Animate only the newly added posts
+        const newPosts = Array.from(container.children).slice(startIndex);
+        animatePostsIn(newPosts, 200); // Small delay for append
     }
     
     // Setup comment input character counters
@@ -477,28 +638,99 @@ function renderPosts(postsToRender, replace = true) {
     });
 }
 
+// Post Animation Functions
+function animatePostsIn(elements, initialDelay = 0) {
+    Array.from(elements).forEach((element, index) => {
+        if (element.classList.contains('skeleton-post')) {
+            return; // Skip skeleton posts
+        }
+        
+        // Initially hide the post
+        element.style.opacity = '0';
+        element.style.transform = 'translateY(20px)';
+        element.style.transition = 'all 0.4s ease-out';
+        
+        // Animate in with staggered timing
+        setTimeout(() => {
+            element.style.opacity = '1';
+            element.style.transform = 'translateY(0)';
+        }, initialDelay + (index * 100)); // 100ms stagger between posts
+    });
+}
+
+function addPostLoadingEffect(postElement) {
+    postElement.classList.add('loading');
+    setTimeout(() => {
+        postElement.classList.remove('loading');
+    }, 300);
+}
+
 function renderEmptyState() {
     const container = document.getElementById('postsList');
     container.innerHTML = `
-        <div style="text-align: center; padding: 3rem; color: #6b7280;">
-            <h3>No posts yet</h3>
-            <p>Be the first to share something!</p>
+        <div class="empty-state" style="text-align: center; padding: 3rem; color: #6b7280; animation: fadeIn 0.5s ease-out;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">📝</div>
+            <h3 style="margin-bottom: 0.5rem;">No posts yet</h3>
+            <p style="margin: 0;">Be the first to share something!</p>
         </div>
     `;
 }
 
-// Infinite scroll functions
+// Skeleton Loading Functions
+function renderSkeletonPosts(count = 3) {
+    const skeletons = Array.from({ length: count }, (_, index) => `
+        <div class="skeleton-post" id="skeleton-${index}">
+            <div class="skeleton-header">
+                <div class="skeleton-element skeleton-avatar"></div>
+                <div class="skeleton-element skeleton-author"></div>
+                <div class="skeleton-element skeleton-time"></div>
+            </div>
+            <div class="skeleton-element skeleton-title"></div>
+            <div class="skeleton-element skeleton-content"></div>
+            <div class="skeleton-element skeleton-content"></div>
+            <div class="skeleton-element skeleton-content"></div>
+            <div class="skeleton-footer">
+                <div class="skeleton-element skeleton-badge"></div>
+                <div class="skeleton-element skeleton-comment-btn"></div>
+            </div>
+        </div>
+    `).join('');
+    
+    return skeletons;
+}
+
+function showSkeletonLoading(replace = true) {
+    const container = document.getElementById('postsList');
+    const skeletonHTML = renderSkeletonPosts(replace ? 6 : 3);
+    
+    if (replace) {
+        container.innerHTML = skeletonHTML;
+    } else {
+        container.insertAdjacentHTML('beforeend', skeletonHTML);
+    }
+}
+
+function hideSkeletonLoading() {
+    const skeletons = document.querySelectorAll('.skeleton-post');
+    skeletons.forEach((skeleton, index) => {
+        setTimeout(() => {
+            if (skeleton.parentNode) {
+                skeleton.remove();
+            }
+        }, index * 50); // Staggered removal for smooth effect
+    });
+}
+
+// Enhanced Infinite scroll functions
 function showInfiniteScrollLoader() {
     let loader = document.getElementById('infiniteScrollLoader');
     if (!loader) {
         loader = document.createElement('div');
         loader.id = 'infiniteScrollLoader';
-        loader.className = 'infinite-scroll-loader';
+        loader.className = 'infinite-scroll-loader enhanced-loader';
         loader.innerHTML = `
-            <div style="text-align: center; padding: 2rem; color: #6b7280;">
-                <div class="loading-spinner" style="display: inline-block; width: 20px; height: 20px; border: 2px solid #d1d5db; border-top: 2px solid #3b82f6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                <p style="margin: 1rem 0 0 0; font-size: 0.9rem;">Loading more posts...</p>
-            </div>
+            <div class="enhanced-spinner"></div>
+            <div class="loading-text loading-dots">Loading more posts</div>
         `;
         document.getElementById('postsList').appendChild(loader);
     }
@@ -518,13 +750,24 @@ function handleScroll() {
     const windowHeight = window.innerHeight;
     const documentHeight = document.documentElement.scrollHeight;
     
-    // Load more when user is within 200px of the bottom
-    if (scrollTop + windowHeight >= documentHeight - 200) {
+    // Load more when user is within 400px of the bottom (increased for better UX)
+    if (scrollTop + windowHeight >= documentHeight - 400) {
         if (paginationState.hasMore && !paginationState.isLoading) {
-            showInfiniteScrollLoader();
             loadPosts(false); // Load more posts (don't reset)
         }
     }
+}
+
+// Optimized scroll handler with throttling
+let scrollTimeout;
+function optimizedHandleScroll() {
+    if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+    }
+    
+    scrollTimeout = setTimeout(() => {
+        handleScroll();
+    }, 100); // Throttle scroll events to every 100ms
 }
 
 function getSentimentClass(post) {
