@@ -885,9 +885,12 @@ function replaceOptimisticPost(tempId, realPost) {
             posts[postIndex] = realPost;
         }
         
-        // Replace in DOM
-        const realHTML = createPostHTML(realPost);
-        tempElement.outerHTML = realHTML;
+        // Replace in DOM using createPostElement
+        const realElement = createPostElement(realPost);
+        tempElement.replaceWith(realElement);
+        
+        // Setup event listeners for the new element
+        setupPostEventListeners();
     }
 }
 
@@ -2889,10 +2892,9 @@ function renderComments(postId, comments) {
         return;
     }
     
-    // Build nested comment structure (simplified for now - full nesting will be added later)
-    const commentsHTML = comments.map(commentData => {
-        const comment = commentData.comment;
-        const author = commentData.author;
+    // Build nested comment structure - API returns comments directly, not wrapped
+    const commentsHTML = comments.map(comment => {
+        // API returns comment objects directly, not wrapped in commentData structure
         const timeAgo = formatTimeAgo(comment.created_at);
         
         // Get sentiment styling (same as posts)
@@ -2911,11 +2913,14 @@ function renderComments(postId, comments) {
             </div>
         ` : '';
         
+        // Handle author - API returns author object or use fallback
+        const authorName = comment.author?.username || 'Anonymous';
+        
         return `
             <div class="comment ${sentimentClass}" data-comment-id="${comment.id}" style="${sentimentStyle}">
                 <div class="comment-header">
                     <div class="comment-header-left">
-                        <span class="comment-author">${escapeHtml(author?.username || 'Anonymous')}</span>
+                        <span class="comment-author">${escapeHtml(authorName)}</span>
                         <span class="comment-time">${timeAgo}</span>
                         ${sentimentEmoji ? `<span class="comment-emotion">${sentimentEmoji}</span>` : ''}
                     </div>
@@ -2942,7 +2947,7 @@ function renderComments(postId, comments) {
                 
                 <!-- Nested replies will go here -->
                 <div id="replies-${comment.id}" class="replies-container">
-                    ${renderReplies(commentData.replies || [])}
+                    ${renderReplies(comment.replies || [])}
                 </div>
             </div>
         `;
@@ -3002,18 +3007,18 @@ function renderEmotionVoting(comment) {
 function renderReplies(replies) {
     if (!replies || replies.length === 0) return '';
     
-    return replies.map(replyData => {
-        const reply = replyData.comment;
-        const author = replyData.author;
+    return replies.map(reply => {
+        // API returns reply objects directly, not wrapped
         const timeAgo = formatTimeAgo(reply.created_at);
         const sentimentClass = getCommentSentimentClass(reply);
         const sentimentEmoji = getCommentSentimentEmoji(reply);
         const sentimentStyle = getCommentSentimentStyle(reply);
+        const authorName = reply.author?.username || 'Anonymous';
         
         return `
             <div class="reply ${sentimentClass}" data-comment-id="${reply.id}" style="${sentimentStyle}">
                 <div class="comment-header">
-                    <span class="comment-author">${escapeHtml(author?.username || 'Anonymous')}</span>
+                    <span class="comment-author">${escapeHtml(authorName)}</span>
                     <span class="comment-time">${timeAgo}</span>
                     ${sentimentEmoji ? `<span class="comment-emotion">${sentimentEmoji}</span>` : ''}
                 </div>
