@@ -462,6 +462,37 @@ pub struct PostgresCommentRepository {
     pool: Arc<PgPool>,
 }
 
+impl PostgresCommentRepository {
+    // Helper function to parse sentiment_analysis JSON into Comment fields
+    fn parse_sentiment_json(value: &Option<serde_json::Value>) -> (Option<f64>, Vec<String>, Option<String>) {
+        if let Some(json) = value {
+            let sentiment_score = json.get("sentiment_score").and_then(|v| v.as_f64());
+            let sentiment_colors = json.get("sentiment_colors")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            let sentiment_type = json.get("sentiment_type").and_then(|v| v.as_str().map(String::from));
+            (sentiment_score, sentiment_colors, sentiment_type)
+        } else {
+            (None, vec![], None)
+        }
+    }
+
+    // Helper function to parse moderation_result JSON into Comment fields
+    fn parse_moderation_json(value: &Option<serde_json::Value>) -> (Vec<String>, Option<serde_json::Value>) {
+        if let Some(json) = value {
+            let toxicity_tags = json.get("toxicity_tags")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            let toxicity_scores = json.get("toxicity_scores").cloned();
+            (toxicity_tags, toxicity_scores)
+        } else {
+            (vec![], None)
+        }
+    }
+}
+
 #[async_trait]
 impl CommentRepository for PostgresCommentRepository {
     // Atomic comment creation with path allocation in single transaction

@@ -15,31 +15,80 @@ pub struct UserContext {
 }
 
 pub async fn auth_middleware(
-    State(app_state): State<AppState>,
-    headers: HeaderMap,
     mut request: Request,
     next: Next,
-) -> Result<Response, AppError> {
+) -> Response {
+    // Try to extract AppState from extensions (injected by router)
+    let app_state = match request.extensions().get::<AppState>() {
+        Some(state) => state.clone(),
+        None => {
+            // Return error response if AppState not found
+            return axum::response::Response::builder()
+                .status(500)
+                .header("content-type", "application/json")
+                .body("Internal Server Error".into())
+                .unwrap_or_else(|_| axum::response::Response::default());
+        }
+    };
+    
+    let headers = request.headers().clone();
     // Extract Authorization header
-    let auth_header = headers.get(header::AUTHORIZATION)
-        .ok_or_else(|| AppError::AuthError("Missing authorization header".to_string()))?;
+    let auth_header = match headers.get(header::AUTHORIZATION) {
+        Some(header) => header,
+        None => {
+            return axum::response::Response::builder()
+                .status(401)
+                .header("content-type", "application/json")
+                .body(r#"{"error": "Missing authorization header"}"#.into())
+                .unwrap_or_else(|_| axum::response::Response::default());
+        }
+    };
     
     // Parse Bearer token
-    let auth_str = auth_header.to_str()
-        .map_err(|_| AppError::AuthError("Invalid authorization header format".to_string()))?;
+    let auth_str = match auth_header.to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            return axum::response::Response::builder()
+                .status(401)
+                .header("content-type", "application/json")
+                .body(r#"{"error": "Invalid authorization header format"}"#.into())
+                .unwrap_or_else(|_| axum::response::Response::default());
+        }
+    };
     
     if !auth_str.starts_with("Bearer ") {
-        return Err(AppError::AuthError("Authorization header must start with 'Bearer '".to_string()));
+        return axum::response::Response::builder()
+            .status(401)
+            .header("content-type", "application/json")
+            .body(r#"{"error": "Authorization header must start with 'Bearer '"}"#.into())
+            .unwrap_or_else(|_| axum::response::Response::default());
     }
     
     let token = &auth_str[7..]; // Remove "Bearer " prefix
     
     // Validate JWT token
-    let claims = app_state.auth_service.verify_token(token)?;
+    let claims = match app_state.auth_service.verify_token(token) {
+        Ok(claims) => claims,
+        Err(_) => {
+            return axum::response::Response::builder()
+                .status(401)
+                .header("content-type", "application/json")
+                .body(r#"{"error": "Invalid or expired token"}"#.into())
+                .unwrap_or_else(|_| axum::response::Response::default());
+        }
+    };
     
     // Parse user_id from string to UUID
-    let user_id = uuid::Uuid::parse_str(&claims.user_id)
-        .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;
+    let user_id = match uuid::Uuid::parse_str(&claims.user_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return axum::response::Response::builder()
+                .status(401)
+                .header("content-type", "application/json")
+                .body(r#"{"error": "Invalid user ID in token"}"#.into())
+                .unwrap_or_else(|_| axum::response::Response::default());
+        }
+    };
     
     // Add both user context and claims to request extensions
     let user_context = UserContext {
@@ -51,5 +100,5 @@ pub async fn auth_middleware(
     request.extensions_mut().insert(claims); // Insert Claims for handlers
     
     let response = next.run(request).await;
-    Ok(response)
+    response
 }
