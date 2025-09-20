@@ -561,9 +561,18 @@ impl CommentRepository for PostgresCommentRepository {
             comment.content,
             computed_path,
             computed_depth,
-            comment.sentiment_analysis,
-            comment.moderation_result,
-            comment.is_flagged,
+            // Convert individual sentiment fields to JSON for database storage (same as posts)
+            serde_json::to_value(serde_json::json!({
+                "sentiment_score": comment.sentiment_score,
+                "sentiment_colors": comment.sentiment_colors,
+                "sentiment_type": comment.sentiment_type
+            })).ok(),
+            serde_json::to_value(serde_json::json!({
+                "toxicity_tags": comment.toxicity_tags,
+                "toxicity_scores": comment.toxicity_scores,
+                "is_blocked": comment.is_blocked
+            })).ok(),
+            comment.is_blocked,
             comment.created_at,
             comment.updated_at,
             comment.reply_count
@@ -577,6 +586,10 @@ impl CommentRepository for PostgresCommentRepository {
             .await
             .map_err(|e| crate::AppError::DatabaseError(format!("Failed to commit atomic comment creation: {}", e)))?;
         
+        // Parse sentiment and moderation JSON to individual fields (same as posts)
+        let (sentiment_score, sentiment_colors, sentiment_type) = Self::parse_sentiment_json(&row.sentiment_analysis);
+        let (toxicity_tags, toxicity_scores) = Self::parse_moderation_json(&row.moderation_result);
+        
         Ok(Comment {
             id: row.id,
             post_id: row.post_id,
@@ -585,9 +598,12 @@ impl CommentRepository for PostgresCommentRepository {
             content: row.content,
             path: row.path,
             depth: row.depth,
-            sentiment_analysis: row.sentiment_analysis,
-            moderation_result: row.moderation_result,
-            is_flagged: row.is_flagged.unwrap_or(false),
+            sentiment_score,
+            sentiment_colors,
+            sentiment_type,
+            is_blocked: row.is_flagged.unwrap_or(false),
+            toxicity_tags,
+            toxicity_scores,
             created_at: row.created_at,
             updated_at: row.updated_at,
             reply_count: row.reply_count.unwrap_or(0),
