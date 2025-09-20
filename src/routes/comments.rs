@@ -118,10 +118,10 @@ async fn get_post_comments(
 async fn create_comment(
     Path(post_id): Path<Uuid>,
     State(app_state): State<crate::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(request): Json<CreateCommentRequest>,
 ) -> Result<Json<CreateCommentResponse>> {
-    // TODO: Extract user_id from JWT claims when auth middleware is added
-    let user_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000") // Use test user for now
+    let user_id = Uuid::parse_str(&claims.user_id)
         .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;
     
     tracing::debug!("📝 Creating comment on post: {} by user: {}", post_id, user_id);

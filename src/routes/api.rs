@@ -11,6 +11,16 @@ use crate::{AppState, AppError};
 use crate::routes::{users, posts, auth, comments, vote_routes};
 use crate::auth::middleware::auth_middleware;
 
+// Function to create protected routes with auth middleware applied
+pub fn protected_routes_with_auth() -> Router<AppState> {
+    Router::new()
+        .route("/posts", post(posts::create_post))
+        .route("/posts/:post_id", put(posts::update_post))
+        .route("/posts/:post_id", delete(posts::delete_post))
+        .merge(comments::protected_routes())
+        .layer(middleware::from_fn(auth_middleware))
+}
+
 pub fn routes() -> Router<AppState> {
     let public_routes = Router::new()
         .route("/health", get(api_health))
@@ -21,14 +31,8 @@ pub fn routes() -> Router<AppState> {
         .route("/posts/:post_id", get(posts::get_post))
         .route("/posts/user/:user_id", get(posts::get_user_posts));
 
-    let protected_routes = Router::new()
-        .route("/posts", post(posts::create_post))
-        .route("/posts/:post_id", put(posts::update_post))
-        .route("/posts/:post_id", delete(posts::delete_post))
-        .merge(comments::protected_routes()); // TODO: Add auth middleware after testing
-
     public_routes
-        .merge(protected_routes)
+        .merge(protected_routes_with_auth())
         .merge(comments::public_routes()) 
         .merge(vote_routes::vote_routes())
 }
