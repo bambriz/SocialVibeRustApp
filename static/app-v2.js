@@ -857,38 +857,69 @@ async function savePostToDatabase(optimisticId, title, content) {
 }
 
 async function saveCommentToDatabase(optimisticId, postId, content, parentId = null) {
+    console.log('💾 DATABASE_SAVE_DIAGNOSTIC: Starting comment save to database');
+    console.log(`   🆔 Optimistic ID: ${optimisticId}`);
+    console.log(`   📍 Post ID: ${postId}`);
+    console.log(`   📄 Content Length: ${content.length}`);
+    console.log(`   👤 Parent ID: ${parentId || 'null (root comment)'}`);
+    
+    const startTime = performance.now();
+    
     try {
         const url = `${API_BASE}/posts/${postId}/comments`;
+        console.log(`   🌐 Request URL: ${url}`);
+        
+        const requestBody = { content, post_id: postId, parent_id: parentId };
+        console.log('   📦 Request Body:', requestBody);
+        
+        console.log('   🚀 Sending HTTP POST request...');
         const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
             },
-            body: JSON.stringify({ content, post_id: postId, parent_id: parentId })
+            body: JSON.stringify(requestBody)
         });
         
-        // Debug: Log the raw response 
-        console.log(`🔍 Raw response status: ${response.status}, headers:`, response.headers);
+        const requestDuration = performance.now() - startTime;
+        console.log(`   ⏱️  Request completed in ${requestDuration.toFixed(2)}ms`);
+        console.log(`   📊 Response Status: ${response.status} ${response.statusText}`);
+        console.log('   📋 Response Headers:', Object.fromEntries(response.headers.entries()));
         
         let data;
         try {
+            console.log('   🔄 Parsing JSON response...');
             data = await response.json();
-            console.log(`📝 Comment response data:`, data);
-        } catch (error) {
-            // If response isn't JSON, get the text for debugging
+            console.log('   ✅ JSON parsed successfully');
+            console.log('   📝 Comment Response Data:', {
+                success: data.success,
+                comment_id: data.comment?.id,
+                message: data.message,
+                comment_created_at: data.comment?.created_at,
+                sentiment_type: data.comment?.sentiment_type
+            });
+        } catch (jsonError) {
+            console.error('   ❌ JSON parsing failed:', jsonError);
             const responseText = await response.text();
-            console.error(`❌ Failed to parse JSON response. Status: ${response.status}, Text:`, responseText);
-            throw new Error(`Server returned non-JSON response: ${responseText.substring(0, 100)}...`);
+            console.error('   📄 Raw Response Text:', responseText.substring(0, 500));
+            throw new Error(`Server returned non-JSON response (${response.status}): ${responseText.substring(0, 100)}...`);
         }
         
         if (response.ok) {
+            console.log('   ✅ Database save successful!');
+            
+            const totalDuration = performance.now() - startTime;
+            console.log(`   ⏱️  Total save operation completed in ${totalDuration.toFixed(2)}ms`);
+            
             // Replace optimistic comment with real data
+            console.log('   🔄 Replacing optimistic comment with real data...');
             replaceOptimisticComment(postId, optimisticId, data.comment);
             markCommentAsSaved(optimisticId, postId, data.comment);
             showToast('✅ Comment saved to database!', 'success');
             
             // Update cache with new comment but don't refresh UI (it's already updated)
+            console.log('   🗃️  Updating comment cache...');
             const comments = commentsCache.get(postId) || [];
             comments.unshift({
                 comment: data.comment,
@@ -899,15 +930,26 @@ async function saveCommentToDatabase(optimisticId, postId, content, parentId = n
             });
             commentsCache.set(postId, comments);
             
-            console.log('✅ Comment saved and cache updated without UI refresh');
+            console.log('   ✅ Comment cache updated successfully');
+            console.log('   🎯 DIAGNOSTIC SUMMARY: Comment save completed successfully');
+            
         } else {
+            console.error('   ❌ Database save failed!');
+            console.error('   📊 Response not OK:', response.status, response.statusText);
+            console.error('   📄 Error Data:', data);
+            
             markCommentAsFailed(optimisticId, postId, data);
-            showToast('❌ Failed to save comment to database', 'error');
+            showToast(`❌ Failed to save comment: ${data.message || 'Unknown error'}`, 'error');
         }
     } catch (error) {
-        console.error('Comment database save error:', error);
-        markCommentAsFailed(optimisticId, postId, { error: 'Network error' });
-        showToast('❌ Network error saving comment', 'error');
+        const totalDuration = performance.now() - startTime;
+        console.error('   💥 CRITICAL ERROR in comment database save:');
+        console.error('   🕐 Error occurred after:', totalDuration.toFixed(2) + 'ms');
+        console.error('   🔍 Error Details:', error);
+        console.error('   📚 Error Stack:', error.stack);
+        
+        markCommentAsFailed(optimisticId, postId, { error: error.message });
+        showToast(`❌ Network error saving comment: ${error.message}`, 'error');
     }
 }
 
@@ -2937,28 +2979,47 @@ async function loadComments(postId) {
 
 // Post a new comment with optimistic UI
 async function postComment(postId) {
+    console.log('🚀 COMMENT_DIAGNOSTIC: Starting comment creation process');
+    console.log(`   📍 Post ID: ${postId}`);
+    console.log(`   👤 Auth Token Present: ${!!authToken}`);
+    console.log(`   🌐 API Base: ${API_BASE}`);
+    
     if (!authToken) {
+        console.error('❌ COMMENT_DIAGNOSTIC: No auth token found');
         showToast('Please log in to comment', 'error');
         return;
     }
     
     const textarea = document.getElementById(`comment-input-${postId}`);
+    if (!textarea) {
+        console.error(`❌ COMMENT_DIAGNOSTIC: Textarea not found for post ${postId}`);
+        showToast('Comment form not found', 'error');
+        return;
+    }
+    
     const content = textarea.value.trim();
+    console.log(`   📝 Content Length: ${content.length} characters`);
+    console.log(`   📄 Content Preview: "${content.substring(0, 100)}${content.length > 100 ? '...' : ''}"`);
     
     if (!content) {
+        console.warn('⚠️ COMMENT_DIAGNOSTIC: Empty content provided');
         showToast('Please enter a comment', 'error');
         return;
     }
     
     if (content.length > 2000) {
+        console.warn(`⚠️ COMMENT_DIAGNOSTIC: Content too long: ${content.length} > 2000`);
         showToast('Comment is too long (max 2000 characters)', 'error');
         return;
     }
     
+    console.log('🔄 COMMENT_DIAGNOSTIC: Creating optimistic comment object');
+    
     // Create optimistic comment
+    const optimisticId = `temp_${Date.now()}`;
     const optimisticComment = {
         comment: {
-            id: `temp_${Date.now()}`,
+            id: optimisticId,
             post_id: postId,
             user_id: currentUser.id,
             content: content,
@@ -2980,17 +3041,28 @@ async function postComment(postId) {
         isPending: true // Mark as pending for UI
     };
     
+    console.log(`✅ COMMENT_DIAGNOSTIC: Optimistic comment created with temp ID: ${optimisticId}`);
+    console.log('   🔍 Comment Structure:', {
+        id: optimisticComment.comment.id,
+        post_id: optimisticComment.comment.post_id,
+        content: optimisticComment.comment.content.substring(0, 50) + '...',
+        user_id: optimisticComment.comment.user_id
+    });
+    
     // Clear input and update UI optimistically
+    console.log('🔄 COMMENT_DIAGNOSTIC: Clearing textarea and updating UI');
     textarea.value = '';
     updateCommentCounter({ target: textarea });
     
     // Add optimistic comment to UI immediately
+    console.log('🎨 COMMENT_DIAGNOSTIC: Adding optimistic comment to UI');
     addOptimisticComment(postId, optimisticComment);
     updatePostCommentCount(postId);
     showToast('💬 Creating comment...', 'info');
     
     // Fire-and-forget async database save - don't wait for response
-    saveCommentToDatabase(optimisticComment.comment.id, postId, content);
+    console.log('🚀 COMMENT_DIAGNOSTIC: Starting async database save (fire-and-forget)');
+    saveCommentToDatabase(optimisticId, postId, content);
 }
 
 // Add optimistic comment to UI immediately

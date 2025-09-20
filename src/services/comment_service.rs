@@ -97,23 +97,42 @@ impl CommentService {
         request: CreateCommentRequest, 
         user_id: Uuid
     ) -> Result<CommentResponse> {
+        tracing::info!("🔄 COMMENT_SERVICE_DIAGNOSTIC: Starting comment creation process");
+        tracing::info!("   📍 Post ID: {}", post_id);
+        tracing::info!("   👤 User ID: {}", user_id);
+        tracing::info!("   📄 Raw content length: {}", request.content.len());
+        
         // Basic validation
         let content = request.content.trim();
+        tracing::info!("   📝 Trimmed content length: {}", content.len());
+        
         if content.is_empty() {
+            tracing::error!("❌ Validation failed: Empty content after trimming");
             return Err(AppError::ValidationError("Comment content cannot be empty".to_string()));
         }
         
         if content.len() > 2000 {
+            tracing::error!("❌ Validation failed: Content too long ({} > 2000)", content.len());
             return Err(AppError::ValidationError("Comment content exceeds 2000 character limit".to_string()));
         }
+        
+        tracing::debug!("   ✅ Basic validation passed");
 
         // Path and depth will be computed atomically in the repository
         
         // 2. Content moderation check
+        tracing::info!("🛡️  COMMENT_SERVICE_DIAGNOSTIC: Starting content moderation");
+        let moderation_start = std::time::Instant::now();
+        
         let moderation_result = if let Some(moderation_service) = &self.moderation_service {
+            tracing::debug!("   🔍 Using content moderation service");
             moderation_service.check_content(content).await
-                .map_err(|e| AppError::InternalError(format!("Content moderation system error: {}. Please try again later or contact support if this persists.", e)))?
+                .map_err(|e| {
+                    tracing::error!("❌ Content moderation system error: {}", e);
+                    AppError::InternalError(format!("Content moderation system error: {}. Please try again later or contact support if this persists.", e))
+                })?
         } else {
+            tracing::warn!("   ⚠️  No moderation service configured - allowing content");
             crate::services::moderation_service::ModerationResult {
                 is_blocked: false,
                 violation_type: None,
@@ -123,7 +142,12 @@ impl CommentService {
             }
         };
         
+        let moderation_duration = moderation_start.elapsed();
+        tracing::info!("   ✅ Moderation completed in {:?} - Blocked: {}", 
+                      moderation_duration, moderation_result.is_blocked);
+        
         if moderation_result.is_blocked {
+            tracing::warn!("❌ Comment blocked by moderation: {:?}", moderation_result.violation_type);
             return Err(AppError::ValidationError(format!(
                 "Comment blocked by moderation: {}",
                 moderation_result.violation_type.clone().unwrap_or_else(|| "Policy violation".to_string())
@@ -131,23 +155,38 @@ impl CommentService {
         }
 
         // 3. Sentiment analysis - analyze content for emotions (same as posts)
+        tracing::info!("🎭 COMMENT_SERVICE_DIAGNOSTIC: Starting sentiment analysis");
+        let sentiment_start = std::time::Instant::now();
+        
         let (sentiment_score, sentiment_colors, sentiment_type) = if let Some(sentiment_service) = &self.sentiment_service {
+            tracing::debug!("   🔍 Using sentiment analysis service");
             let sentiments = sentiment_service
                 .analyze_sentiment(content)
                 .await
-                .map_err(|e| AppError::InternalError(format!("Sentiment analysis failed: {}", e)))?;
+                .map_err(|e| {
+                    tracing::error!("❌ Sentiment analysis failed: {}", e);
+                    AppError::InternalError(format!("Sentiment analysis failed: {}", e))
+                })?;
             
             if let Some(primary_sentiment) = sentiments.first() {
                 let score = (primary_sentiment.confidence - 0.5) * 2.0; // Convert confidence to score
                 let colors = vec![primary_sentiment.color_code.clone()];
                 let sentiment_type = Some(primary_sentiment.sentiment_type.to_string());
+                
+                tracing::info!("   🎯 Sentiment detected: {:?} (confidence: {:.2})", 
+                              primary_sentiment.sentiment_type, primary_sentiment.confidence);
                 (Some(score), colors, sentiment_type)
             } else {
+                tracing::debug!("   ⚪ No sentiment detected");
                 (None, vec![], None)
             }
         } else {
+            tracing::warn!("   ⚠️  No sentiment service configured - skipping analysis");
             (None, vec![], None)
         };
+        
+        let sentiment_duration = sentiment_start.elapsed();
+        tracing::info!("   ✅ Sentiment analysis completed in {:?}", sentiment_duration);
         
         // 4. Calculate initial popularity score based on sentiment
         let popularity_score = self.calculate_popularity_score_from_sentiment(&sentiment_score, &sentiment_type);

@@ -140,17 +140,39 @@ impl PythonManager {
 
     /// Check Python server health
     async fn check_health(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        tracing::debug!("🔍 PYTHON_HEALTH_DIAGNOSTIC: Making health check request");
+        tracing::debug!("   🌐 URL: {}", self.config.health_check_url);
+        tracing::debug!("   ⏰ Timeout: {}s", self.config.health_check_timeout_secs);
+        
+        let start_time = std::time::Instant::now();
+        
         let response = self.http_client
             .get(&self.config.health_check_url)
             .timeout(Duration::from_secs(self.config.health_check_timeout_secs))
             .send()
-            .await?;
+            .await
+            .map_err(|e| {
+                let duration = start_time.elapsed();
+                tracing::error!("   ❌ Health check request failed after {:?}: {}", duration, e);
+                e
+            })?;
+        
+        let request_duration = start_time.elapsed();
+        tracing::debug!("   📊 Response received in {:?} - Status: {}", 
+                       request_duration, response.status());
         
         if !response.status().is_success() {
+            tracing::error!("   ❌ Health check failed with HTTP status: {}", response.status());
             return Err(format!("Health check failed with status: {}", response.status()).into());
         }
         
-        let health_data: serde_json::Value = response.json().await?;
+        let health_data: serde_json::Value = response.json().await
+            .map_err(|e| {
+                tracing::error!("   ❌ Failed to parse health check JSON: {}", e);
+                e
+            })?;
+        
+        tracing::debug!("   ✅ Health check successful - Response: {:?}", health_data);
         Ok(health_data)
     }
 
@@ -337,9 +359,21 @@ impl PythonManager {
         Ok(())
     }
 
-    /// Check if the Python server is running and healthy
+    /// Check if the Python server is running and healthy with comprehensive diagnostics
     pub async fn is_healthy(&self) -> bool {
-        self.check_health().await.is_ok()
+        tracing::debug!("🔍 PYTHON_HEALTH_CHECK: Starting health check");
+        let start_time = std::time::Instant::now();
+        
+        let is_healthy = self.check_health().await.is_ok();
+        let duration = start_time.elapsed();
+        
+        if is_healthy {
+            tracing::debug!("   ✅ Python server is healthy (check completed in {:?})", duration);
+        } else {
+            tracing::warn!("   ❌ Python server health check failed after {:?}", duration);
+        }
+        
+        is_healthy
     }
 
     /// Clone for use in async tasks
@@ -369,17 +403,39 @@ struct PythonManagerForTask {
 impl PythonManagerForTask {
     /// Check Python server health (same as main implementation)
     async fn check_health(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        tracing::debug!("🔍 PYTHON_HEALTH_DIAGNOSTIC: Making health check request");
+        tracing::debug!("   🌐 URL: {}", self.config.health_check_url);
+        tracing::debug!("   ⏰ Timeout: {}s", self.config.health_check_timeout_secs);
+        
+        let start_time = std::time::Instant::now();
+        
         let response = self.http_client
             .get(&self.config.health_check_url)
             .timeout(Duration::from_secs(self.config.health_check_timeout_secs))
             .send()
-            .await?;
+            .await
+            .map_err(|e| {
+                let duration = start_time.elapsed();
+                tracing::error!("   ❌ Health check request failed after {:?}: {}", duration, e);
+                e
+            })?;
+        
+        let request_duration = start_time.elapsed();
+        tracing::debug!("   📊 Response received in {:?} - Status: {}", 
+                       request_duration, response.status());
         
         if !response.status().is_success() {
+            tracing::error!("   ❌ Health check failed with HTTP status: {}", response.status());
             return Err(format!("Health check failed with status: {}", response.status()).into());
         }
         
-        let health_data: serde_json::Value = response.json().await?;
+        let health_data: serde_json::Value = response.json().await
+            .map_err(|e| {
+                tracing::error!("   ❌ Failed to parse health check JSON: {}", e);
+                e
+            })?;
+        
+        tracing::debug!("   ✅ Health check successful - Response: {:?}", health_data);
         Ok(health_data)
     }
 

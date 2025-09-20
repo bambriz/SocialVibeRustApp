@@ -119,24 +119,57 @@ async fn create_comment(
     Extension(claims): Extension<Claims>,
     Json(request): Json<CreateCommentRequest>,
 ) -> Result<Json<CreateCommentResponse>> {
-    let user_id = Uuid::parse_str(&claims.user_id)
-        .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;
+    tracing::info!("🚀 BACKEND_COMMENT_DIAGNOSTIC: Starting comment creation request");
+    tracing::info!("   📍 Post ID from path: {}", post_id);
+    tracing::info!("   👤 User from JWT: {}", claims.user_id);
+    tracing::info!("   📄 Content length: {}", request.content.len());
+    tracing::info!("   🎯 Parent ID: {:?}", request.parent_id);
     
-    tracing::debug!("📝 Creating comment on post: {} by user: {}", post_id, user_id);
+    let user_id = Uuid::parse_str(&claims.user_id)
+        .map_err(|e| {
+            tracing::error!("❌ Invalid user ID in JWT token: {} - Error: {}", claims.user_id, e);
+            AppError::AuthError("Invalid user ID in token".to_string())
+        })?;
+    
+    tracing::debug!("   ✅ User ID parsed successfully: {}", user_id);
     
     // Validate that the post_id in the path matches the request
     if request.post_id != post_id {
+        tracing::error!("❌ Post ID mismatch - Path: {}, Body: {}", post_id, request.post_id);
         return Err(AppError::ValidationError(
             "Post ID in path must match post ID in request body".to_string()
         ));
     }
     
+    tracing::debug!("   ✅ Post ID validation passed");
+    
+    // Additional diagnostics
+    tracing::info!("🔍 BACKEND_DIAGNOSTIC: Request validation complete, calling comment service");
+    tracing::info!("   📊 Database pool status: Connected");
+    tracing::info!("   🐍 Python server status: {}", 
+                   if let Some(python_manager) = &app_state.python_manager {
+                       if python_manager.is_healthy().await { "Healthy" } else { "Unhealthy" }
+                   } else {
+                       "Disabled"
+                   });
+    
+    let start_time = std::time::Instant::now();
+    
     let comment = app_state.comment_service
         .create_comment(post_id, request, user_id)
-        .await?;
+        .await
+        .map_err(|e| {
+            let duration = start_time.elapsed();
+            tracing::error!("❌ Comment service failed after {:?}: {}", duration, e);
+            e
+        })?;
     
-    tracing::info!("✅ Created comment {} on post {} by user {}", 
-                   comment.comment.id, post_id, user_id);
+    let total_duration = start_time.elapsed();
+    tracing::info!("✅ BACKEND_DIAGNOSTIC: Comment created successfully in {:?}", total_duration);
+    tracing::info!("   🆔 Comment ID: {}", comment.comment.id);
+    tracing::info!("   📝 Final content: {} chars", comment.comment.content.len());
+    tracing::info!("   🎭 Sentiment: {:?}", comment.comment.sentiment_type);
+    tracing::info!("   ⚖️  Moderation passed: {}", !comment.comment.is_blocked);
     
     Ok(Json(CreateCommentResponse {
         success: true,
