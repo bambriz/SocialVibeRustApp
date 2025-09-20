@@ -1,6 +1,13 @@
-use axum::{routing::{get, post, put, delete}, Router, Json, middleware};
+use axum::{
+    routing::{get, post, put, delete}, 
+    Router, Json, middleware,
+    extract::{State, Request},
+    middleware::Next,
+    response::Response,
+    http::HeaderMap,
+};
 use serde_json::{json, Value};
-use crate::AppState;
+use crate::{AppState, AppError};
 use crate::routes::{users, posts, auth, comments, vote_routes};
 use crate::auth::middleware::auth_middleware;
 
@@ -18,15 +25,15 @@ pub fn routes() -> Router<AppState> {
         .route("/posts", post(posts::create_post))
         .route("/posts/:post_id", put(posts::update_post))
         .route("/posts/:post_id", delete(posts::delete_post))
-        .merge(comments::protected_routes()) // Add protected comment routes
-        // TODO: Apply auth middleware at app level in main.rs
-        ;
+        .merge(comments::protected_routes()); // TODO: Add auth middleware after testing
 
     public_routes
         .merge(protected_routes)
-        .merge(comments::public_routes()) // Add public comment routes  
-        .merge(vote_routes::vote_routes()) // Add voting routes
+        .merge(comments::public_routes()) 
+        .merge(vote_routes::vote_routes())
 }
+
+// Remove the wrapper function - using auth_middleware directly with from_fn_with_state
 
 async fn api_health() -> Json<Value> {
     Json(json!({

@@ -41,13 +41,14 @@ pub async fn auth_middleware(
     let user_id = uuid::Uuid::parse_str(&claims.user_id)
         .map_err(|_| AppError::AuthError("Invalid user ID in token".to_string()))?;
     
-    // Add user context to request extensions
+    // Add both user context and claims to request extensions
     let user_context = UserContext {
         user_id,
-        username: claims.username,
+        username: claims.username.clone(),
     };
     
     request.extensions_mut().insert(user_context);
+    request.extensions_mut().insert(claims); // Insert Claims for handlers
     
     let response = next.run(request).await;
     Ok(response)
