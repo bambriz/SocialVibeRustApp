@@ -150,7 +150,10 @@ impl CommentService {
             (None, vec![], None)
         };
         
-        // 4. Create comment with full metadata (path and depth computed atomically)
+        // 4. Calculate initial popularity score based on sentiment
+        let popularity_score = self.calculate_popularity_score_from_sentiment(&sentiment_score, &sentiment_type);
+
+        // 5. Create comment with full metadata (path and depth computed atomically)
         let comment = Comment {
             id: Uuid::new_v4(),
             post_id,
@@ -168,9 +171,10 @@ impl CommentService {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             reply_count: 0,
+            popularity_score,
         };
         
-        // 5. Save using atomic method (computes path + inserts + increments reply count in single transaction)
+        // 6. Save using atomic method (computes path + inserts + increments reply count in single transaction)
         let saved_comment = self.comment_repo
             .create_comment_atomic(post_id, request.parent_id, &comment)
             .await?;
@@ -217,6 +221,65 @@ impl CommentService {
         Ok(responses)
     }
     
+    /// Calculate popularity score from sentiment data (similar to posts)
+    fn calculate_popularity_score_from_sentiment(&self, sentiment_score: &Option<f64>, sentiment_type: &Option<String>) -> f64 {
+        // Default neutral score
+        let mut base_score = 1.0;
+        
+        // Apply sentiment multiplier based on type (same logic as posts)
+        if let Some(sentiment_type) = sentiment_type {
+            let sentiment_multiplier = match sentiment_type.as_str() {
+                "joy" => 1.4,       // Highest positive boost
+                "affection" => 1.1,
+                "surprise" => 1.1,  // Slight positive boost - draws attention
+                "neutral" => 1.0,   // Neutral scoring
+                "confused" => 0.95, // Slightly lower than neutral
+                "sarcastic" => 0.9,
+                "disgust" => 0.6,   // Low engagement like anger
+                "sad" => 0.8,
+                "fear" => 0.7,
+                "angry" => 0.6,
+                _ => 1.0, // Default for unknown types
+            };
+            
+            // Apply confidence if available
+            if let Some(confidence) = sentiment_score {
+                base_score = sentiment_multiplier * confidence.abs().max(0.1); // Ensure minimum positive score
+            } else {
+                base_score = sentiment_multiplier;
+            }
+        }
+        
+        // Ensure score is always positive and reasonable
+        base_score.max(0.1).min(2.0)
+    }
+    
+    /// Calculate full popularity score including votes and engagement (similar to posts)
+    pub async fn calculate_popularity_score(&self, comment: &Comment, vote_service: Option<&crate::services::vote_service::VoteService>) -> f64 {
+        // Base score from sentiment analysis
+        let sentiment_score = self.calculate_popularity_score_from_sentiment(&comment.sentiment_score, &comment.sentiment_type);
+        
+        // Factor in engagement metrics
+        let reply_boost = (comment.reply_count as f64) * 0.05; // Smaller boost than posts
+        let recency_hours = (Utc::now() - comment.created_at).num_hours() as f64;
+        let recency_decay = 1.0 / (1.0 + recency_hours * 0.02); // Slightly faster decay than posts
+        
+        let base_score = (sentiment_score + reply_boost) * recency_decay;
+        
+        // Add voting engagement if available, with cap at 3.0
+        if let Some(vote_service) = vote_service {
+            match vote_service.get_engagement_score(comment.id, "comment").await {
+                Ok(engagement_score) => {
+                    // Cap total popularity at 3.0 as per user requirements
+                    (base_score + engagement_score).min(3.0)
+                },
+                Err(_) => base_score // Fall back to base score if voting fails
+            }
+        } else {
+            base_score
+        }
+    }
+
     /// Get a specific comment thread (placeholder)
     pub async fn get_comment_thread(&self, comment_id: Uuid) -> Result<Vec<CommentResponse>> {
         // For now, just return the single comment

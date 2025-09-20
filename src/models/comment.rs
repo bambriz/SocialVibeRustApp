@@ -81,6 +81,10 @@ pub struct Comment {
     /// Count of direct replies to this comment
     /// LEARNING: Denormalized data - store counts for UI performance
     pub reply_count: i32,
+    
+    /// Calculated popularity score for feed ranking (includes votes, sentiment, recency)
+    /// LEARNING: Dynamic scoring for content ranking and discovery
+    pub popularity_score: f64,
 }
 
 /// Request structure for creating a new comment

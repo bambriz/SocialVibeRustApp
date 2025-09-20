@@ -581,9 +581,9 @@ impl CommentRepository for PostgresCommentRepository {
         // Insert comment with atomically computed path - all within same transaction!
         let row = sqlx::query!(
             r#"
-            INSERT INTO comments (id, post_id, user_id, parent_id, content, path, depth, sentiment_analysis, moderation_result, is_flagged, created_at, updated_at, reply_count)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            RETURNING id, post_id, user_id, parent_id, content, path, depth, sentiment_analysis, moderation_result, is_flagged, created_at, updated_at, reply_count
+            INSERT INTO comments (id, post_id, user_id, parent_id, content, path, depth, sentiment_analysis, moderation_result, is_flagged, created_at, updated_at, reply_count, popularity_score)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            RETURNING id, post_id, user_id, parent_id, content, path, depth, sentiment_analysis, moderation_result, is_flagged, created_at, updated_at, reply_count, popularity_score
             "#,
             comment.id,
             comment.post_id,
@@ -606,7 +606,8 @@ impl CommentRepository for PostgresCommentRepository {
             comment.is_blocked,
             comment.created_at,
             comment.updated_at,
-            comment.reply_count
+            comment.reply_count,
+            comment.popularity_score
         )
         .fetch_one(&mut *tx)
         .await
@@ -638,6 +639,7 @@ impl CommentRepository for PostgresCommentRepository {
             created_at: row.created_at,
             updated_at: row.updated_at,
             reply_count: row.reply_count.unwrap_or(0),
+            popularity_score: row.popularity_score.unwrap_or(1.0),
         })
     }
 
