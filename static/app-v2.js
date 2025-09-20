@@ -865,10 +865,22 @@ async function saveCommentToDatabase(optimisticId, postId, content, parentId = n
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
             },
-            body: JSON.stringify({ content, parent_id: parentId })
+            body: JSON.stringify({ content, post_id: postId, parent_id: parentId })
         });
         
-        const data = await response.json();
+        // Debug: Log the raw response 
+        console.log(`🔍 Raw response status: ${response.status}, headers:`, response.headers);
+        
+        let data;
+        try {
+            data = await response.json();
+            console.log(`📝 Comment response data:`, data);
+        } catch (error) {
+            // If response isn't JSON, get the text for debugging
+            const responseText = await response.text();
+            console.error(`❌ Failed to parse JSON response. Status: ${response.status}, Text:`, responseText);
+            throw new Error(`Server returned non-JSON response: ${responseText.substring(0, 100)}...`);
+        }
         
         if (response.ok) {
             // Replace optimistic comment with real data
