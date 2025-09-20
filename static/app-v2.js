@@ -3195,18 +3195,27 @@ function replaceOptimisticComment(postId, tempId, realComment) {
         // Update the data attribute to use the real comment ID
         tempElement.setAttribute('data-comment-id', realComment.id);
         
-        // Remove pending styling
+        // Remove pending styling and add sentiment if available
         tempElement.classList.remove('comment-pending');
         tempElement.classList.add('saved');
         
-        // Update any data that might have changed (like sentiment analysis)
-        const sentimentBadge = tempElement.querySelector('.sentiment-badge');
-        if (sentimentBadge && realComment.sentiment_analysis && realComment.sentiment_analysis.sentiment_type) {
-            // Update sentiment if it was analyzed
-            const sentimentType = realComment.sentiment_analysis.sentiment_type;
-            const sentimentConfig = getSentimentConfig(sentimentType);
-            sentimentBadge.style.backgroundColor = sentimentConfig.color;
-            sentimentBadge.textContent = `${sentimentConfig.emoji} ${sentimentConfig.name}`;
+        // ENHANCED: Update sentiment badge with real data from server
+        const sentimentBadge = tempElement.querySelector('.comment-sentiment-badge');
+        if (realComment.sentiment_type) {
+            const sentimentEmoji = getCommentSentimentEmoji(realComment);
+            const sentimentColor = realComment.sentiment_colors && realComment.sentiment_colors[0] ? realComment.sentiment_colors[0] : '#6b7280';
+            
+            if (sentimentBadge) {
+                // Update existing badge
+                sentimentBadge.style.backgroundColor = sentimentColor;
+                sentimentBadge.textContent = `${sentimentEmoji} ${realComment.sentiment_type}`;
+            } else {
+                // Add new badge if pending comment didn't have one
+                const badgesContainer = tempElement.querySelector('.comment-badges');
+                if (badgesContainer) {
+                    badgesContainer.innerHTML = renderCommentSentimentTag(realComment);
+                }
+            }
         }
         
         console.log(`✅ Replaced optimistic comment ${tempId} with real comment ${realComment.id}`);
@@ -3274,6 +3283,13 @@ function renderComments(postId, comments) {
         const sentimentEmoji = getCommentSentimentEmoji(comment);
         const sentimentStyle = getCommentSentimentStyle(comment);
         
+        // ENHANCED: Render sentiment tag like posts
+        const sentimentTagHTML = renderCommentSentimentTag(comment);
+        
+        // Get toxicity tags for this comment (like posts)
+        const toxicityTags = getCommentToxicityTags(comment);
+        const toxicityTagsHTML = renderCommentToxicityTags(toxicityTags);
+        
         // Show delete controls only for comments owned by current user AND only on "My posts" page
         const isOwner = currentUser && comment.user_id === currentUser.id;
         const isMyPostsPage = currentView === 'user_home';
@@ -3294,11 +3310,16 @@ function renderComments(postId, comments) {
                     <div class="comment-header-left">
                         <span class="comment-author">${escapeHtml(authorName)}</span>
                         <span class="comment-time">${timeAgo}</span>
-                        ${sentimentEmoji ? `<span class="comment-emotion">${sentimentEmoji}</span>` : ''}
                     </div>
-                    ${deleteControlsHTML}
+                    <div class="comment-header-right">
+                        <div class="comment-badges">
+                            ${sentimentTagHTML}
+                        </div>
+                        ${deleteControlsHTML}
+                    </div>
                 </div>
                 <div class="comment-content">${escapeHtml(comment.content)}</div>
+                ${toxicityTagsHTML ? `<div class="comment-toxicity-tags">${toxicityTagsHTML}</div>` : ''}
                 <div class="comment-actions">
                     ${authToken ? `<button onclick="showReplyForm('${comment.id}')" class="reply-btn">Reply</button>` : ''}
                     <div class="emotion-voting" id="emotion-voting-${comment.id}">
@@ -3366,6 +3387,45 @@ function getCommentSentimentStyle(comment) {
     // Use single sentiment color (first color if multiple exist)
     const color = comment.sentiment_colors[0];
     return `border-left: 4px solid ${color}; background: ${color}11;`;
+}
+
+// ENHANCED: Render comment sentiment tag like posts
+function renderCommentSentimentTag(comment) {
+    if (!comment.sentiment_type) return '';
+    
+    const sentimentClass = getCommentSentimentClass(comment);
+    const sentimentEmoji = getCommentSentimentEmoji(comment);
+    const sentimentColor = comment.sentiment_colors && comment.sentiment_colors[0] ? comment.sentiment_colors[0] : '#6b7280';
+    
+    return `<div class="sentiment-badge comment-sentiment-badge ${sentimentClass}" 
+                 style="background-color: ${sentimentColor}; color: white; font-size: 0.75rem; padding: 2px 6px; border-radius: 12px; font-weight: 500;">
+        ${sentimentEmoji} ${comment.sentiment_type}
+    </div>`;
+}
+
+// Get toxicity tags for comments (like posts)
+function getCommentToxicityTags(comment) {
+    const tags = [];
+    if (comment.toxicity_tags && comment.toxicity_tags.length > 0) {
+        comment.toxicity_tags.forEach(tag => {
+            tags.push({
+                type: tag,
+                label: tag.charAt(0).toUpperCase() + tag.slice(1).replace('_', ' ')
+            });
+        });
+    }
+    return tags;
+}
+
+// Render toxicity tags for comments
+function renderCommentToxicityTags(toxicityTags) {
+    if (!toxicityTags || toxicityTags.length === 0) return '';
+    
+    return toxicityTags.map(tag => `
+        <span class="toxicity-tag comment-toxicity-tag" style="background-color: #ef4444; color: white; font-size: 0.7rem; padding: 1px 4px; border-radius: 8px; margin-right: 4px;">
+            ⚠️ ${tag.label}
+        </span>
+    `).join('');
 }
 
 // Render emotion voting buttons (placeholder for now)
