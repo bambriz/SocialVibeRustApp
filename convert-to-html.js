@@ -1,11 +1,27 @@
 const fs = require('fs');
 const { marked } = require('marked');
 
+// Configure marked to preserve mermaid code blocks
+marked.setOptions({
+  highlight: function(code, lang) {
+    if (lang === 'mermaid') {
+      return `<div class="mermaid">${code}</div>`;
+    }
+    return `<pre><code class="language-${lang}">${code}</code></pre>`;
+  }
+});
+
 // Read the markdown file
 const markdownContent = fs.readFileSync('SOCIAL_PULSE_ARCHITECTURE_DOCUMENTATION.md', 'utf8');
 
 // Convert markdown to HTML
-const htmlContent = marked(markdownContent);
+let htmlContent = marked(markdownContent);
+
+// Post-process to convert remaining mermaid code blocks to divs
+htmlContent = htmlContent.replace(
+  /<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g,
+  '<div class="mermaid">$1</div>'
+);
 
 // Create a complete HTML document with styling
 const fullHTML = `
@@ -14,6 +30,19 @@ const fullHTML = `
 <head>
     <meta charset="UTF-8">
     <title>Social Pulse - Architecture Documentation</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            mermaid.initialize({ 
+                startOnLoad: true,
+                theme: 'default',
+                flowchart: {
+                    useMaxWidth: true,
+                    htmlLabels: true
+                }
+            });
+        });
+    </script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif;
@@ -23,6 +52,14 @@ const fullHTML = `
             margin: 0 auto;
             padding: 2rem;
             background: white;
+        }
+        
+        .mermaid {
+            text-align: center;
+            margin: 2rem 0;
+            page-break-inside: avoid;
+            max-width: 100%;
+            overflow: auto;
         }
         
         h1 {
@@ -126,6 +163,28 @@ const fullHTML = `
             text-align: center;
         }
         
+        .conversion-steps {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            text-align: left;
+        }
+        
+        .conversion-steps h4 {
+            color: #495057;
+            margin-top: 0;
+        }
+        
+        .conversion-steps ol {
+            margin: 0.5rem 0;
+        }
+        
+        .conversion-steps li {
+            margin: 0.5rem 0;
+        }
+        
         @media print {
             body {
                 max-width: none;
@@ -150,10 +209,37 @@ const fullHTML = `
 <body>
     <div class="pdf-instructions">
         <strong>📄 PDF Conversion Instructions:</strong><br>
-        To convert this HTML file to PDF: <br>
-        1. Open this file in Chrome/Firefox → Print → Save as PDF<br>
-        2. Or use online tools like <a href="https://html-pdf-api.netlify.app/">html-pdf-api.netlify.app</a><br>
-        3. For best results, use A4 page size with 1-inch margins
+        This HTML file is ready for PDF conversion with rendered Mermaid diagrams!
+    </div>
+    
+    <div class="conversion-steps">
+        <h4>🖨️ Recommended PDF Conversion Methods:</h4>
+        <ol>
+            <li><strong>Browser Print (Recommended):</strong>
+                <ul>
+                    <li>Open this file in Chrome or Firefox</li>
+                    <li>Wait for diagrams to fully render (2-3 seconds)</li>
+                    <li>Press Ctrl+P (Cmd+P on Mac) or go to File → Print</li>
+                    <li>Select "Save as PDF" as destination</li>
+                    <li>Set paper size to A4 or Letter</li>
+                    <li>Enable "Background graphics"</li>
+                    <li>Set margins to "Default" or "Minimum"</li>
+                    <li>Click "Save"</li>
+                </ul>
+            </li>
+            <li><strong>Online Converters:</strong>
+                <ul>
+                    <li><a href="https://www.ilovepdf.com/html-to-pdf">ilovepdf.com/html-to-pdf</a></li>
+                    <li><a href="https://pdfcrowd.com/html-to-pdf/">pdfcrowd.com/html-to-pdf</a></li>
+                </ul>
+            </li>
+            <li><strong>Professional Tools:</strong>
+                <ul>
+                    <li>Typora: Open the .md file → File → Export → PDF</li>
+                    <li>VS Code: Install "Markdown PDF" extension</li>
+                </ul>
+            </li>
+        </ol>
     </div>
     
     ${htmlContent}
