@@ -621,7 +621,7 @@ async function showUserHome() {
 async function showMainFeed() {
     const previousView = currentView;
     currentView = 'feed';
-    document.getElementById('feedTitle').textContent = 'Social Pulse Feed';
+    document.getElementById('feedTitle').textContent = 'Social Pulse Waves';
     // Show vibe check and content filters for main feed
     const feedControlsContainer = document.querySelector('.feed-controls-container');
     if (feedControlsContainer) {
