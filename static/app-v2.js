@@ -3310,7 +3310,7 @@ function renderComments(postId, comments) {
                 
                 <!-- Nested replies will go here -->
                 <div id="replies-${comment.id}" class="replies-container">
-                    ${renderReplies(comment.replies || [])}
+                    ${renderReplies(comment.replies || [], postId)}
                 </div>
             </div>
         `;
@@ -3366,9 +3366,12 @@ function renderEmotionVoting(comment) {
     return `<span class="vote-count">👍 0</span>`;
 }
 
-// Render nested replies
-function renderReplies(replies) {
+// Enhanced render nested replies with full hierarchical support
+function renderReplies(replies, postId = null, depth = 1) {
     if (!replies || replies.length === 0) return '';
+    
+    const maxDisplayDepth = 5; // Limit visual nesting for readability
+    const actualDepth = Math.min(depth, maxDisplayDepth);
     
     return replies.map(reply => {
         // API returns reply objects directly, not wrapped
@@ -3378,14 +3381,52 @@ function renderReplies(replies) {
         const sentimentStyle = getCommentSentimentStyle(reply);
         const authorName = reply.author?.username || 'Anonymous';
         
+        // Show delete controls for replies owned by current user
+        const isOwner = currentUser && reply.user_id === currentUser.id;
+        const isMyPostsPage = currentView === 'user_home';
+        const deleteControlsHTML = (isOwner && isMyPostsPage) ? `
+            <div class="delete-controls comment-delete-controls">
+                <input type="checkbox" class="delete-checkbox" data-type="comment" data-id="${reply.id}" 
+                       onchange="toggleDeleteControls()">
+                <button class="delete-icon" onclick="deleteComment('${reply.id}')" title="Delete Reply">🗑️</button>
+            </div>
+        ` : '';
+        
         return `
-            <div class="reply ${sentimentClass}" data-comment-id="${reply.id}" style="${sentimentStyle}">
+            <div class="reply ${sentimentClass}" data-comment-id="${reply.id}" data-depth="${actualDepth}" style="${sentimentStyle}; margin-left: ${actualDepth * 20}px;">
                 <div class="comment-header">
-                    <span class="comment-author">${escapeHtml(authorName)}</span>
-                    <span class="comment-time">${timeAgo}</span>
-                    ${sentimentEmoji ? `<span class="comment-emotion">${sentimentEmoji}</span>` : ''}
+                    <div class="comment-header-left">
+                        <span class="comment-author">${escapeHtml(authorName)}</span>
+                        <span class="comment-time">${timeAgo}</span>
+                        ${sentimentEmoji ? `<span class="comment-emotion">${sentimentEmoji}</span>` : ''}
+                    </div>
+                    ${deleteControlsHTML}
                 </div>
                 <div class="comment-content">${escapeHtml(reply.content)}</div>
+                
+                <div class="comment-actions">
+                    ${authToken && actualDepth < maxDisplayDepth ? `<button onclick="showReplyForm('${reply.id}')" class="reply-btn">Reply</button>` : ''}
+                    <div class="emotion-voting" id="emotion-voting-${reply.id}">
+                        ${renderEmotionVoting(reply)}
+                    </div>
+                </div>
+                
+                <!-- Reply form for nested replies -->
+                ${authToken && actualDepth < maxDisplayDepth ? `
+                <div id="reply-form-${reply.id}" class="reply-form hidden">
+                    <textarea id="reply-input-${reply.id}" placeholder="Write a reply..." 
+                            class="reply-textarea" rows="2" maxlength="2000"></textarea>
+                    <div class="reply-form-actions">
+                        <button onclick="cancelReply('${reply.id}')" class="cancel-btn">Cancel</button>
+                        <button onclick="postReply('${reply.id}', '${postId || 'unknown'}')" class="reply-submit-btn">Reply</button>
+                    </div>
+                </div>` : ''}
+                
+                <!-- Recursive nested replies -->
+                ${reply.replies && reply.replies.length > 0 ? `
+                <div id="replies-${reply.id}" class="replies-container">
+                    ${renderReplies(reply.replies, postId, depth + 1)}
+                </div>` : ''}
             </div>
         `;
     }).join('');
