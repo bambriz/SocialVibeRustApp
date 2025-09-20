@@ -112,41 +112,43 @@ impl CommentService {
         // Path and depth will be computed atomically in the repository
         
         // 2. Content moderation check
-        let (moderation_result, is_flagged) = if let Some(moderation_service) = &self.moderation_service {
-            let mod_result = moderation_service
-                .check_content(content)
-                .await
-                .map_err(|e| AppError::InternalError(format!("Moderation failed: {}", e)))?;
-            
-            if mod_result.is_blocked {
-                return Err(AppError::ValidationError(format!(
-                    "Comment blocked by moderation: {}",
-                    mod_result.violation_type.clone().unwrap_or_else(|| "Policy violation".to_string())
-                )));
-            }
-            
-            // Separate flagging logic: flag based on toxicity score thresholds, not blocking
-            let is_flagged = !mod_result.toxicity_tags.is_empty() || 
-                mod_result.all_scores
-                    .as_ref()
-                    .and_then(|v| v.as_object())
-                    .map(|scores| scores.values().any(|v| v.as_f64().unwrap_or(0.0) > 0.5))
-                    .unwrap_or(false);
-            
-            (serde_json::to_value(&mod_result).ok(), is_flagged)
+        let moderation_result = if let Some(moderation_service) = &self.moderation_service {
+            moderation_service.check_content(content).await
+                .map_err(|e| AppError::InternalError(format!("Content moderation system error: {}. Please try again later or contact support if this persists.", e)))?
         } else {
-            (None, false)
+            crate::services::moderation_service::ModerationResult {
+                is_blocked: false,
+                violation_type: None,
+                details: None,
+                toxicity_tags: Vec::new(),
+                all_scores: None,
+            }
         };
         
-        // 3. Sentiment analysis
-        let sentiment_analysis = if let Some(sentiment_service) = &self.sentiment_service {
+        if moderation_result.is_blocked {
+            return Err(AppError::ValidationError(format!(
+                "Comment blocked by moderation: {}",
+                moderation_result.violation_type.clone().unwrap_or_else(|| "Policy violation".to_string())
+            )));
+        }
+
+        // 3. Sentiment analysis - analyze content for emotions (same as posts)
+        let (sentiment_score, sentiment_colors, sentiment_type) = if let Some(sentiment_service) = &self.sentiment_service {
             let sentiments = sentiment_service
                 .analyze_sentiment(content)
                 .await
                 .map_err(|e| AppError::InternalError(format!("Sentiment analysis failed: {}", e)))?;
-            serde_json::to_value(&sentiments).ok()
+            
+            if let Some(primary_sentiment) = sentiments.first() {
+                let score = (primary_sentiment.confidence - 0.5) * 2.0; // Convert confidence to score
+                let colors = vec![primary_sentiment.color_code.clone()];
+                let sentiment_type = Some(primary_sentiment.sentiment_type.to_string());
+                (Some(score), colors, sentiment_type)
+            } else {
+                (None, vec![], None)
+            }
         } else {
-            None
+            (None, vec![], None)
         };
         
         // 4. Create comment with full metadata (path and depth computed atomically)
@@ -158,9 +160,12 @@ impl CommentService {
             content: request.content.clone(),
             path: String::new(), // Will be computed atomically
             depth: 0, // Will be computed atomically
-            sentiment_analysis,
-            moderation_result,
-            is_flagged: is_flagged, // Store flagging state separate from blocking
+            sentiment_score,
+            sentiment_colors,
+            sentiment_type,
+            is_blocked: moderation_result.is_blocked,
+            toxicity_tags: moderation_result.toxicity_tags,
+            toxicity_scores: moderation_result.all_scores,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             reply_count: 0,
