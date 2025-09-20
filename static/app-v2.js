@@ -305,6 +305,71 @@ class ViewCache {
 // Initialize global cache
 const postsCache = new PostsCache();
 
+// Enhanced function to load comments for multiple posts efficiently
+async function loadCommentsForPosts(posts) {
+    const startTime = performance.now();
+    console.log(`🔄 COMMENT_BATCH_LOAD: Starting batch comment loading for ${posts.length} posts`);
+    
+    // Create promises for all comment fetches
+    const commentPromises = posts.map(async (post) => {
+        try {
+            // Check if comments are already cached and fresh
+            if (commentsCache.isFresh(post.id)) {
+                const cachedComments = commentsCache.get(post.id);
+                if (cachedComments) {
+                    post._comments = cachedComments; // Attach to post object
+                    loadedComments.add(post.id);
+                    return { postId: post.id, success: true, cached: true };
+                }
+            }
+            
+            // Fetch comments from API
+            const response = await fetch(`${API_BASE}/posts/${post.id}/comments`);
+            const data = await response.json();
+            
+            if (response.ok) {
+                const comments = data.comments || [];
+                
+                // Cache the comments
+                commentsCache.set(post.id, comments);
+                loadedComments.add(post.id);
+                
+                // Attach comments directly to post object for unified caching
+                post._comments = comments;
+                
+                return { postId: post.id, success: true, count: comments.length, cached: false };
+            } else {
+                console.warn(`⚠️ Failed to load comments for post ${post.id}:`, data);
+                return { postId: post.id, success: false, error: data.message };
+            }
+        } catch (error) {
+            console.error(`❌ Error loading comments for post ${post.id}:`, error);
+            return { postId: post.id, success: false, error: error.message };
+        }
+    });
+    
+    // Wait for all comment fetches to complete
+    const results = await Promise.all(commentPromises);
+    
+    // Log results
+    const successful = results.filter(r => r.success);
+    const cached = results.filter(r => r.cached);
+    const fetched = results.filter(r => r.success && !r.cached);
+    const failed = results.filter(r => !r.success);
+    
+    const duration = performance.now() - startTime;
+    console.log(`✅ COMMENT_BATCH_LOAD: Completed in ${duration.toFixed(2)}ms`);
+    console.log(`   📊 Results: ${successful.length}/${posts.length} successful`);
+    console.log(`   🗂️  From cache: ${cached.length}, Fetched: ${fetched.length}, Failed: ${failed.length}`);
+    
+    if (fetched.length > 0) {
+        const totalComments = fetched.reduce((sum, r) => sum + (r.count || 0), 0);
+        console.log(`   💬 Total comments loaded: ${totalComments}`);
+    }
+    
+    return results;
+}
+
 // Start automatic cache cleanup interval
 setInterval(() => {
     postsCache.performCleanup();
@@ -1330,6 +1395,10 @@ async function loadPosts(reset = true) {
             if (newPosts.length > 0) {
                 await loadVoteDataForPosts(newPosts);
             }
+            
+            // ENHANCED: Load comments for each post to enable full caching
+            console.log(`📦 POST_COMMENT_INTEGRATION: Loading comments for ${newPosts.length} posts`);
+            await loadCommentsForPosts(newPosts);
             
             // Update pagination state from server truth
             paginationState.hasMore = serverHasMore;
@@ -2898,15 +2967,23 @@ class CommentsCache {
 // Initialize comments cache
 const commentsCache = new CommentsCache();
 
-// Toggle comment section visibility
+// Enhanced toggle comment section visibility with cached comments support
 function toggleComments(postId) {
     const commentsSection = document.getElementById(`comments-${postId}`);
     const isHidden = commentsSection.classList.contains('hidden');
     
     if (isHidden) {
         commentsSection.classList.remove('hidden');
-        // Load comments if not already loaded
-        if (!loadedComments.has(postId)) {
+        
+        // Try to get comments from the cached post object first
+        const cachedPost = posts.find(p => p.id === postId);
+        if (cachedPost && cachedPost._comments) {
+            console.log(`📦 ENHANCED_COMMENTS: Using cached comments from post object for ${postId}`);
+            renderComments(postId, cachedPost._comments);
+            loadedComments.add(postId);
+        } else if (!loadedComments.has(postId)) {
+            // Fall back to separate comment loading if not cached with post
+            console.log(`📦 ENHANCED_COMMENTS: Loading comments separately for ${postId}`);
             loadComments(postId);
         }
     } else {
