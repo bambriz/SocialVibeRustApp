@@ -3560,9 +3560,7 @@ function renderReplies(replies, postId = null, depth = 1) {
                             aria-controls="replies-${reply.id}"
                             title="Click to expand ${reply.replies.length} replies">↳ ${reply.replies.length} replies</span>` : ''}
                     </div>
-                    <div class="emotion-voting" id="emotion-voting-${reply.id}">
-                        ${renderEmotionVoting(reply)}
-                    </div>
+                    <!-- Emotion voting removed temporarily -->
                 </div>
                 
                 <!-- Reply form for nested replies -->
