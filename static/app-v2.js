@@ -3322,7 +3322,7 @@ function renderComments(postId, comments) {
                 <div class="comment-actions">
                     ${authToken ? `<button onclick="showReplyForm('${comment.id}')" class="reply-btn">Reply</button>` : ''}
                     <div class="comment-stats">
-                        <span class="comment-popularity">⭐ ${(comment.popularity_score || 1.0).toFixed(1)}</span>
+                        <span class="comment-popularity">⭐ ${(comment.popularity_score || comment.comment?.popularity_score || 1.0).toFixed(1)}</span>
                     </div>
                 </div>
                 

@@ -71,6 +71,7 @@ pub fn public_routes() -> Router<crate::AppState> {
 }
 
 /// Protected comment routes (authentication required)
+/// Note: Authentication middleware is applied at the top level in api.rs
 pub fn protected_routes() -> Router<crate::AppState> {
     Router::new()
         // Create a new comment on a post
@@ -79,7 +80,6 @@ pub fn protected_routes() -> Router<crate::AppState> {
         .route("/comments/:comment_id", put(update_comment))
         // Delete a comment
         .route("/comments/:comment_id", delete(delete_comment))
-        // TODO: Add auth middleware - for now allowing access to protected routes
 }
 
 /// Legacy function for backward compatibility
