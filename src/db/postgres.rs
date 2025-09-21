@@ -235,10 +235,10 @@ impl PostRepository for PostgresPostRepository {
     async fn create_post(&self, post: &Post) -> Result<Post> {
         let row = sqlx::query!(
             r#"
-            INSERT INTO posts (id, user_id, content, title, sentiment_analysis, moderation_result, is_flagged, view_count)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO posts (id, user_id, content, title, sentiment_analysis, moderation_result, is_flagged, view_count, popularity_score)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id, user_id, content, title, sentiment_analysis, moderation_result, is_flagged, 
-                      created_at, updated_at, view_count
+                      created_at, updated_at, view_count, popularity_score
             "#,
             post.id,
             post.author_id,
@@ -255,7 +255,8 @@ impl PostRepository for PostgresPostRepository {
                 "is_blocked": post.is_blocked
             })).ok(),
             post.is_blocked,
-            0i32
+            0i32,
+            post.popularity_score
         )
         .fetch_one(&*self.pool)
         .await
@@ -284,7 +285,7 @@ impl PostRepository for PostgresPostRepository {
         let row = sqlx::query!(
             r#"
             SELECT p.id, p.user_id, p.content, p.title, p.sentiment_analysis, p.moderation_result, 
-                   p.is_flagged, p.created_at, p.updated_at, p.view_count, u.username
+                   p.is_flagged, p.created_at, p.updated_at, p.view_count, p.popularity_score, u.username
             FROM posts p
             JOIN users u ON p.user_id = u.id
             WHERE p.id = $1
@@ -311,7 +312,7 @@ impl PostRepository for PostgresPostRepository {
                 sentiment_score,
                 sentiment_colors,
                 sentiment_type,
-                popularity_score: 1.0,
+                popularity_score: r.popularity_score.unwrap_or(1.0) as f64,
                 is_blocked: r.is_flagged.unwrap_or(false),
                 toxicity_tags,
                 toxicity_scores,
@@ -323,7 +324,7 @@ impl PostRepository for PostgresPostRepository {
         let rows = sqlx::query!(
             r#"
             SELECT p.id, p.user_id, p.content, p.title, p.sentiment_analysis, p.moderation_result, 
-                   p.is_flagged, p.created_at, p.updated_at, p.view_count, u.username,
+                   p.is_flagged, p.created_at, p.updated_at, p.view_count, p.popularity_score, u.username,
                    (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.depth = 0) as root_comment_count
             FROM posts p
             JOIN users u ON p.user_id = u.id
@@ -353,7 +354,7 @@ impl PostRepository for PostgresPostRepository {
                 sentiment_score,
                 sentiment_colors,
                 sentiment_type,
-                popularity_score: 1.0,
+                popularity_score: r.popularity_score.unwrap_or(1.0) as f64,
                 is_blocked: r.is_flagged.unwrap_or(false),
                 toxicity_tags,
                 toxicity_scores,
@@ -362,28 +363,15 @@ impl PostRepository for PostgresPostRepository {
     }
     
     async fn get_posts_by_popularity(&self, limit: u32, offset: u32) -> Result<Vec<Post>> {
-        // ENHANCED: Proper popularity-based sorting with comment engagement and time decay
+        // Use stored popularity_score from database for proper ordering with Rust-calculated values
         let rows = sqlx::query!(
             r#"
             SELECT p.id, p.user_id, p.content, p.title, p.sentiment_analysis, p.moderation_result, 
-                   p.is_flagged, p.created_at, p.updated_at, p.view_count, u.username,
-                   (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.depth = 0) as root_comment_count,
-                   -- Calculate popularity score with enhanced comment engagement and time decay
-                   CASE 
-                       WHEN extract(epoch from (now() - p.created_at)) / 3600 <= 24 THEN
-                           -- Recent posts (≤24h): base sentiment + (comment_count * 0.3) + time boost
-                           COALESCE((p.sentiment_analysis->>'sentiment_score')::float, 1.0) + 
-                           ((SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id)::float * 0.3) +
-                           (1.0 + (24.0 - extract(epoch from (now() - p.created_at)) / 3600) * 0.05)
-                       ELSE
-                           -- Older posts: base sentiment + (comment_count * 0.3) + decay
-                           (COALESCE((p.sentiment_analysis->>'sentiment_score')::float, 1.0) + 
-                            ((SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id)::float * 0.3)) * 
-                           (1.0 / (1.0 + (extract(epoch from (now() - p.created_at)) / 3600 - 24.0) * 0.02))
-                   END as calculated_popularity
+                   p.is_flagged, p.created_at, p.updated_at, p.view_count, p.popularity_score, u.username,
+                   (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.depth = 0) as root_comment_count
             FROM posts p
             JOIN users u ON p.user_id = u.id
-            ORDER BY calculated_popularity DESC, p.created_at DESC
+            ORDER BY p.popularity_score DESC, p.created_at DESC
             LIMIT $1 OFFSET $2
             "#,
             limit as i64,
@@ -409,7 +397,7 @@ impl PostRepository for PostgresPostRepository {
                 sentiment_score,
                 sentiment_colors,
                 sentiment_type,
-                popularity_score: r.calculated_popularity.unwrap_or(1.0) as f64,
+                popularity_score: r.popularity_score.unwrap_or(1.0) as f64,
                 is_blocked: r.is_flagged.unwrap_or(false),
                 toxicity_tags,
                 toxicity_scores,
@@ -421,7 +409,7 @@ impl PostRepository for PostgresPostRepository {
         let rows = sqlx::query!(
             r#"
             SELECT p.id, p.user_id, p.content, p.title, p.sentiment_analysis, p.moderation_result, 
-                   p.is_flagged, p.created_at, p.updated_at, p.view_count, u.username,
+                   p.is_flagged, p.created_at, p.updated_at, p.view_count, p.popularity_score, u.username,
                    (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.depth = 0) as root_comment_count
             FROM posts p
             JOIN users u ON p.user_id = u.id
@@ -453,7 +441,7 @@ impl PostRepository for PostgresPostRepository {
                 sentiment_score,
                 sentiment_colors,
                 sentiment_type,
-                popularity_score: 1.0,
+                popularity_score: r.popularity_score.unwrap_or(1.0) as f64,
                 is_blocked: r.is_flagged.unwrap_or(false),
                 toxicity_tags,
                 toxicity_scores,
@@ -511,8 +499,16 @@ impl PostRepository for PostgresPostRepository {
         Ok(())
     }
     
-    async fn update_popularity_score(&self, _post_id: Uuid, _score: f64) -> Result<()> {
-        // Popularity score not stored in database - calculated on demand
+    async fn update_popularity_score(&self, post_id: Uuid, score: f64) -> Result<()> {
+        sqlx::query!(
+            "UPDATE posts SET popularity_score = $1 WHERE id = $2",
+            score,
+            post_id
+        )
+        .execute(&*self.pool)
+        .await
+        .map_err(|e| AppError::DatabaseError(format!("Failed to update popularity score: {}", e)))?;
+        
         Ok(())
     }
     
