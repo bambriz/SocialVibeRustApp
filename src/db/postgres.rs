@@ -269,7 +269,7 @@ impl PostRepository for PostgresPostRepository {
             author_username: post.author_username.clone(),
             created_at: row.created_at,
             updated_at: row.updated_at,
-            comment_count: 0,
+            comment_count: 0, // Will be calculated separately
             sentiment_score: post.sentiment_score,
             sentiment_colors: post.sentiment_colors.clone(),
             sentiment_type: post.sentiment_type.clone(),
@@ -307,7 +307,7 @@ impl PostRepository for PostgresPostRepository {
                 author_username: r.username,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
-                comment_count: 0, // Will be calculated separately
+                comment_count: 0, // Will be calculated separately // Will be calculated separately
                 sentiment_score,
                 sentiment_colors,
                 sentiment_type,
@@ -323,7 +323,8 @@ impl PostRepository for PostgresPostRepository {
         let rows = sqlx::query!(
             r#"
             SELECT p.id, p.user_id, p.content, p.title, p.sentiment_analysis, p.moderation_result, 
-                   p.is_flagged, p.created_at, p.updated_at, p.view_count, u.username
+                   p.is_flagged, p.created_at, p.updated_at, p.view_count, u.username,
+                   (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.depth = 0) as root_comment_count
             FROM posts p
             JOIN users u ON p.user_id = u.id
             ORDER BY p.created_at DESC
@@ -348,7 +349,7 @@ impl PostRepository for PostgresPostRepository {
                 author_username: r.username,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
-                comment_count: 0,
+                comment_count: 0, // Will be calculated separately
                 sentiment_score,
                 sentiment_colors,
                 sentiment_type,
@@ -396,7 +397,7 @@ impl PostRepository for PostgresPostRepository {
                 author_username: r.username,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
-                comment_count: 0,
+                comment_count: 0, // Will be calculated separately
                 sentiment_score,
                 sentiment_colors,
                 sentiment_type,
@@ -454,7 +455,7 @@ impl PostRepository for PostgresPostRepository {
     }
     
     async fn increment_comment_count(&self, _post_id: Uuid) -> Result<()> {
-        // Comment count not stored in database - calculated on demand
+        // Comment count calculated on-demand in get_posts_by_popularity 
         Ok(())
     }
     

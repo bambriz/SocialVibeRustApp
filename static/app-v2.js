@@ -3036,6 +3036,11 @@ async function loadComments(postId) {
             const comments = Array.isArray(data) ? data : data.comments || [];
             console.log(`🔍 COMMENT_LOAD_DEBUG: Post ${postId} - API returned ${comments.length} comments`);
             
+            // Calculate and update root comment count (depth = 0 only)  
+            const rootCommentCount = comments.filter(comment => comment.depth === 0).length;
+            console.log(`📊 COMMENT_COUNT: Post ${postId} - ${rootCommentCount} root comments, ${comments.length} total`);
+            updatePostCommentCountInUI(postId, rootCommentCount);
+            
             // Cache the comments
             commentsCache.set(postId, comments);
             loadedComments.add(postId);
@@ -3323,6 +3328,7 @@ function renderComments(postId, comments) {
                     ${authToken ? `<button onclick="showReplyForm('${comment.id}')" class="reply-btn">Reply</button>` : ''}
                     <div class="comment-stats">
                         <span class="comment-popularity">⭐ ${(comment.popularity_score || comment.comment?.popularity_score || 1.0).toFixed(1)}</span>
+                        ${comment.reply_count > 0 ? `<span class="comment-replies">↳ ${comment.reply_count} replies</span>` : ''}
                     </div>
                 </div>
                 
@@ -3569,6 +3575,15 @@ function updatePostCommentCount(postId) {
             const currentCount = parseInt(match[1]);
             commentButton.innerHTML = `💬 ${currentCount + 1} comments`;
         }
+    }
+}
+
+// Update post comment count in UI with specific count  
+function updatePostCommentCountInUI(postId, count) {
+    const commentButton = document.querySelector(`button[onclick="toggleComments('${postId}')"]`);
+    if (commentButton) {
+        commentButton.innerHTML = `💬 ${count} comments`;
+        console.log(`📊 Updated post ${postId} comment count to ${count}`);
     }
 }
 
