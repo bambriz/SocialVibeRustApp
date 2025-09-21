@@ -3340,15 +3340,15 @@ function renderComments(postId, comments) {
                     <div class="comment-stats">
                         <span class="comment-popularity">⭐ ${(comment.popularity_score || comment.comment?.popularity_score || 1.0).toFixed(1)}</span>
                         ${(() => {
-                            const directReplyCount = calculateDirectReplyCount(comments, comment.id);
-                            return directReplyCount > 0 ? `<span class="comment-replies clickable" 
+                            const replyCount = comment.replies ? comment.replies.length : 0;
+                            return replyCount > 0 ? `<span class="comment-replies clickable" 
                                 data-comment-id="${comment.id}" 
-                                data-reply-count="${directReplyCount}"
+                                data-reply-count="${replyCount}"
                                 role="button" 
                                 tabindex="0" 
                                 aria-expanded="false"
                                 aria-controls="replies-${comment.id}"
-                                title="Click to expand ${directReplyCount} replies">↳ ${directReplyCount} replies</span>` : '';
+                                title="Click to expand ${replyCount} replies">↳ ${replyCount} replies</span>` : '';
                         })()}
                     </div>
                 </div>

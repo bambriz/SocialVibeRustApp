@@ -261,19 +261,82 @@ impl CommentService {
         }
             
         // Fetch author information for all comments
-        let mut responses = Vec::new();
+        let mut comment_responses = Vec::new();
         for comment in comments {
             let author = self.user_repo.get_user_by_id(comment.user_id).await?;
-            responses.push(CommentResponse {
+            comment_responses.push(CommentResponse {
                 comment,
                 author,
-                replies: vec![], // TODO: Build hierarchical structure  
+                replies: vec![], // Will be populated in build_hierarchical_structure
                 can_modify: false, // TODO: Check permissions
                 is_collapsed: false,
             });
         }
+
+        // Build hierarchical structure
+        let hierarchical_comments = self.build_hierarchical_structure(comment_responses);
+
+        Ok(hierarchical_comments)
+    }
+
+    /// Build hierarchical comment structure from flat list
+    fn build_hierarchical_structure(&self, comments: Vec<CommentResponse>) -> Vec<CommentResponse> {
+        use std::collections::HashMap;
+        
+        // Create a map of comment ID to comment for quick lookup
+        let mut comment_map: HashMap<Uuid, CommentResponse> = HashMap::new();
+        for comment in comments {
+            comment_map.insert(comment.comment.id, comment);
+        }
+        
+        // Build the hierarchy
+        let mut root_comments = Vec::new();
+        let mut comments_to_process: Vec<_> = comment_map.into_iter().collect();
+        
+        // First pass: identify root comments
+        let mut i = 0;
+        while i < comments_to_process.len() {
+            let (id, comment) = &comments_to_process[i];
+            if comment.comment.parent_id.is_none() {
+                // This is a root comment
+                let (_, root_comment) = comments_to_process.remove(i);
+                root_comments.push(root_comment);
+            } else {
+                i += 1;
+            }
+        }
+        
+        // Recursive function to build children for each comment
+        fn build_children(
+            parent_id: Uuid,
+            remaining_comments: &mut Vec<(Uuid, CommentResponse)>
+        ) -> Vec<CommentResponse> {
+            let mut children = Vec::new();
+            let mut i = 0;
             
-        Ok(responses)
+            while i < remaining_comments.len() {
+                let (_, comment) = &remaining_comments[i];
+                if comment.comment.parent_id == Some(parent_id) {
+                    // This comment is a child of the current parent
+                    let (child_id, mut child_comment) = remaining_comments.remove(i);
+                    
+                    // Recursively build this child's children
+                    child_comment.replies = build_children(child_id, remaining_comments);
+                    children.push(child_comment);
+                } else {
+                    i += 1;
+                }
+            }
+            
+            children
+        }
+        
+        // Build children for each root comment
+        for root_comment in &mut root_comments {
+            root_comment.replies = build_children(root_comment.comment.id, &mut comments_to_process);
+        }
+        
+        root_comments
     }
     
     /// Sort comments by popularity while preserving hierarchical structure
