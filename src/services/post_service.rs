@@ -1,7 +1,7 @@
 use crate::models::Post;
 use crate::models::post::{CreatePostRequest, PostResponse};
 use crate::models::sentiment::{Sentiment, SentimentType};
-use crate::db::repository::{PostRepository, CsvPostRepository};
+use crate::db::repository::PostRepository;
 use crate::services::{SentimentService, ModerationService, VoteService};
 use crate::{AppError, Result};
 use crate::error::ContentModerationError;
@@ -11,7 +11,6 @@ use chrono::Utc;
 
 pub struct PostService {
     primary_repo: Arc<dyn PostRepository>,
-    csv_fallback_repo: Arc<CsvPostRepository>,
     sentiment_service: Arc<SentimentService>,
     moderation_service: Arc<ModerationService>,
     vote_service: Option<Arc<VoteService>>,
@@ -20,13 +19,11 @@ pub struct PostService {
 impl PostService {
     pub fn new(
         primary_repo: Arc<dyn PostRepository>, 
-        csv_fallback_repo: Arc<CsvPostRepository>,
         sentiment_service: Arc<SentimentService>,
         moderation_service: Arc<ModerationService>
     ) -> Self {
         Self { 
             primary_repo,
-            csv_fallback_repo,
             sentiment_service,
             moderation_service,
             vote_service: None
@@ -36,115 +33,18 @@ impl PostService {
     /// Create PostService with VoteService integration
     pub fn new_with_vote_service(
         primary_repo: Arc<dyn PostRepository>, 
-        csv_fallback_repo: Arc<CsvPostRepository>,
         sentiment_service: Arc<SentimentService>,
         moderation_service: Arc<ModerationService>,
         vote_service: Arc<VoteService>
     ) -> Self {
         Self { 
             primary_repo,
-            csv_fallback_repo,
             sentiment_service,
             moderation_service,
             vote_service: Some(vote_service)
         }
     }
     
-    // Helper method to try primary repository first, then fall back to CSV (for read operations)
-    async fn try_with_fallback<T, F, C, PrimFut, CsvFut>(&self, operation_name: &str, primary_op: F, csv_op: C) -> Result<T>
-    where
-        F: FnOnce() -> PrimFut,
-        C: FnOnce() -> CsvFut,
-        PrimFut: std::future::Future<Output = Result<T>>,
-        CsvFut: std::future::Future<Output = Result<T>>,
-        T: Clone + std::fmt::Debug,
-    {
-        // Enhanced trace logging for fallback testing
-        tracing::info!("🔄 FALLBACK_TRACE: Starting {} operation", operation_name);
-        
-        match primary_op().await {
-            Ok(result) => {
-                tracing::info!("✅ FALLBACK_TRACE: {} succeeded with primary repository", operation_name);
-                tracing::debug!("Primary repository result: {:?}", result);
-                Ok(result)
-            }
-            Err(primary_error) => {
-                tracing::error!("❌ FALLBACK_TRACE: {} failed with primary repository: {:?}", operation_name, primary_error);
-                tracing::warn!("🔄 FALLBACK_TRACE: Attempting CSV fallback for {}", operation_name);
-                
-                match csv_op().await {
-                    Ok(csv_result) => {
-                        tracing::info!("✅ FALLBACK_TRACE: {} succeeded with CSV fallback repository", operation_name);
-                        tracing::info!("📄 FALLBACK_TRACE: CSV operation completed successfully");
-                        tracing::debug!("CSV fallback result: {:?}", csv_result);
-                        Ok(csv_result)
-                    }
-                    Err(csv_error) => {
-                        tracing::error!("❌ FALLBACK_TRACE: {} failed with CSV fallback: {:?}", operation_name, csv_error);
-                        tracing::error!("💥 FALLBACK_TRACE: Both repositories failed for {}", operation_name);
-                        Err(AppError::InternalError(format!(
-                            "Both primary and CSV fallback repositories failed. Primary: {:?}, CSV: {:?}", 
-                            primary_error, csv_error
-                        )))
-                    }
-                }
-            }
-        }
-    }
-
-    // Helper method to write to both primary and CSV repositories (for persistence)
-    async fn write_to_both_repositories<T, F, C, PrimFut, CsvFut>(&self, operation_name: &str, primary_op: F, csv_op: C) -> Result<T>
-    where
-        F: FnOnce() -> PrimFut,
-        C: FnOnce() -> CsvFut,
-        PrimFut: std::future::Future<Output = Result<T>>,
-        CsvFut: std::future::Future<Output = Result<T>>,
-        T: Clone + std::fmt::Debug,
-    {
-        tracing::info!("🔄 PERSISTENCE_TRACE: Starting {} operation (write to both repositories)", operation_name);
-        
-        // Always try primary repository first
-        match primary_op().await {
-            Ok(result) => {
-                tracing::info!("✅ PERSISTENCE_TRACE: {} succeeded with primary repository", operation_name);
-                tracing::debug!("Primary repository result: {:?}", result);
-                
-                // Also write to CSV for backup persistence (don't fail if CSV fails)
-                match csv_op().await {
-                    Ok(_) => {
-                        tracing::info!("📄 PERSISTENCE_TRACE: {} also persisted to CSV backup successfully", operation_name);
-                    }
-                    Err(csv_error) => {
-                        tracing::warn!("⚠️ PERSISTENCE_TRACE: {} failed to persist to CSV backup (non-fatal): {:?}", operation_name, csv_error);
-                        // Don't fail the operation if CSV backup fails - it's just a backup
-                    }
-                }
-                
-                Ok(result)
-            }
-            Err(primary_error) => {
-                tracing::error!("❌ PERSISTENCE_TRACE: {} failed with primary repository: {:?}", operation_name, primary_error);
-                tracing::warn!("🔄 PERSISTENCE_TRACE: Attempting CSV fallback for {}", operation_name);
-                
-                // If primary fails, try CSV as fallback
-                match csv_op().await {
-                    Ok(csv_result) => {
-                        tracing::info!("✅ PERSISTENCE_TRACE: {} succeeded with CSV fallback repository", operation_name);
-                        tracing::debug!("CSV fallback result: {:?}", csv_result);
-                        Ok(csv_result)
-                    }
-                    Err(csv_error) => {
-                        tracing::error!("❌ PERSISTENCE_TRACE: {} failed with CSV fallback: {:?}", operation_name, csv_error);
-                        tracing::error!("💥 PERSISTENCE_TRACE: Both repositories failed for {}", operation_name);
-                        Err(AppError::InternalError(format!(
-                            "Both primary and CSV repositories failed. Primary: {:?}, CSV: {:?}", 
-                            primary_error, csv_error
-                        )))
-                    }
-                }
-            }
-        }
-    }
 
     pub async fn create_post(&self, request: CreatePostRequest, author_id: Uuid, author_username: String) -> Result<PostResponse> {
         // Analyze title and body separately with body bias
@@ -265,12 +165,7 @@ impl PostService {
             toxicity_scores: moderation_result.all_scores, // Include diagnostic scores from moderation service
         };
         
-        // Write to both primary and CSV repositories for persistence
-        let created_post = self.write_to_both_repositories(
-            "create_post",
-            || self.primary_repo.create_post(&post),
-            || self.csv_fallback_repo.create_post(&post),
-        ).await?;
+        let created_post = self.primary_repo.create_post(&post).await?;
         Ok(PostResponse::from(created_post))
     }
 
@@ -342,21 +237,13 @@ impl PostService {
 
     pub async fn get_post(&self, post_id: Uuid) -> Result<Option<PostResponse>> {
         // Try primary repository first, then fallback to CSV using helper method
-        let post = self.try_with_fallback(
-            "get_post_by_id",
-            || self.primary_repo.get_post_by_id(post_id),
-            || self.csv_fallback_repo.get_post_by_id(post_id),
-        ).await?;
+        let post = self.primary_repo.get_post_by_id(post_id).await?;
         Ok(post.map(PostResponse::from))
     }
 
     pub async fn get_posts_feed(&self, limit: u32, offset: u32) -> Result<Vec<PostResponse>> {
         // Try primary repository first, then fallback to CSV using helper method
-        let mut posts = self.try_with_fallback(
-            "get_posts_by_popularity",
-            || self.primary_repo.get_posts_by_popularity(limit, offset),
-            || self.csv_fallback_repo.get_posts_by_popularity(limit, offset),
-        ).await?;
+        let mut posts = self.primary_repo.get_posts_by_popularity(limit, offset).await?;
         
         // Update popularity scores for loaded posts (dynamic decay and engagement updates)
         for post in &mut posts {
@@ -364,11 +251,7 @@ impl PostService {
             
             // Only update if the score has changed significantly (avoid unnecessary writes)
             if (updated_score - post.popularity_score).abs() > 0.1 {
-                let _ = self.write_to_both_repositories(
-                    "update_popularity_score",
-                    || self.primary_repo.update_popularity_score(post.id, updated_score),
-                    || self.csv_fallback_repo.update_popularity_score(post.id, updated_score)
-                ).await;
+                let _ = self.primary_repo.update_popularity_score(post.id, updated_score).await;
                 
                 post.popularity_score = updated_score;
                 tracing::debug!("📊 Updated post {} popularity from loading: {:.2}", post.id, updated_score);
@@ -391,11 +274,7 @@ impl PostService {
         let new_popularity_score = self.calculate_popularity_score(&post).await;
         
         // Update the popularity score (this will trigger repository update if needed)
-        let _ = self.write_to_both_repositories(
-            "update_popularity_score",
-            || self.primary_repo.update_popularity_score(post.id, new_popularity_score),
-            || self.csv_fallback_repo.update_popularity_score(post.id, new_popularity_score)
-        ).await;
+        let _ = self.primary_repo.update_popularity_score(post.id, new_popularity_score).await;
         
         tracing::debug!("📊 Updated popularity score for post {} to {}", post_id, new_popularity_score);
         Ok(())
@@ -528,11 +407,7 @@ impl PostService {
         let new_popularity_score = self.calculate_popularity_score(&post).await;
         
         // Update the popularity score (this will trigger repository update if needed)
-        let _ = self.write_to_both_repositories(
-            "update_popularity_score",
-            || self.primary_repo.update_popularity_score(post.id, new_popularity_score),
-            || self.csv_fallback_repo.update_popularity_score(post.id, new_popularity_score)
-        ).await;
+        let _ = self.primary_repo.update_popularity_score(post.id, new_popularity_score).await;
         
         tracing::debug!("📊 Updated post {} popularity to {:.2} after comment activity", post_id, new_popularity_score);
         Ok(())
@@ -565,11 +440,7 @@ impl PostService {
     
     pub async fn get_posts_paginated(&self, limit: u32, offset: u32) -> Result<Vec<PostResponse>> {
         // Try primary repository first, then fallback to CSV using helper method
-        let posts = self.try_with_fallback(
-            "get_posts_paginated",
-            || self.primary_repo.get_posts_paginated(limit, offset),
-            || self.csv_fallback_repo.get_posts_paginated(limit, offset),
-        ).await?;
+        let posts = self.primary_repo.get_posts_paginated(limit, offset).await?;
         
         Ok(posts.into_iter().map(PostResponse::from).collect())
     }
@@ -577,22 +448,14 @@ impl PostService {
     /// Get posts for a specific user with pagination
     pub async fn get_posts_by_user(&self, user_id: uuid::Uuid, limit: u32, offset: u32) -> Result<Vec<PostResponse>> {
         // Try primary repository first, then fallback to CSV using helper method
-        let posts = self.try_with_fallback(
-            "get_posts_by_user",
-            || self.primary_repo.get_posts_by_user(user_id, limit, offset),
-            || self.csv_fallback_repo.get_posts_by_user(user_id, limit, offset),
-        ).await?;
+        let posts = self.primary_repo.get_posts_by_user(user_id, limit, offset).await?;
         
         Ok(posts.into_iter().map(PostResponse::from).collect())
     }
     
     pub async fn update_post(&self, post_id: Uuid, request: CreatePostRequest, author_id: Uuid) -> Result<PostResponse> {
         // First, get the existing post using fallback helper
-        let existing_post = match self.try_with_fallback(
-            "get_post_by_id_for_update",
-            || self.primary_repo.get_post_by_id(post_id),
-            || self.csv_fallback_repo.get_post_by_id(post_id),
-        ).await? {
+        let existing_post = match self.primary_repo.get_post_by_id(post_id).await? {
             Some(post) => post,
             None => return Err(AppError::NotFound("Post not found".to_string())),
         };
@@ -635,23 +498,14 @@ impl PostService {
         // Update popularity score
         updated_post.popularity_score = self.calculate_popularity_score_from_sentiment(&sentiments);
         
-        // Write to both primary and CSV repositories for persistence
-        let result_post = self.write_to_both_repositories(
-            "update_post",
-            || self.primary_repo.update_post(&updated_post),
-            || self.csv_fallback_repo.update_post(&updated_post),
-        ).await?;
+        let result_post = self.primary_repo.update_post(&updated_post).await?;
         
         Ok(PostResponse::from(result_post))
     }
     
     pub async fn delete_post(&self, post_id: Uuid, author_id: Uuid) -> Result<()> {
         // First, get the existing post to verify ownership using fallback helper
-        let existing_post = match self.try_with_fallback(
-            "get_post_by_id_for_delete",
-            || self.primary_repo.get_post_by_id(post_id),
-            || self.csv_fallback_repo.get_post_by_id(post_id),
-        ).await? {
+        let existing_post = match self.primary_repo.get_post_by_id(post_id).await? {
             Some(post) => post,
             None => return Err(AppError::NotFound("Post not found".to_string())),
         };
@@ -661,12 +515,7 @@ impl PostService {
             return Err(AppError::AuthError("Not authorized to delete this post".to_string()));
         }
         
-        // Write to both primary and CSV repositories for persistence
-        self.write_to_both_repositories(
-            "delete_post",
-            || async { self.primary_repo.delete_post(post_id).await.map(|_| ()) },
-            || async { self.csv_fallback_repo.delete_post(post_id).await.map(|_| ()) },
-        ).await?;
+        self.primary_repo.delete_post(post_id).await?;
         
         Ok(())
     }
@@ -686,11 +535,7 @@ impl PostService {
         };
         
         // Get posts with old sentiment types from both repositories
-        let posts_with_old_sentiments = self.try_with_fallback(
-            "get_posts_with_old_sentiment_types",
-            || self.primary_repo.get_posts_with_old_sentiment_types(),
-            || self.csv_fallback_repo.get_posts_with_old_sentiment_types()
-        ).await?;
+        let posts_with_old_sentiments = self.primary_repo.get_posts_with_old_sentiment_types().await?;
         
         migration_result.posts_requiring_migration = posts_with_old_sentiments.len();
         
@@ -776,20 +621,11 @@ impl PostService {
         };
         
         // Update post sentiment in both repositories
-        self.write_to_both_repositories(
-            "update_post_sentiment",
-            || self.primary_repo.update_post_sentiment(
-                post.id, 
-                sentiment_info.sentiment_type.clone(), 
-                sentiment_info.sentiment_colors.clone(), 
-                sentiment_info.sentiment_score
-            ),
-            || self.csv_fallback_repo.update_post_sentiment(
-                post.id, 
-                sentiment_info.sentiment_type.clone(), 
-                sentiment_info.sentiment_colors.clone(), 
-                sentiment_info.sentiment_score
-            )
+        self.primary_repo.update_post_sentiment(
+            post.id, 
+            sentiment_info.sentiment_type.clone(), 
+            sentiment_info.sentiment_colors.clone(), 
+            sentiment_info.sentiment_score
         ).await?;
         
         // Recalculate and update popularity score based on new sentiment
@@ -799,22 +635,14 @@ impl PostService {
             vec![]
         });
         
-        let _ = self.write_to_both_repositories(
-            "update_popularity_score",
-            || self.primary_repo.update_popularity_score(post.id, new_popularity_score),
-            || self.csv_fallback_repo.update_popularity_score(post.id, new_popularity_score)
-        ).await;
+        let _ = self.primary_repo.update_popularity_score(post.id, new_popularity_score).await;
         
         Ok(sentiment_info)
     }
     
     /// Check if migration is needed (posts with old emotion types exist)
     pub async fn is_migration_needed(&self) -> Result<bool> {
-        let posts_with_old_sentiments = self.try_with_fallback(
-            "get_posts_with_old_sentiment_types",
-            || self.primary_repo.get_posts_with_old_sentiment_types(),
-            || self.csv_fallback_repo.get_posts_with_old_sentiment_types()
-        ).await?;
+        let posts_with_old_sentiments = self.primary_repo.get_posts_with_old_sentiment_types().await?;
         
         Ok(!posts_with_old_sentiments.is_empty())
     }
