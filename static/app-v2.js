@@ -1404,6 +1404,16 @@ async function loadPosts(reset = true) {
             await loadCommentsForPosts(newPosts);
             console.log(`📦 POST_COMMENT_INTEGRATION: Comments attached to ${newPosts.filter(p => p._comments).length}/${newPosts.length} posts`);
             
+            // Update comment counts for all posts after loading comments
+            console.log(`🔄 POST_COMMENT_INTEGRATION: Updating comment counts for all posts`);
+            newPosts.forEach(post => {
+                const comments = commentsCache.get(post.id);
+                if (comments) {
+                    const rootCount = calculateRootCommentCount(comments);
+                    updatePostCommentCountInUI(post.id, rootCount);
+                }
+            });
+            
             // Update pagination state from server truth
             paginationState.hasMore = serverHasMore;
             paginationState.offset += newPosts.length;
@@ -3037,7 +3047,7 @@ async function loadComments(postId) {
             console.log(`🔍 COMMENT_LOAD_DEBUG: Post ${postId} - API returned ${comments.length} comments`);
             
             // Calculate and update root comment count (depth = 0 only)  
-            const rootCommentCount = comments.filter(comment => comment.depth === 0).length;
+            const rootCommentCount = calculateRootCommentCount(comments);
             console.log(`📊 COMMENT_COUNT: Post ${postId} - ${rootCommentCount} root comments, ${comments.length} total`);
             updatePostCommentCountInUI(postId, rootCommentCount);
             
@@ -3328,7 +3338,10 @@ function renderComments(postId, comments) {
                     ${authToken ? `<button onclick="showReplyForm('${comment.id}')" class="reply-btn">Reply</button>` : ''}
                     <div class="comment-stats">
                         <span class="comment-popularity">⭐ ${(comment.popularity_score || comment.comment?.popularity_score || 1.0).toFixed(1)}</span>
-                        ${comment.reply_count > 0 ? `<span class="comment-replies">↳ ${comment.reply_count} replies</span>` : ''}
+                        ${(() => {
+                            const directReplyCount = calculateDirectReplyCount(comments, comment.id);
+                            return directReplyCount > 0 ? `<span class="comment-replies">↳ ${directReplyCount} replies</span>` : '';
+                        })()}
                     </div>
                 </div>
                 
@@ -3585,6 +3598,24 @@ function updatePostCommentCountInUI(postId, count) {
         commentButton.innerHTML = `💬 ${count} comments`;
         console.log(`📊 Updated post ${postId} comment count to ${count}`);
     }
+}
+
+// Calculate root comment count from comments array (depth 0 or no parent)
+function calculateRootCommentCount(comments) {
+    if (!comments || !Array.isArray(comments)) return 0;
+    return comments.filter(comment => {
+        // Use depth if available, otherwise fallback to parent_id check
+        if (comment.depth !== undefined) {
+            return comment.depth === 0;
+        }
+        return comment.parent_id === null || comment.parent_id === undefined;
+    }).length;
+}
+
+// Calculate direct reply count for a specific comment
+function calculateDirectReplyCount(comments, commentId) {
+    if (!comments || !Array.isArray(comments)) return 0;
+    return comments.filter(comment => comment.parent_id === commentId).length;
 }
 
 // Show reply form
