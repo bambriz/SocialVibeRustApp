@@ -6,7 +6,7 @@
  */
 
 use crate::models::comment::{Comment, CreateCommentRequest, CommentResponse};
-use crate::db::repository::CommentRepository;
+use crate::db::repository::{CommentRepository, UserRepository};
 use crate::services::sentiment_service::SentimentService;
 use crate::services::moderation_service::ModerationService;
 use crate::services::vote_service::VoteService;
@@ -24,6 +24,7 @@ const DEPTH_INCREMENT: i32 = 1;
 /// Enhanced comment service with sentiment analysis and hierarchy
 pub struct CommentService {
     comment_repo: Arc<dyn CommentRepository>,
+    user_repo: Arc<dyn UserRepository>,
     sentiment_service: Option<Arc<SentimentService>>,
     moderation_service: Option<Arc<ModerationService>>,
     vote_service: Option<Arc<VoteService>>,
@@ -35,12 +36,14 @@ impl CommentService {
     /// Create CommentService with AI services (enhanced version)
     pub fn new_with_ai(
         comment_repo: Arc<dyn CommentRepository>,
+        user_repo: Arc<dyn UserRepository>,
         sentiment_service: Option<Arc<SentimentService>>,
         moderation_service: Option<Arc<ModerationService>>,
         vote_service: Option<Arc<VoteService>>,
     ) -> Self {
         Self { 
             comment_repo,
+            user_repo,
             sentiment_service,
             moderation_service,
             vote_service,
@@ -222,9 +225,12 @@ impl CommentService {
             saved_comment.id
         );
         
+        // Fetch author information
+        let author = self.user_repo.get_user_by_id(saved_comment.user_id).await?;
+        
         Ok(CommentResponse {
             comment: saved_comment,
-            author: None, // TODO: Fetch author info from user service
+            author,
             replies: vec![],
             can_modify: true,
             is_collapsed: false,
@@ -251,16 +257,18 @@ impl CommentService {
             comments = self.sort_comments_by_popularity(comments).await;
         }
             
-        let responses = comments
-            .into_iter()
-            .map(|comment| CommentResponse {
+        // Fetch author information for all comments
+        let mut responses = Vec::new();
+        for comment in comments {
+            let author = self.user_repo.get_user_by_id(comment.user_id).await?;
+            responses.push(CommentResponse {
                 comment,
-                author: None, // TODO: Fetch author info
-                replies: vec![], // TODO: Build hierarchical structure
+                author,
+                replies: vec![], // TODO: Build hierarchical structure  
                 can_modify: false, // TODO: Check permissions
                 is_collapsed: false,
-            })
-            .collect();
+            });
+        }
             
         Ok(responses)
     }

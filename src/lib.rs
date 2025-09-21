@@ -44,6 +44,7 @@ impl AppState {
         
         let comment_service = std::sync::Arc::new(services::CommentService::new_with_ai(
             db.comment_repo.clone(),
+            db.user_repo.clone(),
             Some(sentiment_service.clone()),
             Some(moderation_service.clone()),
             Some(vote_service.clone())
