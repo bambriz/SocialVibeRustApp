@@ -362,8 +362,59 @@ impl PostRepository for PostgresPostRepository {
     }
     
     async fn get_posts_by_popularity(&self, limit: u32, offset: u32) -> Result<Vec<Post>> {
-        // For now, same as paginated until we add popularity scoring
-        self.get_posts_paginated(limit, offset).await
+        // ENHANCED: Proper popularity-based sorting with comment engagement and time decay
+        let rows = sqlx::query!(
+            r#"
+            SELECT p.id, p.user_id, p.content, p.title, p.sentiment_analysis, p.moderation_result, 
+                   p.is_flagged, p.created_at, p.updated_at, p.view_count, u.username,
+                   (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.depth = 0) as root_comment_count,
+                   -- Calculate popularity score with enhanced comment engagement and time decay
+                   CASE 
+                       WHEN extract(epoch from (now() - p.created_at)) / 3600 <= 24 THEN
+                           -- Recent posts (≤24h): base sentiment + (comment_count * 0.3) + time boost
+                           COALESCE((p.sentiment_analysis->>'sentiment_score')::float, 1.0) + 
+                           ((SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id)::float * 0.3) +
+                           (1.0 + (24.0 - extract(epoch from (now() - p.created_at)) / 3600) * 0.05)
+                       ELSE
+                           -- Older posts: base sentiment + (comment_count * 0.3) + decay
+                           (COALESCE((p.sentiment_analysis->>'sentiment_score')::float, 1.0) + 
+                            ((SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id)::float * 0.3)) * 
+                           (1.0 / (1.0 + (extract(epoch from (now() - p.created_at)) / 3600 - 24.0) * 0.02))
+                   END as calculated_popularity
+            FROM posts p
+            JOIN users u ON p.user_id = u.id
+            ORDER BY calculated_popularity DESC, p.created_at DESC
+            LIMIT $1 OFFSET $2
+            "#,
+            limit as i64,
+            offset as i64
+        )
+        .fetch_all(&*self.pool)
+        .await
+        .map_err(|e| AppError::DatabaseError(format!("Failed to get posts by popularity: {}", e)))?;
+        
+        Ok(rows.into_iter().map(|r| {
+            let (sentiment_score, sentiment_colors, sentiment_type) = Self::parse_sentiment_json(&r.sentiment_analysis);
+            let (toxicity_tags, toxicity_scores) = Self::parse_moderation_json(&r.moderation_result);
+            
+            Post {
+                id: r.id,
+                title: r.title.unwrap_or_default(),
+                content: r.content,
+                author_id: r.user_id,
+                author_username: r.username,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+                comment_count: r.root_comment_count.unwrap_or(0) as u32,
+                sentiment_score,
+                sentiment_colors,
+                sentiment_type,
+                popularity_score: r.calculated_popularity.unwrap_or(1.0) as f64,
+                is_blocked: r.is_flagged.unwrap_or(false),
+                toxicity_tags,
+                toxicity_scores,
+            }
+        }).collect())
     }
     
     async fn get_posts_by_user(&self, user_id: Uuid, limit: u32, offset: u32) -> Result<Vec<Post>> {
