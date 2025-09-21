@@ -2009,34 +2009,37 @@ function handleTouchEnd(e) {
 }
 
 function getSentimentClass(post) {
-    if (!post.sentiment_colors || post.sentiment_colors.length === 0) {
+    // Check if we have sentiment analysis data from the backend
+    if (!post.sentiment_analysis || !post.sentiment_analysis.primary_emotion) {
         return 'sentiment-neutral';
     }
     
-    // Use the first sentiment color to determine class
-    const primaryColor = post.sentiment_colors[0];
+    // Use the primary emotion from sentiment analysis
+    const primaryEmotion = post.sentiment_analysis.primary_emotion.toLowerCase();
     
-    // Map colors to sentiment classes (updated with new backend colors)
-    const colorToClass = {
-        '#fbbf24': 'sentiment-joy',        // Bright yellow/gold - Joy 😊 (matches backend)
-        '#1e3a8a': 'sentiment-sad',        // Dark blue - Sad
-        '#dc2626': 'sentiment-angry',      // Red - Angry
-        '#a16207': 'sentiment-confused',   // Brown/amber - Confused
-        '#84cc16': 'sentiment-disgust',    // Lime green - Disgust 🤢
-        '#f97316': 'sentiment-surprise',   // Orange - Surprise 😲
-        '#374151': 'sentiment-fear',       // Dark grey - Fear
-        '#6b7280': 'sentiment-neutral',    // Neutral gray - Neutral (matches backend)
-        '#ec4899': 'sentiment-affection',  // Pink - Affection
-        '#7c3aed': 'sentiment-sarcastic'   // Purple - Sarcastic
+    // Map emotion names to sentiment classes
+    const emotionToClass = {
+        'joy': 'sentiment-joy',
+        'happy': 'sentiment-joy',        // Alias for joy
+        'sad': 'sentiment-sad',
+        'angry': 'sentiment-angry',
+        'confused': 'sentiment-confused',
+        'disgust': 'sentiment-disgust',
+        'surprise': 'sentiment-surprise',
+        'fear': 'sentiment-fear',
+        'neutral': 'sentiment-neutral',
+        'affection': 'sentiment-affection',
+        'affectionate': 'sentiment-affection',  // Alias
+        'sarcastic': 'sentiment-sarcastic'
     };
     
-    return colorToClass[primaryColor] || 'sentiment-neutral';
+    return emotionToClass[primaryEmotion] || 'sentiment-neutral';
 }
 
 function getSentimentLabel(post) {
     // Use the actual sentiment detected by our enhanced analysis system
-    if (post.sentiment_colors && post.sentiment_colors.length > 0) {
-        // Show the emoji for the detected emotion (no more combo logic)
+    if (post.sentiment_analysis && post.sentiment_analysis.primary_emotion) {
+        // Get the sentiment class and convert to display type
         const sentimentClass = getSentimentClass(post);
         const sentimentType = getSentimentTypeFromClass(sentimentClass);
         return sentimentType;
@@ -2096,14 +2099,34 @@ function renderToxicityTags(toxicityTags, postId) {
     return `<div class="toxicity-tags-container">${tagsHTML}</div>`;
 }
 
+// Helper function to get color from emotion
+function getEmotionColor(emotion) {
+    const emotionToColor = {
+        'joy': '#fbbf24',        // Bright yellow/gold
+        'happy': '#fbbf24',      // Alias for joy
+        'sad': '#1e3a8a',        // Dark blue
+        'angry': '#dc2626',      // Red
+        'confused': '#a16207',   // Brown/amber
+        'disgust': '#84cc16',    // Lime green
+        'surprise': '#f97316',   // Orange
+        'fear': '#374151',       // Dark grey
+        'neutral': '#6b7280',    // Neutral gray
+        'affection': '#ec4899',  // Pink
+        'affectionate': '#ec4899', // Alias
+        'sarcastic': '#7c3aed'   // Purple
+    };
+    
+    return emotionToColor[emotion?.toLowerCase()] || '#6b7280';
+}
+
 // Function to handle single color backgrounds (no more gradients)
 function getSentimentBackground(post) {
-    if (!post.sentiment_colors || post.sentiment_colors.length === 0) {
+    if (!post.sentiment_analysis || !post.sentiment_analysis.primary_emotion) {
         return '';
     }
     
-    // Use single sentiment color (first color if multiple exist)
-    const color = post.sentiment_colors[0];
+    // Get color from the primary emotion
+    const color = getEmotionColor(post.sentiment_analysis.primary_emotion);
     return `border-left: 4px solid ${color}; background: ${color}11;`;
 }
 
@@ -2528,7 +2551,7 @@ async function loadVoteDataForPosts(posts) {
 async function loadUserVotesForPost(post) {
     try {
         // Load user votes for emotion tags
-        if (post.sentiment_colors && post.sentiment_colors.length > 0) {
+        if (post.sentiment_analysis && post.sentiment_analysis.primary_emotion) {
             const sentimentClass = getSentimentClass(post);
             const emotionTag = sentimentClass.replace('sentiment-', '');
             
@@ -3442,12 +3465,12 @@ function getCommentSentimentEmoji(comment) {
 
 // Get comment sentiment style (same as posts)
 function getCommentSentimentStyle(comment) {
-    if (!comment.sentiment_colors || comment.sentiment_colors.length === 0) {
+    if (!comment.sentiment_type) {
         return '';
     }
     
-    // Use single sentiment color (first color if multiple exist)
-    const color = comment.sentiment_colors[0];
+    // Get color from the sentiment type
+    const color = getEmotionColor(comment.sentiment_type);
     return `border-left: 4px solid ${color}; background: ${color}11;`;
 }
 
@@ -3457,7 +3480,7 @@ function renderVotableCommentSentimentTag(comment) {
     
     const sentimentClass = getCommentSentimentClass(comment);
     const sentimentEmoji = getCommentSentimentEmoji(comment);
-    const sentimentColor = comment.sentiment_colors && comment.sentiment_colors[0] ? comment.sentiment_colors[0] : '#6b7280';
+    const sentimentColor = getEmotionColor(comment.sentiment_type);
     
     // Extract emotion tag from sentiment type for voting
     const emotionTag = comment.sentiment_type.toLowerCase();
