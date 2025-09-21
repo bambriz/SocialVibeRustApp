@@ -3,6 +3,13 @@
 ## Overview
 Social Pulse is a social media application designed to foster a safe and emotionally-aware online environment. It combines traditional social networking features like infinite scroll and hierarchical comment threading with advanced sentiment analysis and content moderation. The platform utilizes a performant Rust (Axum) backend and a vanilla JavaScript frontend, focusing on user well-being, content quality, and an engaging user experience with comprehensive optimistic UI.
 
+## Recent Changes
+**September 21, 2025 - Fixed Critical Backend Popularity Ordering Issue**
+- **Problem**: Posts weren't showing in correct popularity + newness order. Database lacked `popularity_score` column, causing weak SQL calculations instead of sophisticated Rust 5x boosting system.
+- **Solution**: Added `popularity_score` column to PostgreSQL database and updated all getter methods (get_post_by_id, get_posts_paginated, get_posts_by_user, get_posts_by_popularity) to read stored scores instead of hard-coding 1.0.
+- **Result**: Proper database persistence in create_post and update_popularity_score functions now stores calculated popularity scores. API-database synchronization verified with identical popularity values (e.g., 7.4 for new posts, ~2.0 for older posts) confirming proper time-based decay and ordering.
+- **Architecture**: Feed now correctly orders posts by stored popularity and recency with backend persistence working as intended. New posts receive massive visibility boosts, older posts decay over time.
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
