@@ -3199,21 +3199,20 @@ function replaceOptimisticComment(postId, tempId, realComment) {
         tempElement.classList.remove('comment-pending');
         tempElement.classList.add('saved');
         
-        // ENHANCED: Update sentiment badge with real data from server
+        // ENHANCED: Update sentiment badge with real data from server and make it votable
         const sentimentBadge = tempElement.querySelector('.comment-sentiment-badge');
         if (realComment.sentiment_type) {
-            const sentimentEmoji = getCommentSentimentEmoji(realComment);
-            const sentimentColor = realComment.sentiment_colors && realComment.sentiment_colors[0] ? realComment.sentiment_colors[0] : '#6b7280';
-            
             if (sentimentBadge) {
-                // Update existing badge
-                sentimentBadge.style.backgroundColor = sentimentColor;
-                sentimentBadge.textContent = `${sentimentEmoji} ${realComment.sentiment_type}`;
-            } else {
-                // Add new badge if pending comment didn't have one
+                // Replace existing badge with votable version
                 const badgesContainer = tempElement.querySelector('.comment-badges');
                 if (badgesContainer) {
-                    badgesContainer.innerHTML = renderCommentSentimentTag(realComment);
+                    badgesContainer.innerHTML = renderVotableCommentSentimentTag(realComment);
+                }
+            } else {
+                // Add new votable badge if pending comment didn't have one
+                const badgesContainer = tempElement.querySelector('.comment-badges');
+                if (badgesContainer) {
+                    badgesContainer.innerHTML = renderVotableCommentSentimentTag(realComment);
                 }
             }
         }
@@ -3283,12 +3282,12 @@ function renderComments(postId, comments) {
         const sentimentEmoji = getCommentSentimentEmoji(comment);
         const sentimentStyle = getCommentSentimentStyle(comment);
         
-        // ENHANCED: Render sentiment tag like posts
-        const sentimentTagHTML = renderCommentSentimentTag(comment);
+        // ENHANCED: Render votable sentiment tag like posts
+        const sentimentTagHTML = renderVotableCommentSentimentTag(comment);
         
         // Get toxicity tags for this comment (like posts)
         const toxicityTags = getCommentToxicityTags(comment);
-        const toxicityTagsHTML = renderCommentToxicityTags(toxicityTags);
+        const toxicityTagsHTML = renderVotableCommentToxicityTags(comment.id, toxicityTags);
         
         // Show delete controls only for comments owned by current user AND only on "My posts" page
         const isOwner = currentUser && comment.user_id === currentUser.id;
@@ -3322,8 +3321,8 @@ function renderComments(postId, comments) {
                 ${toxicityTagsHTML ? `<div class="comment-toxicity-tags">${toxicityTagsHTML}</div>` : ''}
                 <div class="comment-actions">
                     ${authToken ? `<button onclick="showReplyForm('${comment.id}')" class="reply-btn">Reply</button>` : ''}
-                    <div class="emotion-voting" id="emotion-voting-${comment.id}">
-                        ${renderEmotionVoting(comment)}
+                    <div class="comment-stats">
+                        <span class="comment-popularity">⭐ ${(comment.popularity_score || 1.0).toFixed(1)}</span>
                     </div>
                 </div>
                 
@@ -3389,17 +3388,27 @@ function getCommentSentimentStyle(comment) {
     return `border-left: 4px solid ${color}; background: ${color}11;`;
 }
 
-// ENHANCED: Render comment sentiment tag like posts
-function renderCommentSentimentTag(comment) {
+// ENHANCED: Render votable comment sentiment tag like posts
+function renderVotableCommentSentimentTag(comment) {
     if (!comment.sentiment_type) return '';
     
     const sentimentClass = getCommentSentimentClass(comment);
     const sentimentEmoji = getCommentSentimentEmoji(comment);
     const sentimentColor = comment.sentiment_colors && comment.sentiment_colors[0] ? comment.sentiment_colors[0] : '#6b7280';
     
-    return `<div class="sentiment-badge comment-sentiment-badge ${sentimentClass}" 
-                 style="background-color: ${sentimentColor}; color: white; font-size: 0.75rem; padding: 2px 6px; border-radius: 12px; font-weight: 500;">
-        ${sentimentEmoji} ${comment.sentiment_type}
+    // Extract emotion tag from sentiment type for voting
+    const emotionTag = comment.sentiment_type.toLowerCase();
+    const userVote = getCurrentUserAgreement(comment.id, 'emotion', emotionTag);
+    const voteCount = getCurrentVoteCount(comment.id, 'emotion', emotionTag);
+    const voteCountDisplay = voteCount > 0 ? ` ${formatVoteCount(voteCount)}` : '';
+    
+    const votedClass = userVote ? 'voted agreed' : '';
+    
+    return `<div class="sentiment-badge comment-sentiment-badge votable-tag ${sentimentClass} ${votedClass}" 
+                 style="background-color: ${sentimentColor}; color: white; font-size: 0.75rem; padding: 2px 6px; border-radius: 12px; font-weight: 500; cursor: pointer;"
+                 onclick="voteOnTag('${comment.id}', 'comment', 'emotion', '${emotionTag}')"
+                 title="Click to agree this emotion matches the comment. Click again to remove your agreement.">
+        ${sentimentEmoji} ${comment.sentiment_type}${voteCountDisplay}
     </div>`;
 }
 
@@ -3417,22 +3426,60 @@ function getCommentToxicityTags(comment) {
     return tags;
 }
 
-// Render toxicity tags for comments
-function renderCommentToxicityTags(toxicityTags) {
+// Render votable toxicity tags for comments
+function renderVotableCommentToxicityTags(commentId, toxicityTags) {
     if (!toxicityTags || toxicityTags.length === 0) return '';
     
-    return toxicityTags.map(tag => `
-        <span class="toxicity-tag comment-toxicity-tag" style="background-color: #ef4444; color: white; font-size: 0.7rem; padding: 1px 4px; border-radius: 8px; margin-right: 4px;">
-            ⚠️ ${tag.label}
-        </span>
-    `).join('');
+    return toxicityTags.map(tag => {
+        const userVote = getCurrentUserAgreement(commentId, 'content_filter', tag.type);
+        const voteCount = getCurrentVoteCount(commentId, 'content_filter', tag.type);
+        const voteCountDisplay = voteCount > 0 ? ` ${formatVoteCount(voteCount)}` : '';
+        
+        const votedClass = userVote ? 'voted agreed' : '';
+        
+        return `
+            <span class="toxicity-tag comment-toxicity-tag votable-tag ${votedClass}" 
+                  style="background-color: #ef4444; color: white; font-size: 0.7rem; padding: 1px 4px; border-radius: 8px; margin-right: 4px; cursor: pointer;"
+                  onclick="voteOnTag('${commentId}', 'comment', 'content_filter', '${tag.type}')"
+                  title="Click to agree this content tag matches. Click again to remove your agreement.">
+                ⚠️ ${tag.label}${voteCountDisplay}
+            </span>
+        `;
+    }).join('');
 }
 
-// Render emotion voting buttons (placeholder for now)
-function renderEmotionVoting(comment) {
-    // TODO: Implement full emotion voting system
-    // For now, just show a simple like count
-    return `<span class="vote-count">👍 0</span>`;
+// Update comment voting UI after vote (similar to post voting)
+function refreshCommentVotingOptimistic(commentId) {
+    const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`);
+    if (!commentElement) return;
+    
+    // Update emotion tags with current vote state
+    const sentimentBadges = commentElement.querySelectorAll('.sentiment-badge.votable-tag');
+    sentimentBadges.forEach(badge => {
+        const onClick = badge.getAttribute('onclick');
+        if (onClick) {
+            // Extract tag from onclick attribute
+            const match = onClick.match(/voteOnTag\('[^']*',\s*'comment',\s*'emotion',\s*'([^']*)'\)/);
+            if (match) {
+                const emotionTag = match[1];
+                updateVotableElementOptimistic(badge, commentId, 'emotion', emotionTag);
+            }
+        }
+    });
+    
+    // Update toxicity tags with current vote state
+    const toxicityTags = commentElement.querySelectorAll('.toxicity-tag.votable-tag');
+    toxicityTags.forEach(tag => {
+        const onClick = tag.getAttribute('onclick');
+        if (onClick) {
+            // Extract tag from onclick attribute
+            const match = onClick.match(/voteOnTag\('[^']*',\s*'comment',\s*'content_filter',\s*'([^']*)'\)/);
+            if (match) {
+                const contentTag = match[1];
+                updateVotableElementOptimistic(tag, commentId, 'content_filter', contentTag);
+            }
+        }
+    });
 }
 
 // Enhanced render nested replies with full hierarchical support
