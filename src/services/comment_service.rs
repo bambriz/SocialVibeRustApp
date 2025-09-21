@@ -228,6 +228,9 @@ impl CommentService {
         // Fetch author information
         let author = self.user_repo.get_user_by_id(saved_comment.user_id).await?;
         
+        // ENHANCED: Log that comment was created for future post popularity updates
+        tracing::debug!("📊 Comment created for post {} - popularity will be updated by periodic refresh", post_id);
+
         Ok(CommentResponse {
             comment: saved_comment,
             author,
@@ -391,10 +394,18 @@ impl CommentService {
         // Base score from sentiment analysis
         let sentiment_score = self.calculate_popularity_score_from_sentiment(&comment.sentiment_score, &comment.sentiment_type);
         
-        // Factor in engagement metrics
-        let reply_boost = (comment.reply_count as f64) * 0.05; // Smaller boost than posts
+        // ENHANCED: Factor in engagement metrics with bigger reply boost
+        let reply_boost = (comment.reply_count as f64) * 0.15; // Increased from 0.05 to 0.15
         let recency_hours = (Utc::now() - comment.created_at).num_hours() as f64;
-        let recency_decay = 1.0 / (1.0 + recency_hours * 0.02); // Slightly faster decay than posts
+        
+        // Enhanced recency decay - newer comments get more boost
+        let recency_decay = if recency_hours <= 6.0 {
+            // Comments within 6 hours get a boost
+            1.0 + (6.0 - recency_hours) * 0.1  // Up to 60% boost for very recent comments
+        } else {
+            // Older comments decay more than posts since conversation moves faster
+            1.0 / (1.0 + (recency_hours - 6.0) * 0.03)
+        };
         
         let base_score = (sentiment_score + reply_boost) * recency_decay;
         

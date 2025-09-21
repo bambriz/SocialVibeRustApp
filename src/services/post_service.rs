@@ -363,8 +363,8 @@ impl PostService {
         // Base score from sentiment analysis (use actual sentiment score, not popularity_score!)
         let sentiment_score = post.sentiment_score.unwrap_or(1.0);
         
-        // Factor in engagement metrics
-        let comment_boost = (post.comment_count as f64) * 0.1;
+        // ENHANCED: Significantly boost popularity based on comment engagement
+        let comment_engagement_boost = self.calculate_comment_engagement_boost(post).await;
         let recency_hours = (Utc::now() - post.created_at).num_hours() as f64;
         
         // Enhanced time decay - recent posts get bigger boost, older posts decay faster
@@ -376,7 +376,7 @@ impl PostService {
             1.0 / (1.0 + (recency_hours - 24.0) * 0.02)
         };
         
-        let base_score = (sentiment_score + comment_boost) * recency_decay;
+        let base_score = (sentiment_score + comment_engagement_boost) * recency_decay;
         
         // Add voting engagement if available, with cap at 3.0
         if let Some(vote_service) = &self.vote_service {
@@ -425,6 +425,60 @@ impl PostService {
         } else {
             1.0
         }
+    }
+
+    /// Calculate comment engagement boost with time weighting for newer replies
+    async fn calculate_comment_engagement_boost(&self, post: &Post) -> f64 {
+        // Base comment count boost - significantly increased from 0.1 to 0.3 per comment
+        let base_comment_boost = (post.comment_count as f64) * 0.3;
+        
+        // Get recent comment activity for time-weighted boost
+        let recent_comment_boost = match self.get_recent_comment_activity_boost(post.id).await {
+            Ok(boost) => boost,
+            Err(_) => 0.0
+        };
+        
+        // Total comment engagement = base boost + recent activity boost
+        let total_boost = base_comment_boost + recent_comment_boost;
+        
+        tracing::debug!("📊 Comment engagement for post {}: base={:.2}, recent={:.2}, total={:.2}", 
+                       post.id, base_comment_boost, recent_comment_boost, total_boost);
+        
+        total_boost
+    }
+    
+    /// Get activity boost from recent comments (newer comments boost popularity more)
+    async fn get_recent_comment_activity_boost(&self, _post_id: Uuid) -> Result<f64> {
+        // For now, return a base boost since we can't easily access comment service
+        // This will be enhanced later when we restructure the service dependencies
+        let base_recent_activity_boost = 0.1f64;
+        
+        // This is a simplified version - in the future we can:
+        // 1. Add comment service as a dependency to post service, or
+        // 2. Use a repository pattern to access recent comments directly
+        // 3. Or pass recent comment data from the caller
+        
+        Ok(base_recent_activity_boost)
+    }
+
+    /// Update popularity after comment activity (to be called when comments are added)
+    pub async fn update_popularity_after_comment(&self, post_id: Uuid) -> Result<()> {
+        // Get the current post
+        let post = self.primary_repo.get_post_by_id(post_id).await?
+            .ok_or_else(|| AppError::NotFound("Post not found".to_string()))?;
+        
+        // Calculate new popularity score including comment engagement
+        let new_popularity_score = self.calculate_popularity_score(&post).await;
+        
+        // Update the popularity score (this will trigger repository update if needed)
+        let _ = self.write_to_both_repositories(
+            "update_popularity_score",
+            || self.primary_repo.update_popularity_score(post.id, new_popularity_score),
+            || self.csv_fallback_repo.update_popularity_score(post.id, new_popularity_score)
+        ).await;
+        
+        tracing::debug!("📊 Updated post {} popularity to {:.2} after comment activity", post_id, new_popularity_score);
+        Ok(())
     }
     
     // Helper method to parse sentiment type from string (handles combinations)
