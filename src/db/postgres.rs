@@ -421,7 +421,8 @@ impl PostRepository for PostgresPostRepository {
         let rows = sqlx::query!(
             r#"
             SELECT p.id, p.user_id, p.content, p.title, p.sentiment_analysis, p.moderation_result, 
-                   p.is_flagged, p.created_at, p.updated_at, p.view_count, u.username
+                   p.is_flagged, p.created_at, p.updated_at, p.view_count, u.username,
+                   (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.depth = 0) as root_comment_count
             FROM posts p
             JOIN users u ON p.user_id = u.id
             WHERE p.user_id = $1
@@ -448,7 +449,7 @@ impl PostRepository for PostgresPostRepository {
                 author_username: r.username,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
-                comment_count: 0, // Will be calculated separately
+                comment_count: r.root_comment_count.unwrap_or(0) as u32,
                 sentiment_score,
                 sentiment_colors,
                 sentiment_type,
