@@ -386,6 +386,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadContentFilterState(); // Load saved filter preferences first
     initializeApp();
     setupEventListeners();
+    initializeCommentToggling(); // Initialize collapsible reply functionality
     
     // Debug function accessible from console
     window.debugAuth = function() {
@@ -3340,7 +3341,14 @@ function renderComments(postId, comments) {
                         <span class="comment-popularity">⭐ ${(comment.popularity_score || comment.comment?.popularity_score || 1.0).toFixed(1)}</span>
                         ${(() => {
                             const directReplyCount = calculateDirectReplyCount(comments, comment.id);
-                            return directReplyCount > 0 ? `<span class="comment-replies">↳ ${directReplyCount} replies</span>` : '';
+                            return directReplyCount > 0 ? `<span class="comment-replies clickable" 
+                                data-comment-id="${comment.id}" 
+                                data-reply-count="${directReplyCount}"
+                                role="button" 
+                                tabindex="0" 
+                                aria-expanded="false"
+                                aria-controls="replies-${comment.id}"
+                                title="Click to expand ${directReplyCount} replies">↳ ${directReplyCount} replies</span>` : '';
                         })()}
                     </div>
                 </div>
@@ -3356,8 +3364,8 @@ function renderComments(postId, comments) {
                     </div>
                 </div>` : ''}
                 
-                <!-- Nested replies will go here -->
-                <div id="replies-${comment.id}" class="replies-container">
+                <!-- Nested replies will go here (initially hidden) -->
+                <div id="replies-${comment.id}" class="replies-container hidden">
                     ${renderReplies(comment.replies || [], postId)}
                 </div>
             </div>
@@ -3541,6 +3549,17 @@ function renderReplies(replies, postId = null, depth = 1) {
                 
                 <div class="comment-actions">
                     ${authToken && actualDepth < maxDisplayDepth ? `<button onclick="showReplyForm('${reply.id}')" class="reply-btn">Reply</button>` : ''}
+                    <div class="comment-stats">
+                        <span class="comment-popularity">⭐ ${(reply.popularity_score || 1.0).toFixed(1)}</span>
+                        ${reply.replies && reply.replies.length > 0 ? `<span class="comment-replies clickable" 
+                            data-comment-id="${reply.id}" 
+                            data-reply-count="${reply.replies.length}"
+                            role="button" 
+                            tabindex="0" 
+                            aria-expanded="false"
+                            aria-controls="replies-${reply.id}"
+                            title="Click to expand ${reply.replies.length} replies">↳ ${reply.replies.length} replies</span>` : ''}
+                    </div>
                     <div class="emotion-voting" id="emotion-voting-${reply.id}">
                         ${renderEmotionVoting(reply)}
                     </div>
@@ -3557,14 +3576,96 @@ function renderReplies(replies, postId = null, depth = 1) {
                     </div>
                 </div>` : ''}
                 
-                <!-- Recursive nested replies -->
+                <!-- Recursive nested replies (initially hidden) -->
                 ${reply.replies && reply.replies.length > 0 ? `
-                <div id="replies-${reply.id}" class="replies-container">
+                <div id="replies-${reply.id}" class="replies-container hidden">
                     ${renderReplies(reply.replies, postId, depth + 1)}
                 </div>` : ''}
             </div>
         `;
     }).join('');
+}
+
+// Toggle replies visibility for a comment using data attributes
+function toggleReplies(commentId) {
+    const repliesContainer = document.getElementById(`replies-${commentId}`);
+    const repliesButton = document.querySelector(`[data-comment-id="${commentId}"].comment-replies.clickable`);
+    
+    if (!repliesContainer || !repliesButton) return;
+    
+    // Prevent rapid clicks during animation
+    if (repliesButton.hasAttribute('data-toggling')) return;
+    repliesButton.setAttribute('data-toggling', 'true');
+    
+    const isHidden = repliesContainer.classList.contains('hidden');
+    const replyCount = repliesButton.getAttribute('data-reply-count') || '0';
+    
+    // Remove any existing animation event listeners
+    repliesContainer.removeEventListener('animationend', handleExpandComplete);
+    repliesContainer.removeEventListener('animationend', handleCollapseComplete);
+    
+    if (isHidden) {
+        // Show replies with smooth animation
+        repliesContainer.classList.remove('hidden');
+        repliesContainer.classList.add('expanding');
+        repliesButton.setAttribute('title', `Click to hide ${replyCount} replies`);
+        repliesButton.innerHTML = `▼ Hide ${replyCount} replies`;
+        
+        // Listen for animation completion
+        function handleExpandComplete() {
+            repliesContainer.classList.remove('expanding');
+            repliesContainer.classList.add('expanded');
+            repliesButton.setAttribute('aria-expanded', 'true');
+            repliesButton.removeAttribute('data-toggling');
+            repliesContainer.removeEventListener('animationend', handleExpandComplete);
+        }
+        repliesContainer.addEventListener('animationend', handleExpandComplete);
+        
+    } else {
+        // Hide replies with smooth animation
+        repliesContainer.classList.remove('expanded');
+        repliesContainer.classList.add('collapsing');
+        repliesButton.setAttribute('title', `Click to expand ${replyCount} replies`);
+        repliesButton.innerHTML = `↳ ${replyCount} replies`;
+        
+        // Listen for animation completion
+        function handleCollapseComplete() {
+            repliesContainer.classList.remove('collapsing');
+            repliesContainer.classList.add('hidden');
+            repliesButton.setAttribute('aria-expanded', 'false');
+            repliesButton.removeAttribute('data-toggling');
+            repliesContainer.removeEventListener('animationend', handleCollapseComplete);
+        }
+        repliesContainer.addEventListener('animationend', handleCollapseComplete);
+    }
+}
+
+// Initialize delegated event handlers for collapsible replies
+function initializeCommentToggling() {
+    // Remove any existing handlers to prevent duplicates
+    document.removeEventListener('click', handleReplyToggle);
+    document.removeEventListener('keydown', handleReplyToggle);
+    
+    // Add delegated event handlers for reply toggles
+    document.addEventListener('click', handleReplyToggle);
+    document.addEventListener('keydown', handleReplyToggle);
+}
+
+// Handle reply toggle clicks and keyboard events using event delegation
+function handleReplyToggle(event) {
+    // For keyboard events, only proceed if it's Enter or Space
+    if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') {
+        return;
+    }
+    
+    const target = event.target.closest('.comment-replies.clickable');
+    if (!target) return;
+    
+    event.preventDefault();
+    const commentId = target.getAttribute('data-comment-id');
+    if (commentId) {
+        toggleReplies(commentId);
+    }
 }
 
 // Update comment counter
