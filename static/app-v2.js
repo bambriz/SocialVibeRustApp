@@ -1099,6 +1099,42 @@ async function refreshPostsFromDatabase() {
     }
 }
 
+// Feed loading function - wrapper around loadPosts for main feed loading
+async function loadPostsFeed(reset = true) {
+    console.log(`🔄 Loading main feed posts (reset: ${reset})`);
+    
+    // Ensure we're in main feed view
+    const previousView = currentView;
+    currentView = 'feed';
+    
+    try {
+        await loadPosts(reset);
+    } catch (error) {
+        console.error('❌ Failed to load feed posts:', error);
+        currentView = previousView;
+        throw error;
+    }
+}
+
+// User posts loading function - wrapper around loadPosts for user-specific loading
+async function loadUserPosts(userId, reset = true) {
+    console.log(`🔄 Loading posts for user ${userId} (reset: ${reset})`);
+    
+    // Ensure we're in user_home view
+    const previousView = currentView;
+    currentView = 'user_home';
+    
+    try {
+        // Use the main loadPosts function which handles user view correctly
+        await loadPosts(reset);
+    } catch (error) {
+        console.error('❌ Failed to load user posts:', error);
+        // Restore previous view on error
+        currentView = previousView;
+        throw error;
+    }
+}
+
 async function refreshCommentsFromDatabase(postId) {
     console.log(`🔄 Refreshing comments for post ${postId} from database after save confirmation`);
     
