@@ -2009,13 +2009,13 @@ function handleTouchEnd(e) {
 }
 
 function getSentimentClass(post) {
-    // Check if we have sentiment analysis data from the backend
-    if (!post.sentiment_analysis || !post.sentiment_analysis.primary_emotion) {
+    // Check if we have sentiment type from the backend API
+    if (!post.sentiment_type) {
         return 'sentiment-neutral';
     }
     
-    // Use the primary emotion from sentiment analysis
-    const primaryEmotion = post.sentiment_analysis.primary_emotion.toLowerCase();
+    // Use the sentiment type from the API response
+    const sentimentType = post.sentiment_type.toLowerCase();
     
     // Map emotion names to sentiment classes
     const emotionToClass = {
@@ -2033,12 +2033,12 @@ function getSentimentClass(post) {
         'sarcastic': 'sentiment-sarcastic'
     };
     
-    return emotionToClass[primaryEmotion] || 'sentiment-neutral';
+    return emotionToClass[sentimentType] || 'sentiment-neutral';
 }
 
 function getSentimentLabel(post) {
     // Use the actual sentiment detected by our enhanced analysis system
-    if (post.sentiment_analysis && post.sentiment_analysis.primary_emotion) {
+    if (post.sentiment_type) {
         // Get the sentiment class and convert to display type
         const sentimentClass = getSentimentClass(post);
         const sentimentType = getSentimentTypeFromClass(sentimentClass);
@@ -2121,12 +2121,12 @@ function getEmotionColor(emotion) {
 
 // Function to handle single color backgrounds (no more gradients)
 function getSentimentBackground(post) {
-    if (!post.sentiment_analysis || !post.sentiment_analysis.primary_emotion) {
+    if (!post.sentiment_colors || post.sentiment_colors.length === 0) {
         return '';
     }
     
-    // Get color from the primary emotion
-    const color = getEmotionColor(post.sentiment_analysis.primary_emotion);
+    // Use the first color from sentiment_colors (API now provides proper colors)
+    const color = post.sentiment_colors[0];
     return `border-left: 4px solid ${color}; background: ${color}11;`;
 }
 
@@ -2551,7 +2551,7 @@ async function loadVoteDataForPosts(posts) {
 async function loadUserVotesForPost(post) {
     try {
         // Load user votes for emotion tags
-        if (post.sentiment_analysis && post.sentiment_analysis.primary_emotion) {
+        if (post.sentiment_type) {
             const sentimentClass = getSentimentClass(post);
             const emotionTag = sentimentClass.replace('sentiment-', '');
             

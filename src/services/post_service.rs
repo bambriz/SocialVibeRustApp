@@ -139,6 +139,7 @@ impl PostService {
             sentiment_score: None,
             sentiment_colors: vec![],
             sentiment_type: None,
+            sentiment_analysis: None,
             popularity_score: initial_sentiment_score,
             is_blocked: false,
             toxicity_tags: vec![],
@@ -159,6 +160,7 @@ impl PostService {
             sentiment_score,
             sentiment_colors,
             sentiment_type,
+            sentiment_analysis: None,
             popularity_score,
             is_blocked: false, // Already checked above
             toxicity_tags: moderation_result.toxicity_tags, // Include toxicity tags from moderation service
