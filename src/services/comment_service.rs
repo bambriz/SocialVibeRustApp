@@ -473,7 +473,7 @@ impl CommentService {
         let base_score = (sentiment_score + reply_boost) * recency_decay;
         
         // Add voting engagement if available, with cap at 3.0
-        if let Some(vote_service) = vote_service {
+        let final_score = if let Some(vote_service) = vote_service {
             match vote_service.get_engagement_score(comment.id, "comment").await {
                 Ok(engagement_score) => {
                     // Cap total popularity at 3.0 as per user requirements
@@ -483,7 +483,10 @@ impl CommentService {
             }
         } else {
             base_score
-        }
+        };
+        
+        // CRITICAL: Ensure popularity score is never negative - minimum value of 0.0
+        final_score.max(0.0)
     }
     
     /// Recalculate and update popularity score after voting (for triggering recalculation)

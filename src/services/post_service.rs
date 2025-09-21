@@ -309,7 +309,7 @@ impl PostService {
         let base_score = (sentiment_score + comment_engagement_boost) * recency_multiplier;
         
         // Add voting engagement if available, with higher cap for new posts
-        if let Some(vote_service) = &self.vote_service {
+        let final_score = if let Some(vote_service) = &self.vote_service {
             match vote_service.get_engagement_score(post.id, "post").await {
                 Ok(engagement_score) => {
                     // Higher cap for recent posts to allow viral content
@@ -320,7 +320,10 @@ impl PostService {
             }
         } else {
             base_score
-        }
+        };
+        
+        // CRITICAL: Ensure popularity score is never negative - minimum value of 0.0
+        final_score.max(0.0)
     }
     
     fn calculate_popularity_score_from_sentiment(&self, sentiments: &[crate::models::sentiment::Sentiment]) -> f64 {
