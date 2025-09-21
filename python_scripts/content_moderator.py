@@ -89,10 +89,17 @@ class ContentModerator:
                     print(f"   🎯 Detoxify results (NEW TOXICITY COMBO SYSTEM):")
                     print(f"      🏹 Identity attack: {identity_attack_score:.3f} (BLOCKING THRESHOLD: ≥ 0.8)")
                     
-                    # Categories for toxicity tagging (threshold ≥ 0.5)
+                    # Categories for toxicity tagging with optimized thresholds
                     toxicity_categories = ['toxicity', 'severe_toxicity', 'obscene', 'threat', 'insult']
                     toxicity_tags = []
-                    toxicity_thresholds = {'toxicity': 0.62, 'severe_toxicity': 0.5, 'obscene': 0.8, 'threat': 0.6, 'insult': 0.5}
+                    # Optimized thresholds for better detection balance
+                    toxicity_thresholds = {
+                        'toxicity': 0.55,        # Lowered from 0.62 for broader toxicity detection
+                        'severe_toxicity': 0.45, # Lowered from 0.5 for serious violations
+                        'obscene': 0.7,          # Lowered from 0.8 for better profanity detection  
+                        'threat': 0.5,           # Lowered from 0.6 for threat detection
+                        'insult': 0.45           # Lowered from 0.5 for better insult detection
+                    }
                     for category in toxicity_categories:
                         if category in all_scores:
                             score = all_scores[category]

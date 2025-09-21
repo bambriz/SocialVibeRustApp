@@ -144,25 +144,32 @@ class SentimentAnalyzer:
                     hf_confidence = result['confidence']
                     print(f"   🎯 HuggingFace result: {hf_emotion} (confidence: {hf_confidence})")
                     
-                    # Map HuggingFace emotions to our system
-                    # HuggingFace supports: anger, sadness, joy, fear, surprise, love, disgust
-                    emotion_mapping = {
-                        'joy': 'joy',
-                        'happiness': 'joy', 
-                        'happy': 'joy',
-                        'sadness': 'sad',
-                        'sad': 'sad',
-                        'anger': 'angry',
-                        'angry': 'angry',
-                        'fear': 'fear',
-                        'surprise': 'surprise',
-                        'disgust': 'disgust',
-                        'love': 'affection',
-                        'neutral': 'neutral'
-                    }
-                    
-                    mapped_emotion = emotion_mapping.get(hf_emotion.lower(), 'neutral')
-                    base_confidence = min(0.95, max(0.5, hf_confidence))
+                    # BIAS CORRECTION: HuggingFace tends to over-detect joy
+                    # Apply stricter thresholds for joy detection
+                    if hf_emotion.lower() in ['joy', 'happiness', 'happy']:
+                        if hf_confidence < 0.75:  # Require higher confidence for joy
+                            print(f"   🔧 BIAS CORRECTION: Joy confidence {hf_confidence:.3f} below 0.75 threshold - defaulting to neutral")
+                            mapped_emotion = 'neutral'
+                            base_confidence = 0.5
+                        else:
+                            mapped_emotion = 'joy'
+                            base_confidence = min(0.85, hf_confidence)  # Cap joy confidence lower
+                    else:
+                        # Map HuggingFace emotions to our system
+                        emotion_mapping = {
+                            'sadness': 'sad',
+                            'sad': 'sad',
+                            'anger': 'angry',
+                            'angry': 'angry',
+                            'fear': 'fear',
+                            'surprise': 'surprise',
+                            'disgust': 'disgust',
+                            'love': 'affection',
+                            'neutral': 'neutral'
+                        }
+                        
+                        mapped_emotion = emotion_mapping.get(hf_emotion.lower(), 'neutral')
+                        base_confidence = min(0.90, max(0.4, hf_confidence))
                     
             except Exception as e:
                 print(f"HuggingFace EmotionClassifier failed: {e}, falling back")
@@ -228,8 +235,25 @@ class SentimentAnalyzer:
             r'(?:^|\W)(lost\s+in|totally\s+bewildered|absolutely\s+no\s+sense)(?:\W|$)'
         ]
         
-        # Neutral - balanced, peaceful, serene (default state)
+        # Neutral - balanced, factual, informational, mundane (default state)
         neutral_patterns = [
+            # Factual/informational content
+            r'(?:^|\W)(document|contains|information|data|report|according\s+to)(?:\W|$)',
+            r'(?:^|\W)(the\s+weather|temperature|forecast|conditions)(?:\W|$)',
+            r'(?:^|\W)(meeting|scheduled|appointment|conference|agenda)(?:\W|$)',
+            r'(?:^|\W)(located|address|contact|phone|email|website)(?:\W|$)',
+            
+            # Mundane activities
+            r'(?:^|\W)(going\s+to|planning\s+to|will\s+be|probably|maybe)(?:\W|$)',
+            r'(?:^|\W)(today\s+is|yesterday\s+was|tomorrow\s+will)(?:\W|$)',
+            r'(?:^|\W)(working\s+on|need\s+to|have\s+to|supposed\s+to)(?:\W|$)',
+            
+            # Neutral descriptors  
+            r'(?:^|\W)(okay|fine|alright|normal|usual|regular|standard)(?:\W|$)',
+            r'(?:^|\W)(average|typical|common|ordinary|basic|simple)(?:\W|$)',
+            r'(?:^|\W)(nothing\s+special|not\s+much|same\s+as\s+usual)(?:\W|$)',
+            
+            # Peaceful states (original patterns)
             r'(?:^|\W)(calm|peaceful|serene|tranquil|relaxed|zen)(?:\W|$)',
             r'(?:^|\W)(at\s+peace|deep\s+breath|quiet|still|centered)(?:\W|$)',
             r'(?:^|\W)(meditation|mindful|balanced)(?:\W|$)'
