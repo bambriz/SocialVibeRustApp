@@ -857,7 +857,7 @@ async function handleCreatePost(e) {
         updated_at: new Date().toISOString(),
         sentiment_analysis: { sentiment_type: null },
         moderation_result: { is_blocked: false, toxicity_tags: [] },
-        popularity_score: 1.0,
+        popularity_score: 8.5, // Realistic score for brand new posts (will be corrected by server)
         comment_count: 0,
         isPending: true
     };

@@ -223,8 +223,29 @@ impl PostService {
             None
         };
         
-        // Calculate popularity score based on sentiment
-        let popularity_score = self.calculate_popularity_score_from_sentiment(&sentiments);
+        // Calculate popularity score with time-based boosting for new posts
+        let initial_sentiment_score = self.calculate_popularity_score_from_sentiment(&sentiments);
+        
+        // Apply full popularity calculation including time-based boosting for brand new posts
+        let post_for_calculation = Post {
+            id: uuid::Uuid::new_v4(),
+            title: request.title.clone(),
+            content: request.content.clone(),
+            author_id,
+            author_username: author_username.clone(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            comment_count: 0,
+            sentiment_score: None,
+            sentiment_colors: vec![],
+            sentiment_type: None,
+            popularity_score: initial_sentiment_score,
+            is_blocked: false,
+            toxicity_tags: vec![],
+            toxicity_scores: None,
+        };
+        
+        let popularity_score = self.calculate_popularity_score(&post_for_calculation).await;
         
         let post = Post {
             id: uuid::Uuid::new_v4(),
