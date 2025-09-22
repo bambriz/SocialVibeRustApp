@@ -1570,9 +1570,9 @@ function createPostElement(post) {
     const isMyPostsPage = currentView === 'user_home';
     const deleteControlsHTML = (isOwner && isMyPostsPage) ? `
         <div class="delete-controls">
-            <input type="checkbox" class="delete-checkbox" data-type="post" data-id="${post.id}" 
+            <input type="checkbox" class="delete-checkbox" data-type="post" data-id="${escapeHtml(post.id)}" 
                    onchange="toggleDeleteControls()">
-            <button class="delete-icon" onclick="deletePost('${post.id}')" title="Delete Post">🗑️</button>
+            <button class="delete-icon" onclick="deletePost('${escapeJavaScript(post.id)}')" title="Delete Post">🗑️</button>
         </div>
     ` : '';
     
@@ -1594,22 +1594,22 @@ function createPostElement(post) {
         ${toxicityTagsHTML}
         <div class="post-footer">
             <div>Popularity: ${(post.popularity_score || 1.0).toFixed(1)}</div>
-            <button class="comment-toggle" onclick="toggleComments('${post.id}')">
+            <button class="comment-toggle" onclick="toggleComments('${escapeJavaScript(post.id)}')">
                 💬 ${post.comment_count || 0} comments
             </button>
         </div>
         
         <!-- Comments Section -->
-        <div id="comments-${post.id}" class="comments-section hidden" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <div id="comments-${escapeHtml(post.id)}" class="comments-section hidden" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
             <div class="comment-form" ${!authToken ? 'style="display:none;"' : ''}>
-                <textarea id="comment-input-${post.id}" placeholder="Share your thoughts..." 
+                <textarea id="comment-input-${escapeHtml(post.id)}" placeholder="Share your thoughts..." 
                         class="comment-textarea" rows="3" maxlength="2000"></textarea>
                 <div class="comment-form-actions">
                     <span class="comment-counter">0/2000</span>
-                    <button onclick="postComment('${post.id}')" class="comment-submit-btn">Post Comment</button>
+                    <button onclick="postComment('${escapeJavaScript(post.id)}')" class="comment-submit-btn">Post Comment</button>
                 </div>
             </div>
-            <div id="comments-list-${post.id}" class="comments-list">
+            <div id="comments-list-${escapeHtml(post.id)}" class="comments-list">
                 <!-- Comments will be loaded here -->
             </div>
         </div>
@@ -2837,6 +2837,13 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function escapeJavaScript(text) {
+    // Escape text for safe use in JavaScript string contexts
+    return text.toString().replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+               .replace(/"/g, '\\"').replace(/\n/g, '\\n')
+               .replace(/\r/g, '\\r').replace(/\t/g, '\\t');
 }
 
 function showToast(message, type = 'info') {
