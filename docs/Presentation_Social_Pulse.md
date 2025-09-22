@@ -123,6 +123,73 @@ Python AI Server (Sentiment + Moderation)
 
 ### Database Schema Design
 
+#### Entity Relationship Diagram
+```mermaid
+erDiagram
+    User ||--o{ Post : creates
+    User ||--o{ Comment : writes
+    User ||--o{ Vote : casts
+    Post ||--o{ Comment : contains
+    Post ||--o{ Vote : receives
+    Comment ||--o{ Comment : replies_to
+    Comment ||--o{ Vote : receives
+    
+    User {
+        uuid id PK
+        string username UK
+        string email UK
+        string password_hash
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    
+    Post {
+        uuid id PK
+        string title
+        text content
+        uuid author_id FK
+        string author_username
+        timestamptz created_at
+        timestamptz updated_at
+        integer comment_count
+        float sentiment_score
+        string[] sentiment_colors
+        string sentiment_type
+        jsonb sentiment_analysis
+        float popularity_score
+        boolean is_blocked
+        string[] toxicity_tags
+        jsonb toxicity_scores
+    }
+    
+    Comment {
+        uuid id PK
+        uuid post_id FK
+        uuid user_id FK
+        uuid parent_id FK
+        string path
+        integer depth
+        text content
+        float sentiment_score
+        string[] sentiment_colors
+        string sentiment_type
+        boolean is_blocked
+        string[] toxicity_tags
+        jsonb toxicity_scores
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    
+    Vote {
+        uuid id PK
+        uuid user_id FK
+        uuid target_id FK
+        string target_type
+        string emotion_type
+        timestamptz created_at
+    }
+```
+
 #### Posts Table
 ```sql
 CREATE TABLE posts (
