@@ -1282,7 +1282,7 @@ function createOptimisticPostHTML(post) {
     const timeAgo = formatTimeAgo(post.created_at);
     
     return `
-        <article class="post-card post-pending" data-post-id="${post.id}">
+        <article class="post-card post-pending" data-post-id="${escapeHtml(post.id)}">
             <div class="post-header">
                 <div class="post-author-section">
                     <div class="post-author">${escapeHtml(post.author_username)}</div>
@@ -1296,13 +1296,13 @@ function createOptimisticPostHTML(post) {
             <p class="post-content">${escapeHtml(post.content)}</p>
             <div class="post-footer">
                 <div>Popularity: ${(post.popularity_score || 1.0).toFixed(1)}</div>
-                <button class="comment-toggle" onclick="toggleComments('${post.id}')">
+                <button class="comment-toggle" onclick="toggleComments('${escapeJavaScript(post.id)}')">
                     💬 0 comments
                 </button>
             </div>
             
             <!-- Comments Section -->
-            <div id="comments-${post.id}" class="comments-section hidden">
+            <div id="comments-${escapeHtml(post.id)}" class="comments-section hidden">
                 <div class="comments-list">
                     <div class="no-comments">No comments yet. Be the first to comment!</div>
                 </div>
@@ -1658,9 +1658,9 @@ function renderPosts(postsToRender, replace = true) {
         const isMyPostsPage = currentView === 'user_home';
         const deleteControlsHTML = (isOwner && isMyPostsPage) ? `
             <div class="delete-controls">
-                <input type="checkbox" class="delete-checkbox" data-type="post" data-id="${post.id}" 
+                <input type="checkbox" class="delete-checkbox" data-type="post" data-id="${escapeHtml(post.id)}" 
                        onchange="toggleDeleteControls()">
-                <button class="delete-icon" onclick="deletePost('${post.id}')" title="Delete Post">🗑️</button>
+                <button class="delete-icon" onclick="deletePost('${escapeJavaScript(post.id)}')" title="Delete Post">🗑️</button>
             </div>
         ` : '';
         
@@ -1683,22 +1683,22 @@ function renderPosts(postsToRender, replace = true) {
                 ${toxicityTagsHTML}
                 <div class="post-footer">
                     <div>Popularity: ${(post.popularity_score || 1.0).toFixed(1)}</div>
-                    <button class="comment-toggle" onclick="toggleComments('${post.id}')">
+                    <button class="comment-toggle" onclick="toggleComments('${escapeJavaScript(post.id)}')">
                         💬 ${post.comment_count || 0} comments
                     </button>
                 </div>
                 
                 <!-- Comments Section -->
-                <div id="comments-${post.id}" class="comments-section hidden" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div id="comments-${escapeHtml(post.id)}" class="comments-section hidden" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
                     <div class="comment-form" ${!authToken ? 'style="display:none;"' : ''}>
-                        <textarea id="comment-input-${post.id}" placeholder="Share your thoughts..." 
+                        <textarea id="comment-input-${escapeHtml(post.id)}" placeholder="Share your thoughts..." 
                                 class="comment-textarea" rows="3" maxlength="2000"></textarea>
                         <div class="comment-form-actions">
                             <span class="comment-counter">0/2000</span>
-                            <button onclick="postComment('${post.id}')" class="comment-submit-btn">Post Comment</button>
+                            <button onclick="postComment('${escapeJavaScript(post.id)}')" class="comment-submit-btn">Post Comment</button>
                         </div>
                     </div>
-                    <div id="comments-list-${post.id}" class="comments-list">
+                    <div id="comments-list-${escapeHtml(post.id)}" class="comments-list">
                         <!-- Comments will be loaded here -->
                     </div>
                 </div>
@@ -2250,7 +2250,7 @@ function renderVotableEmotionTag(post, sentimentClass, sentimentLabel) {
     
     return `
         <div class="sentiment-badge ${sentimentClass} votable-tag ${votedClass} ${pendingClass}" 
-             onclick="voteOnTag('${post.id}', 'post', 'emotion', '${emotionTag}')"
+             onclick="voteOnTag('${escapeJavaScript(post.id)}', 'post', 'emotion', '${escapeJavaScript(emotionTag)}')"
              title="Click to agree this emotion matches the content. Click again to remove your agreement.">
             ${sentimentLabel}${voteCountDisplay}
         </div>
@@ -2271,7 +2271,7 @@ function renderVotableContentTag(postId, tag) {
     return `
         <span class="toxicity-tag votable-tag ${votedClass} ${pendingClass}" 
               style="background-color: ${tag.color}20; border: 1px solid ${tag.color}60; color: ${tag.color}"
-              onclick="voteOnTag('${postId}', 'post', 'content_filter', '${tag.tag}')"
+              onclick="voteOnTag('${escapeJavaScript(postId)}', 'post', 'content_filter', '${escapeJavaScript(tag.tag)}')"
               title="Click to agree this content tag matches. Click again to remove your agreement.">
             ${tag.displayText}${voteCountDisplay}
         </span>
@@ -3128,7 +3128,7 @@ async function loadComments(postId) {
             commentsList.innerHTML = `
                 <div class="error-message">
                     <span>❌ Failed to load comments</span>
-                    <button onclick="loadComments('${postId}')" class="retry-btn">🔄 Retry</button>
+                    <button onclick="loadComments('${escapeJavaScript(postId)}')" class="retry-btn">🔄 Retry</button>
                 </div>
             `;
         }
@@ -3137,7 +3137,7 @@ async function loadComments(postId) {
         commentsList.innerHTML = `
             <div class="error-message">
                 <span>❌ Network error loading comments</span>
-                <button onclick="loadComments('${postId}')" class="retry-btn">🔄 Retry</button>
+                <button onclick="loadComments('${escapeJavaScript(postId)}')" class="retry-btn">🔄 Retry</button>
             </div>
         `;
     } finally {
@@ -3426,7 +3426,7 @@ function renderComments(postId, comments) {
                             class="reply-textarea" rows="2" maxlength="2000"></textarea>
                     <div class="reply-form-actions">
                         <button onclick="cancelReply('${comment.id}')" class="cancel-btn">Cancel</button>
-                        <button onclick="postReply('${comment.id}', '${postId}')" class="reply-submit-btn">Reply</button>
+                        <button onclick="postReply('${escapeJavaScript(comment.id)}', '${escapeJavaScript(postId)}')" class="reply-submit-btn">Reply</button>
                     </div>
                 </div>` : ''}
                 
@@ -3636,7 +3636,7 @@ function renderReplies(replies, postId = null, depth = 1) {
                             class="reply-textarea" rows="2" maxlength="2000"></textarea>
                     <div class="reply-form-actions">
                         <button onclick="cancelReply('${reply.id}')" class="cancel-btn">Cancel</button>
-                        <button onclick="postReply('${reply.id}', '${postId || 'unknown'}')" class="reply-submit-btn">Reply</button>
+                        <button onclick="postReply('${escapeJavaScript(reply.id)}', '${escapeJavaScript(postId || 'unknown')}')" class="reply-submit-btn">Reply</button>
                     </div>
                 </div>` : ''}
                 
