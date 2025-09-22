@@ -257,7 +257,7 @@ function renderPosts(postsToRender) {
                         <div class="post-author">${escapeHtml(post.author_username)}</div>
                         <div class="post-time">${timeAgo}</div>
                     </div>
-                    ${sentimentLabel ? `<div class="sentiment-badge ${sentimentClass}">${sentimentLabel}</div>` : ''}
+                    ${sentimentLabel ? `<div class="sentiment-badge ${escapeHtml(sentimentClass)}">${escapeHtml(sentimentLabel)}</div>` : ''}
                 </div>
                 <h3 class="post-title">${escapeHtml(post.title)}</h3>
                 <p class="post-content">${escapeHtml(post.content)}</p>
