@@ -3463,9 +3463,9 @@ function renderComments(postId, comments) {
         const isMyPostsPage = currentView === 'user_home';
         const deleteControlsHTML = (isOwner && isMyPostsPage) ? `
             <div class="delete-controls comment-delete-controls">
-                <input type="checkbox" class="delete-checkbox" data-type="comment" data-id="${comment.id}" 
+                <input type="checkbox" class="delete-checkbox" data-type="comment" data-id="${escapeHtml(comment.id)}" 
                        onchange="toggleDeleteControls()">
-                <button class="delete-icon" onclick="deleteComment('${comment.id}')" title="Delete Comment">🗑️</button>
+                <button class="delete-icon" onclick="deleteComment('${escapeJavaScript(comment.id)}')" title="Delete Comment">🗑️</button>
             </div>
         ` : '';
         
@@ -3473,7 +3473,7 @@ function renderComments(postId, comments) {
         const authorName = comment.author?.username || 'Anonymous';
         
         return `
-            <div class="comment ${sentimentClass}" data-comment-id="${comment.id}" style="${sentimentStyle}">
+            <div class="comment ${sentimentClass}" data-comment-id="${escapeHtml(comment.id)}" style="${sentimentStyle}">
                 <div class="comment-header">
                     <div class="comment-header-left">
                         <span class="comment-author">${escapeHtml(authorName)}</span>
@@ -3489,13 +3489,13 @@ function renderComments(postId, comments) {
                 <div class="comment-content">${escapeHtml(comment.content)}</div>
                 ${toxicityTagsHTML ? `<div class="comment-toxicity-tags">${toxicityTagsHTML}</div>` : ''}
                 <div class="comment-actions">
-                    ${authToken ? `<button onclick="showReplyForm('${comment.id}')" class="reply-btn">Reply</button>` : ''}
+                    ${authToken ? `<button onclick="showReplyForm('${escapeJavaScript(comment.id)}')" class="reply-btn">Reply</button>` : ''}
                     <div class="comment-stats">
                         <span class="comment-popularity">⭐ ${(comment.popularity_score || comment.comment?.popularity_score || 1.0).toFixed(1)}</span>
                         ${(() => {
                             const replyCount = comment.replies ? comment.replies.length : 0;
                             return replyCount > 0 ? `<span class="comment-replies clickable" 
-                                data-comment-id="${comment.id}" 
+                                data-comment-id="${escapeHtml(comment.id)}" 
                                 data-reply-count="${replyCount}"
                                 role="button" 
                                 tabindex="0" 
