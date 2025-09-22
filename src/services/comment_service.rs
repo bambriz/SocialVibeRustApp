@@ -204,8 +204,8 @@ impl CommentService {
             path: String::new(), // Will be computed atomically
             depth: 0, // Will be computed atomically
             sentiment_score,
-            sentiment_colors,
-            sentiment_type,
+            sentiment_colors: sentiment_colors.clone(),
+            sentiment_type: sentiment_type.clone(),
             is_blocked: moderation_result.is_blocked,
             toxicity_tags: moderation_result.toxicity_tags,
             toxicity_scores: moderation_result.all_scores,
