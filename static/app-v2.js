@@ -3586,9 +3586,9 @@ function renderVotableCommentSentimentTag(comment) {
     
     return `<div class="sentiment-badge comment-sentiment-badge votable-tag ${sentimentClass} ${votedClass}" 
                  style="background-color: ${sentimentColor}; color: white; font-size: 0.75rem; padding: 2px 6px; border-radius: 12px; font-weight: 500; cursor: pointer;"
-                 onclick="voteOnTag('${comment.id}', 'comment', 'emotion', '${emotionTag}')"
+                 onclick="voteOnTag('${escapeJavaScript(comment.id)}', 'comment', 'emotion', '${escapeJavaScript(emotionTag)}')"
                  title="Click to agree this emotion matches the comment. Click again to remove your agreement.">
-        ${sentimentEmoji} ${comment.sentiment_type}${voteCountDisplay}
+        ${sentimentEmoji} ${escapeHtml(comment.sentiment_type)}${voteCountDisplay}
     </div>`;
 }
 
