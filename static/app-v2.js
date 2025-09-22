@@ -2890,9 +2890,13 @@ function formatTimeAgo(dateString) {
 }
 
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (!text) return '';
+    return text.toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function escapeJavaScript(text) {
@@ -3151,12 +3155,17 @@ async function loadComments(postId) {
     }
     
     const commentsList = document.getElementById(`comments-list-${postId}`);
-    commentsList.innerHTML = `
-        <div class="loading-comments">
-            <div class="loading-spinner"></div>
-            <span>💬 Loading comments...</span>
-        </div>
-    `;
+    // Clear and create loading state safely
+    commentsList.textContent = '';
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'loading-comments';
+    const spinner = document.createElement('div');
+    spinner.className = 'loading-spinner';
+    const text = document.createElement('span');
+    text.textContent = '💬 Loading comments...';
+    loadingDiv.appendChild(spinner);
+    loadingDiv.appendChild(text);
+    commentsList.appendChild(loadingDiv);
     
     commentsCache.setLoading(postId, true);
     
@@ -3181,21 +3190,35 @@ async function loadComments(postId) {
             console.log(`📦 Comments: Loaded and cached ${comments.length} comments for post ${postId}`);
             renderComments(postId, comments);
         } else {
-            commentsList.innerHTML = `
-                <div class="error-message">
-                    <span>❌ Failed to load comments</span>
-                    <button onclick="loadComments('${escapeJavaScript(postId)}')" class="retry-btn">🔄 Retry</button>
-                </div>
-            `;
+            // Create error message safely
+            commentsList.textContent = '';
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            const errorSpan = document.createElement('span');
+            errorSpan.textContent = '❌ Failed to load comments';
+            const retryBtn = document.createElement('button');
+            retryBtn.className = 'retry-btn';
+            retryBtn.textContent = '🔄 Retry';
+            retryBtn.onclick = () => loadComments(postId);
+            errorDiv.appendChild(errorSpan);
+            errorDiv.appendChild(retryBtn);
+            commentsList.appendChild(errorDiv);
         }
     } catch (error) {
         console.error('Load comments error:', error);
-        commentsList.innerHTML = `
-            <div class="error-message">
-                <span>❌ Network error loading comments</span>
-                <button onclick="loadComments('${escapeJavaScript(postId)}')" class="retry-btn">🔄 Retry</button>
-            </div>
-        `;
+        // Create network error message safely
+        commentsList.textContent = '';
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        const errorSpan = document.createElement('span');
+        errorSpan.textContent = '❌ Network error loading comments';
+        const retryBtn = document.createElement('button');
+        retryBtn.className = 'retry-btn';
+        retryBtn.textContent = '🔄 Retry';
+        retryBtn.onclick = () => loadComments(postId);
+        errorDiv.appendChild(errorSpan);
+        errorDiv.appendChild(retryBtn);
+        commentsList.appendChild(errorDiv);
     } finally {
         commentsCache.setLoading(postId, false);
     }
@@ -3368,7 +3391,11 @@ function removeOptimisticComment(postId, tempId) {
         // Check if no comments left
         const commentsList = document.getElementById(`comments-list-${postId}`);
         if (commentsList && commentsList.children.length === 0) {
-            commentsList.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
+            const noCommentsDiv = document.createElement('div');
+            noCommentsDiv.className = 'no-comments';
+            noCommentsDiv.textContent = 'No comments yet. Be the first to comment!';
+            commentsList.textContent = '';
+            commentsList.appendChild(noCommentsDiv);
         }
     }
 }
@@ -3729,7 +3756,7 @@ function toggleReplies(commentId) {
         repliesContainer.classList.remove('hidden');
         repliesContainer.classList.add('expanding');
         repliesButton.setAttribute('title', `Click to hide ${replyCount} replies`);
-        repliesButton.innerHTML = `▼ Hide ${replyCount} replies`;
+        repliesButton.textContent = `▼ Hide ${replyCount} replies`;
         
         // Listen for animation completion
         function handleExpandComplete() {
@@ -3746,7 +3773,7 @@ function toggleReplies(commentId) {
         repliesContainer.classList.remove('expanded');
         repliesContainer.classList.add('collapsing');
         repliesButton.setAttribute('title', `Click to expand ${replyCount} replies`);
-        repliesButton.innerHTML = `↳ ${replyCount} replies`;
+        repliesButton.textContent = `↳ ${replyCount} replies`;
         
         // Listen for animation completion
         function handleCollapseComplete() {
@@ -3807,7 +3834,7 @@ function updatePostCommentCount(postId) {
         const match = commentButton.textContent.match(/(\d+)/);
         if (match) {
             const currentCount = parseInt(match[1]);
-            commentButton.innerHTML = `💬 ${currentCount + 1} comments`;
+            commentButton.textContent = `💬 ${currentCount + 1} comments`;
         }
     }
 }
@@ -3816,7 +3843,7 @@ function updatePostCommentCount(postId) {
 function updatePostCommentCountInUI(postId, count) {
     const commentButton = document.querySelector(`button[onclick="toggleComments('${postId}')"]`);
     if (commentButton) {
-        commentButton.innerHTML = `💬 ${count} comments`;
+        commentButton.textContent = `💬 ${count} comments`;
         console.log(`📊 Updated post ${postId} comment count to ${count}`);
     }
 }
@@ -3936,10 +3963,15 @@ function formatTimeAgo(timestamp) {
     return postTime.toLocaleDateString();
 }
 
+// Note: This is a duplicate function - consider consolidating
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (!text) return '';
+    return text.toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 // Auto-refresh disabled per user request
