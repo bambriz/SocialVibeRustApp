@@ -538,14 +538,45 @@ impl PostgresCommentRepository {
     fn parse_sentiment_json(value: &Option<serde_json::Value>) -> (Option<f64>, Vec<String>, Option<String>) {
         if let Some(json) = value {
             let sentiment_score = json.get("sentiment_score").and_then(|v| v.as_f64());
+            
+            // Try to get sentiment type from either field name (posts use "sentiment_type", comments use "primary_emotion")
+            let sentiment_type = json.get("sentiment_type")
+                .and_then(|v| v.as_str().map(String::from))
+                .or_else(|| json.get("primary_emotion").and_then(|v| v.as_str().map(String::from)));
+            
+            // Try to get pre-computed colors, or generate them from emotion type
             let sentiment_colors = json.get("sentiment_colors")
                 .and_then(|v| v.as_array())
                 .map(|arr| arr.iter().filter_map(|s| s.as_str().map(String::from)).collect())
-                .unwrap_or_default();
-            let sentiment_type = json.get("sentiment_type").and_then(|v| v.as_str().map(String::from));
+                .unwrap_or_else(|| {
+                    // Generate colors from emotion type if not already present
+                    if let Some(ref emotion) = sentiment_type {
+                        vec![Self::get_emotion_color(emotion)]
+                    } else {
+                        vec![]
+                    }
+                });
+            
             (sentiment_score, sentiment_colors, sentiment_type)
         } else {
             (None, vec![], None)
+        }
+    }
+    
+    // Helper function to map emotion types to colors (same as frontend)
+    fn get_emotion_color(emotion: &str) -> String {
+        match emotion.to_lowercase().as_str() {
+            "joy" | "happy" | "happiness" => "#fbbf24".to_string(), // gold
+            "sad" | "sadness" => "#6b7280".to_string(), // gray
+            "angry" | "anger" => "#dc2626".to_string(), // red
+            "fear" | "afraid" => "#7c3aed".to_string(), // purple
+            "disgust" => "#059669".to_string(), // green
+            "surprise" | "surprised" => "#f97316".to_string(), // orange
+            "confused" | "confusion" => "#0ea5e9".to_string(), // blue
+            "neutral" => "#9ca3af".to_string(), // neutral gray
+            "sarcastic" => "#ec4899".to_string(), // pink
+            "affectionate" | "love" => "#ef4444".to_string(), // bright red
+            _ => "#9ca3af".to_string(), // default neutral gray
         }
     }
 
