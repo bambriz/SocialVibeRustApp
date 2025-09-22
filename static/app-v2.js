@@ -1787,12 +1787,51 @@ function renderSkeletonPosts(count = 3) {
 
 function showSkeletonLoading(replace = true) {
     const container = document.getElementById('postsList');
-    const skeletonHTML = renderSkeletonPosts(replace ? 6 : 3);
+    const count = replace ? 6 : 3;
     
     if (replace) {
-        container.innerHTML = skeletonHTML;
-    } else {
-        container.insertAdjacentHTML('beforeend', skeletonHTML);
+        container.replaceChildren();
+    }
+    
+    // Create skeleton elements safely using DOM methods
+    for (let index = 0; index < count; index++) {
+        const skeletonPost = document.createElement('div');
+        skeletonPost.className = 'skeleton-post';
+        skeletonPost.id = `skeleton-${index}`;
+        
+        // Create header section
+        const header = document.createElement('div');
+        header.className = 'skeleton-header';
+        ['skeleton-avatar', 'skeleton-author', 'skeleton-time'].forEach(cls => {
+            const elem = document.createElement('div');
+            elem.className = `skeleton-element ${cls}`;
+            header.appendChild(elem);
+        });
+        skeletonPost.appendChild(header);
+        
+        // Create title
+        const title = document.createElement('div');
+        title.className = 'skeleton-element skeleton-title';
+        skeletonPost.appendChild(title);
+        
+        // Create content lines
+        for (let i = 0; i < 3; i++) {
+            const content = document.createElement('div');
+            content.className = 'skeleton-element skeleton-content';
+            skeletonPost.appendChild(content);
+        }
+        
+        // Create footer section
+        const footer = document.createElement('div');
+        footer.className = 'skeleton-footer';
+        ['skeleton-badge', 'skeleton-comment-btn'].forEach(cls => {
+            const elem = document.createElement('div');
+            elem.className = `skeleton-element ${cls}`;
+            footer.appendChild(elem);
+        });
+        skeletonPost.appendChild(footer);
+        
+        container.appendChild(skeletonPost);
     }
 }
 
@@ -1814,10 +1853,18 @@ function showInfiniteScrollLoader() {
         loader = document.createElement('div');
         loader.id = 'infiniteScrollLoader';
         loader.className = 'infinite-scroll-loader enhanced-loader';
-        loader.innerHTML = `
-            <div class="enhanced-spinner"></div>
-            <div class="loading-text loading-dots">Loading more posts</div>
-        `;
+        
+        // Create spinner element
+        const spinner = document.createElement('div');
+        spinner.className = 'enhanced-spinner';
+        loader.appendChild(spinner);
+        
+        // Create loading text element
+        const loadingText = document.createElement('div');
+        loadingText.className = 'loading-text loading-dots';
+        loadingText.textContent = 'Loading more posts';
+        loader.appendChild(loadingText);
+        
         document.getElementById('postsList').appendChild(loader);
     }
     loader.classList.remove('hidden');
@@ -1837,10 +1884,19 @@ function showPullToRefreshIndicator() {
         indicator = document.createElement('div');
         indicator.id = 'pullToRefreshIndicator';
         indicator.className = 'pull-to-refresh-indicator';
-        indicator.innerHTML = `
-            <div class="pull-refresh-arrow">↓</div>
-            <div class="pull-refresh-text">Release to refresh</div>
-        `;
+        
+        // Create arrow element
+        const arrow = document.createElement('div');
+        arrow.className = 'pull-refresh-arrow';
+        arrow.textContent = '↓';
+        indicator.appendChild(arrow);
+        
+        // Create text element
+        const text = document.createElement('div');
+        text.className = 'pull-refresh-text';
+        text.textContent = 'Release to refresh';
+        indicator.appendChild(text);
+        
         document.body.insertBefore(indicator, document.body.firstChild);
     }
     indicator.classList.remove('hidden');
