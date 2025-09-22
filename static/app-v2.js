@@ -3433,7 +3433,11 @@ function renderComments(postId, comments) {
     const commentsList = document.getElementById(`comments-list-${postId}`);
     
     if (!comments || comments.length === 0) {
-        commentsList.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
+        const noCommentsDiv = document.createElement('div');
+        noCommentsDiv.className = 'no-comments';
+        noCommentsDiv.textContent = 'No comments yet. Be the first to comment!';
+        commentsList.textContent = '';
+        commentsList.appendChild(noCommentsDiv);
         return;
     }
     
