@@ -294,11 +294,11 @@ classDiagram
         +DateTime created_at
     }
 
-    User ||--o{ Post : creates
-    User ||--o{ Comment : writes
-    User ||--o{ Vote : casts
-    Post ||--o{ Comment : contains
-    Comment ||--o{ Comment : replies_to
+    User "1" --> "0..*" Post : creates
+    User "1" --> "0..*" Comment : writes  
+    User "1" --> "0..*" Vote : casts
+    Post "1" --> "0..*" Comment : contains
+    Comment "1" --> "0..*" Comment : replies_to
 ```
 
 #### Controllers (Service Layer)
