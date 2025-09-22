@@ -2664,7 +2664,7 @@ function previewSentiment() {
             previewText += ` | ⚠️ Toxicity: ${toxicityText}`;
         }
         
-        preview.innerHTML = previewText;
+        preview.textContent = previewText;
     } else {
         preview.textContent = '';
     }
