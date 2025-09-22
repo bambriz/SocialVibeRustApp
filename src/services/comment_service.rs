@@ -213,6 +213,11 @@ impl CommentService {
             updated_at: Utc::now(),
             reply_count: 0,
             popularity_score,
+            sentiment_analysis: Some(serde_json::json!({
+                "sentiment_score": sentiment_score,
+                "sentiment_colors": sentiment_colors,
+                "sentiment_type": sentiment_type
+            })),
         };
         
         // 6. Save using atomic method (computes path + inserts + increments reply count in single transaction)

@@ -711,6 +711,7 @@ impl CommentRepository for PostgresCommentRepository {
             updated_at: row.updated_at,
             reply_count: row.reply_count.unwrap_or(0),
             popularity_score: row.popularity_score.unwrap_or(1.0),
+            sentiment_analysis: row.sentiment_analysis,
         })
     }
 
@@ -763,6 +764,7 @@ impl CommentRepository for PostgresCommentRepository {
                 updated_at: row.updated_at,
                 reply_count: row.reply_count.unwrap_or(0),
                 popularity_score: row.popularity_score.unwrap_or(1.0),
+                sentiment_analysis: row.sentiment_analysis,
             });
         }
 

@@ -85,6 +85,10 @@ pub struct Comment {
     /// Calculated popularity score for feed ranking (includes votes, sentiment, recency)
     /// LEARNING: Dynamic scoring for content ranking and discovery
     pub popularity_score: f64,
+    
+    /// Raw sentiment analysis data from AI processing (JSONB in database)
+    /// LEARNING: Store complete analysis results for debugging and feature expansion
+    pub sentiment_analysis: Option<serde_json::Value>,
 }
 
 /// Request structure for creating a new comment
